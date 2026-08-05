@@ -1340,7 +1340,7 @@ async function detailCot(id){
           const opIt = (DB.produccion||[]).find(x=>String(x.COT)===String(id) && String(x.ITEM)===String(it.ITEM||it.ITEM_NUM));
           const pctIt = opIt ? Number(opIt['%AVANCE']||0) : null;
           const procIt = opIt ? calcProcActual(opIt) : '—';
-          return `<tr>
+          return `<tr onclick="detailItem('${it.ID_ITEM}')" style="cursor:pointer">
             <td class="td-center" style="font-weight:700;color:var(--accent)">${it.ITEM||it['COT-ITEM']||'—'}</td>
             <td style="max-width:200px;font-weight:500">${it['DESCRIPCION ITEM']||it.DESCRIPCION||'—'}</td>
             <td class="td-center">${it.UNIDADES||it.CANT||0}</td>
@@ -1357,7 +1357,7 @@ async function detailCot(id){
               <span style="font-size:10px;font-family:var(--mono)">${pctIt}%</span>
               <span style="font-size:10px;color:var(--gold)">${procIt!=='—'?'· '+procIt:''}</span>
             </div>`:'—'}</td>
-            <td>
+            <td onclick="event.stopPropagation()">
               <button class="btn btn-ghost btn-sm" onclick="formItem(DB.items.find(x=>x.ID_ITEM==='${it.ID_ITEM}')||${JSON.stringify(it).replace(/'/g,"\'").replace(/"/g,'&quot;')})">✏️</button>
               <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="deleteItem('${it.ID_ITEM}')">🗑</button>
             </td>
@@ -1522,7 +1522,7 @@ async function detailCot(id){
         const panelItems = document.querySelector('.dp-tabpanel[data-panel="items"]');
         if(panelItems){
           const itemsHtmlNuevo = itsNuevos.length ? itsNuevos.map(it=>`
-            <div class="item-card" onclick="formItem(DB.items?.find(x=>x.ID_ITEM==='${it.ID_ITEM}')||it)">
+            <div class="item-card" onclick="detailItem('${it.ID_ITEM}')">
               <div class="item-card-top">
                 <div>
                   <div class="item-card-num">ITEM ${it.ITEM||it['COT-ITEM']||'—'}</div>
@@ -2693,10 +2693,11 @@ async function formItem(it={}){
   if(_catalogosPendientes) toast('⏳ Cargando catálogos...');
   try{
     const loads=[];
-    if(!DB.materiales) loads.push(load('materiales','getMateriales'));
-    if(!DB.servicios)  loads.push(load('servicios','getServicios'));
-    if(!DB.procesos)   loads.push(load('procesos','getProcesos'));
-    if(!DB.clientes)   loads.push(load('clientes','getClientes'));
+    if(!DB.materiales)   loads.push(load('materiales','getMateriales'));
+    if(!DB.servicios)    loads.push(load('servicios','getServicios'));
+    if(!DB.procesos)     loads.push(load('procesos','getProcesos'));
+    if(!DB.clientes)     loads.push(load('clientes','getClientes'));
+    if(!DB.cotizaciones) loads.push(load('cotizaciones','getCotizaciones'));
     if(loads.length) await Promise.all(loads);
     if(_catalogosPendientes) toast(`✓ Catálogos listos (${DB.materiales?.length||0} mat, ${DB.servicios?.length||0} svc, ${DB.procesos?.length||0} prc)`);
   }catch(e){ toast('Error cargando catálogos: '+e.message,'error'); }
@@ -2790,20 +2791,28 @@ const svcOpts = (DB.servicios || []).map(s => {
       </div>
     </div>
 
-    <!-- PASO 1: MATERIALES -->
+    <!-- PASO 1: MATERIALES (hasta 5, se muestran los que ya tengan datos) -->
     <div class="wiz-step" id="wiz-item-1" style="display:none">
       <div id="mat-rows">
-        ${buildMatRow(0, it)}
+        ${(()=>{
+          let n=1;
+          for(let k=5;k>=2;k--){ if(_matN(it,k).nombre){ n=k; break; } }
+          return Array.from({length:n},(_,i)=>buildMatRow(i, it)).join('');
+        })()}
       </div>
-      <button type="button" class="btn btn-ghost btn-sm" style="margin-top:10px;width:100%" onclick="addMatRow()">＋ Agregar Material 2</button>
+      <button type="button" class="btn btn-ghost btn-sm" style="margin-top:10px;width:100%" onclick="addMatRow()">＋ Agregar Material</button>
     </div>
 
-    <!-- PASO 2: SERVICIOS EXTERNOS -->
+    <!-- PASO 2: SERVICIOS EXTERNOS (hasta 3) -->
     <div class="wiz-step" id="wiz-item-2" style="display:none">
       <div id="svc-rows">
-        ${buildSvcRow(0, it)}
+        ${(()=>{
+          let n=1;
+          for(let k=3;k>=2;k--){ if(_svcN(it,k).nombre){ n=k; break; } }
+          return Array.from({length:n},(_,i)=>buildSvcRow(i, it)).join('');
+        })()}
       </div>
-      <button type="button" class="btn btn-ghost btn-sm" style="margin-top:10px;width:100%" onclick="addSvcRow()">＋ Agregar Servicio 2</button>
+      <button type="button" class="btn btn-ghost btn-sm" style="margin-top:10px;width:100%" onclick="addSvcRow()">＋ Agregar Servicio</button>
       <div class="divider"></div>
       <p style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:8px">Diseño</p>
       <div class="btn-group-row" id="dis-btns">
@@ -2847,10 +2856,13 @@ const svcOpts = (DB.servicios || []).map(s => {
         </div>
       </div>
       <div id="prc-rows">
-        ${buildPrcRow(0, it, prcOpts)}
-        ${it.RUTA_MQ2?buildPrcRow(1, it, prcOpts):''}
+        ${(()=>{
+          let n=1;
+          for(let k=10;k>=2;k--){ if(_prcN(it,k).nombre){ n=k; break; } }
+          return Array.from({length:n},(_,i)=>buildPrcRow(i, it, prcOpts)).join('');
+        })()}
       </div>
-      <button type="button" class="btn btn-ghost btn-sm" style="margin-top:10px;width:100%" onclick="addPrcRow()">＋ Agregar Proceso 2</button>
+      <button type="button" class="btn btn-ghost btn-sm" style="margin-top:10px;width:100%" onclick="addPrcRow()">＋ Agregar Proceso</button>
     </div>
 
     <!-- PASO 4: PRECIOS -->
@@ -2893,20 +2905,69 @@ const svcOpts = (DB.servicios || []).map(s => {
 }
 
 // ── Builders de filas dinámicas ────────────────────────────────
+// Normaliza un material (1..5) leyendo tanto las claves internas del form
+// (MATERIAL_ID_N, GEOMETRIA_N...) como las columnas reales del Sheet
+// (MATERIAL N, GEOMETRIA N (mm), DIAMETRO N (mm)...) para que al editar un
+// item existente los campos SIEMPRE se prellenen, venga el registro de
+// AppSheet o de este panel.
+function _matN(it, n){
+  const geomKey = (n===1) ? 'GEOMETRIA '+n : 'GEOMETRIA '+n+' (mm)';
+  const nombre  = it['MATERIAL_'+n] ?? it['MATERIAL '+n] ?? '';
+  const geo     = it['GEOMETRIA_'+n] ?? it[geomKey] ?? 'Cilindro';
+  const diaRaw  = it['DIAMETRO_'+n] ?? it['DIAMETRO '+n+' (mm)'] ?? 0;
+  const espRaw  = it['ESPESOR_'+n] ?? it['ESPESOR '+n+' (mm)'] ?? 0;
+  // Para Platina, el "dim1" del formulario (Alto) se guarda en la columna
+  // ESPESOR N (mm); para Cilindro se guarda en DIAMETRO N (mm).
+  const dim1 = geo==='Platina' ? (Number(diaRaw)||Number(espRaw)||0) : (Number(diaRaw)||0);
+  const esEspecial = String(nombre).toUpperCase()==='ESPECIAL';
+  return {
+    id:   it['MATERIAL_ID_'+n] ?? nombre ?? '',
+    nombre,
+    geo,
+    dim1,
+    lar:  Number(it['LARGO_'+n] ?? it['LARGO '+n+' (mm)'] ?? 0),
+    anc:  Number(it['ANCHO_'+n] ?? it['ANCHO '+n+' (mm)'] ?? 0),
+    cost: Number(it['COSTO_MAT_'+n] ?? it['COSTO MAT '+n] ?? 0),
+    cant: Number(it['CANT_MAT_'+n] ?? it['CANTIDAD TOTAL MATERIAL '+n] ?? it['PESO MAT '+n+' (kg)'] ?? 0),
+    esEspecial,
+    descEsp: it['DESCRIPCION_MAT_ESP_'+n] ?? it['DESCRIPCION MAT ESP '+n] ?? '',
+    costEsp: Number(it['COSTO_MAT_'+n+'_ESP'] ?? it['COSTO MAT '+n+' ESP'] ?? 0),
+  };
+}
 function buildMatRow(idx, it){
-  const _selMat=String(it['MATERIAL_ID_'+(idx+1)]||'');
-  const matOpts=(DB.materiales||[]).map(m=>`<option value="${m.MATERIAL}"
-    data-densidad="${m['Densidad g/mm3']||0}"
-    data-preciokg="${m['PRECIO KG']||0}"
-    data-nombre="${m.MATERIAL||m.MATERIAL||''}"
-    ${_selMat&&_selMat===String(m.MATERIAL)?'selected':''}>${m.MATERIAL||m.MATERIAL||'—'}</option>`).join('');
+  const m=_matN(it, idx+1);
+  const _selMat=String(m.id||m.nombre||'');
+  const matOpts=(DB.materiales||[]).map(mt=>`<option value="${mt.MATERIAL}"
+    data-densidad="${mt['Densidad g/mm3']||0}"
+    data-preciokg="${mt['PRECIO KG']||0}"
+    data-nombre="${mt.MATERIAL||mt.MATERIAL||''}"
+    ${_selMat&&_selMat===String(mt.MATERIAL)?'selected':''}>${mt.MATERIAL||mt.MATERIAL||'—'}</option>`).join('');
   const selVal=_selMat;
+  const esEspecial = m.esEspecial;
   return `<div class="mat-row" id="mat-row-${idx}" style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px">
     <div class="field" style="margin-bottom:10px"><label>Material ${idx+1}</label>
       <select id="mat${idx}" onchange="onSelectMat(${idx})">
-        <option value="">NO APLICA</option>${matOpts}
+        <option value="">NO APLICA</option>
+        <option value="ESPECIAL" ${esEspecial?'selected':''}>⚡ ESPECIAL (personalizado)</option>
+        ${matOpts}
       </select></div>
-    <div id="mat${idx}-extra" style="${selVal?'':'display:none'}">
+    <div id="mat${idx}-especial" style="${esEspecial?'':'display:none'}">
+      <div class="form-grid">
+        <div class="field span2"><label>Descripción Mat Esp ${idx+1}</label>
+          <input id="mat${idx}descesp" value="${m.descEsp||''}" placeholder="Describe el material especial" oninput="recalcItem()"></div>
+        <div class="field span2">
+          <label>Costo Mat ${idx+1} Esp (Total) *</label>
+          <div class="spin-row">
+            <button type="button" class="spin-btn" onclick="spinField('mat${idx}costesp',-10000)">−</button>
+            <input type="number" id="mat${idx}costesp" value="${m.esEspecial?(m.costEsp||m.cost||0):0}" oninput="syncMatEspecial(${idx})">
+            <button type="button" class="spin-btn" onclick="spinField('mat${idx}costesp',10000)">+</button>
+          </div>
+        </div>
+        <div class="field span2"><label>Cantidad Total Material ${idx+1}</label>
+          <input type="number" id="mat${idx}qtyesp" value="${m.cant||0}" oninput="recalcItem()"></div>
+      </div>
+    </div>
+    <div id="mat${idx}-extra" style="${selVal&&!esEspecial?'':'display:none'}">
       <div id="mat${idx}-info" style="background:var(--card2);border-radius:6px;padding:8px 10px;
         font-size:11px;color:var(--muted);margin-bottom:10px;display:flex;gap:12px;flex-wrap:wrap">
         <span>Densidad: <strong id="mat${idx}-dens">—</strong> g/mm³</span>
@@ -2917,16 +2978,16 @@ function buildMatRow(idx, it){
       <div class="form-grid">
         <div class="field"><label>Geometría</label>
           <div class="btn-group-row" id="geo${idx}-btns">
-            ${['Cilindro','Platina'].map(g=>`<button type="button" class="btn-seg ${(it['GEOMETRIA_'+(idx+1)]||'Cilindro')===g?'active':''}"
-              onclick="selectSeg('geo${idx}-btns','${g}','geo${idx}val');calcCostMat(${idx})">${g}</button>`).join('')}
+            ${['Cilindro','Platina'].map(g=>`<button type="button" class="btn-seg ${(m.geo||'Cilindro')===g?'active':''}"
+              onclick="selectSeg('geo${idx}-btns','${g}','geo${idx}val');toggleMatDims(${idx});calcCostMat(${idx})">${g}</button>`).join('')}
           </div>
-          <input type="hidden" id="geo${idx}val" value="${it['GEOMETRIA_'+(idx+1)]||'Cilindro'}">
+          <input type="hidden" id="geo${idx}val" value="${m.geo||'Cilindro'}">
         </div>
         <div class="field">
-          <label id="mat${idx}-dim1-label">Diámetro (mm)</label>
+          <label id="mat${idx}-dim1-label">${m.geo==='Platina'?'Espesor / Alto (mm)':'Diámetro (mm)'}</label>
           <div class="spin-row">
             <button type="button" class="spin-btn" onclick="spinField('mat${idx}dia',-5)">−</button>
-            <input type="number" id="mat${idx}dia" value="${it['DIAMETRO_'+(idx+1)]||0}" oninput="calcCostMat(${idx})">
+            <input type="number" id="mat${idx}dia" value="${m.dim1||0}" oninput="calcCostMat(${idx})">
             <button type="button" class="spin-btn" onclick="spinField('mat${idx}dia',5)">+</button>
           </div>
         </div>
@@ -2934,15 +2995,15 @@ function buildMatRow(idx, it){
           <label>Largo (mm)</label>
           <div class="spin-row">
             <button type="button" class="spin-btn" onclick="spinField('mat${idx}lar',-5)">−</button>
-            <input type="number" id="mat${idx}lar" value="${it['LARGO_'+(idx+1)]||0}" oninput="calcCostMat(${idx})">
+            <input type="number" id="mat${idx}lar" value="${m.lar||0}" oninput="calcCostMat(${idx})">
             <button type="button" class="spin-btn" onclick="spinField('mat${idx}lar',5)">+</button>
           </div>
         </div>
-        <div class="field" id="mat${idx}-dim3-wrap" style="display:none">
+        <div class="field" id="mat${idx}-dim3-wrap" style="${m.geo==='Platina'?'':'display:none'}">
           <label>Ancho (mm) — Platina</label>
           <div class="spin-row">
             <button type="button" class="spin-btn" onclick="spinField('mat${idx}anc',-5)">−</button>
-            <input type="number" id="mat${idx}anc" value="${it['ANCHO_'+(idx+1)]||0}" oninput="calcCostMat(${idx})">
+            <input type="number" id="mat${idx}anc" value="${m.anc||0}" oninput="calcCostMat(${idx})">
             <button type="button" class="spin-btn" onclick="spinField('mat${idx}anc',5)">+</button>
           </div>
         </div>
@@ -2951,7 +3012,7 @@ function buildMatRow(idx, it){
           <div style="display:flex;align-items:center;gap:8px">
             <div class="spin-row" style="flex:1">
               <button type="button" class="spin-btn" onclick="spinField('mat${idx}cost',-10000)">−</button>
-              <input type="number" id="mat${idx}cost" value="${it['COSTO_MAT_'+(idx+1)]||0}" oninput="recalcItem()">
+              <input type="number" id="mat${idx}cost" value="${m.cost||0}" oninput="recalcItem()">
               <button type="button" class="spin-btn" onclick="spinField('mat${idx}cost',10000)">+</button>
             </div>
             <button type="button" class="btn btn-ghost btn-sm" onclick="calcCostMat(${idx})">⟳</button>
@@ -2960,15 +3021,59 @@ function buildMatRow(idx, it){
         <div class="field span2">
           <label>Peso calculado (kg)</label>
           <div id="mat${idx}qty" style="font-family:var(--mono);font-size:14px;color:var(--gold);padding:4px 0">
-            ${it['CANT_MAT_'+(idx+1)]||'—'}
+            ${m.cant||'—'}
           </div>
         </div>
       </div>
     </div>
   </div>`;
 }
+// Cuando el material es ESPECIAL: el costo total ingresado se refleja también
+// en el campo de costo estándar (mat{idx}cost, aunque esté oculto) para que
+// recalcItem() lo sume igual que cualquier otro material.
+function syncMatEspecial(idx){
+  const costEsp=Number(document.getElementById('mat'+idx+'costesp')?.value||0);
+  let hid=document.getElementById('mat'+idx+'cost');
+  if(!hid){
+    hid=document.createElement('input');
+    hid.type='hidden'; hid.id='mat'+idx+'cost';
+    document.getElementById('mat-row-'+idx)?.appendChild(hid);
+  }
+  hid.value=costEsp;
+  recalcItem();
+}
+// Muestra/oculta el bloque ESPECIAL vs el bloque normal según el material elegido
+function toggleMatEspecial(idx){
+  const sel=document.getElementById('mat'+idx);
+  const esEspecial=(sel?.value||'')==='ESPECIAL';
+  const espBlock=document.getElementById('mat'+idx+'-especial');
+  const normBlock=document.getElementById('mat'+idx+'-extra');
+  if(espBlock) espBlock.style.display=esEspecial?'':'none';
+  if(normBlock) normBlock.style.display=(sel?.value&&!esEspecial)?'block':'none';
+  if(esEspecial) syncMatEspecial(idx);
+}
+// Muestra/oculta el campo Ancho y ajusta la etiqueta del dim1 según geometría
+function toggleMatDims(idx){
+  const geo=document.getElementById('geo'+idx+'val')?.value||'Cilindro';
+  const d3w=document.getElementById('mat'+idx+'-dim3-wrap');
+  const d1l=document.getElementById('mat'+idx+'-dim1-label');
+  if(d1l) d1l.textContent = geo==='Platina' ? 'Espesor / Alto (mm)' : 'Diámetro (mm)';
+  if(d3w) d3w.style.display = geo==='Platina' ? '' : 'none';
+}
 
+// Normaliza un servicio externo (1..3) leyendo claves internas o columnas reales del Sheet
+function _svcN(it, n){
+  const nombre = it['SERVICIO_EXT_'+n] ?? it['SERVICIO EXTERNO '+n] ?? '';
+  return {
+    nombre,
+    dias:  Number(it['DIAS_SVC_'+n] ?? it['DIAS SERVICIO E '+n] ?? 0),
+    costo: Number(it['COSTO_SVC_'+n] ?? it['COSTO SERVICIO E '+n+' (costo total)'] ?? 0),
+    dureza: it['DUREZA_'+n] ?? it['DUREZA '+n] ?? '',
+    descOtros: it['DESCRIPCION_OTROS_'+n] ?? it['DESCRIPCION OTROS '+n] ?? '',
+  };
+}
 function buildSvcRow(idx, it){
+  const sv=_svcN(it, idx+1);
   const svcOpts = (DB.servicios || []).map(s => {
 
     const nombre =
@@ -2996,13 +3101,17 @@ function buildSvcRow(idx, it){
         0
     );
 
+    const val = s.ID_SVC || nombre;
+    const isSel = sv.nombre && (String(sv.nombre)===String(val) || String(sv.nombre)===String(nombre));
+
     return `
         <option
-            value="${s.ID_SVC || nombre}"
+            value="${val}"
             data-dias="${s.DIAS || 0}"
             data-costokg="${costoKg}"
             data-costo2="${costo2}"
-            data-costo10="${costo10}">
+            data-costo10="${costo10}"
+            ${isSel?'selected':''}>
             ${nombre}
         </option>
     `;
@@ -3013,7 +3122,7 @@ function buildSvcRow(idx, it){
       <select id="svc${idx}" onchange="onSelectSvc(${idx})">
         <option value=""></option>${svcOpts}
       </select></div>
-    <div id="svc${idx}-extra" style="display:none">
+    <div id="svc${idx}-extra" style="${sv.nombre?'':'display:none'}">
       <div id="svc${idx}-info" style="background:var(--card2);border-radius:6px;padding:8px 10px;
         font-size:11px;color:var(--muted);margin-bottom:10px;display:flex;gap:12px;flex-wrap:wrap">
         <span>Días: <strong id="svc${idx}-dias">—</strong></span>
@@ -3025,28 +3134,64 @@ function buildSvcRow(idx, it){
         <div class="field"><label>Días Servicio ${idx+1}</label>
           <div class="spin-row">
             <button type="button" class="spin-btn" onclick="spinField('svc${idx}d',-1)">−</button>
-            <input type="number" id="svc${idx}d" value="${it['DIAS_SVC_'+(idx+1)]||1}">
+            <input type="number" id="svc${idx}d" value="${sv.dias||1}">
             <button type="button" class="spin-btn" onclick="spinField('svc${idx}d',1)">+</button>
           </div>
         </div>
         <div class="field"><label>Costo Total ${idx+1} $</label>
           <div class="spin-row">
             <button type="button" class="spin-btn" onclick="spinField('svc${idx}c',-50000)">−</button>
-            <input type="number" id="svc${idx}c" value="${it['COSTO_SVC_'+(idx+1)]||0}" oninput="recalcItem()">
+            <input type="number" id="svc${idx}c" value="${sv.costo||0}" oninput="recalcItem()">
             <button type="button" class="spin-btn" onclick="spinField('svc${idx}c',50000)">+</button>
           </div>
         </div>
         <div class="field span2"><label>Dureza / Especificación</label>
-          <input id="svc${idx}dur" value="${it['DUREZA_'+(idx+1)]||''}" placeholder="ej. 55 HRC"></div>
+          <input id="svc${idx}dur" value="${sv.dureza||''}" placeholder="ej. 55 HRC"></div>
+        <div class="field span2"><label>Descripción / Notas</label>
+          <input id="svc${idx}desc" value="${sv.descOtros||''}" placeholder="Observaciones del servicio"></div>
       </div>
     </div>
   </div>`;
 }
 
+// Normaliza un proceso (1..10) leyendo claves internas o columnas reales del Sheet.
+// Los datos de la calculadora de Hilo se guardan en el Sheet como columnas
+// GLOBALES únicas por item (Perimetro/Espesor/Material), así que si el proceso
+// que coincide con EROSIONADORA DE HILO no trae su propio PERIMETRO_HILO_n
+// (sesión nueva cargando desde Sheet), se rellena desde esas columnas globales.
+function _prcN(it, n){
+  const nombre = it['RUTA_MQ'+n] ?? it['PROCESO '+n] ?? '';
+  const esHilo = String(nombre).toUpperCase()==='EROSIONADORA DE HILO';
+  const peri = it['PERIMETRO_HILO_'+n] ?? (esHilo ? it['Perimetro'] : undefined) ?? 0;
+  const esp  = it['ESPESOR_HILO_'+n]   ?? (esHilo ? it['Espesor']   : undefined) ?? 0;
+  const mat  = it['MATERIAL_HILO_'+n]  ?? (esHilo ? it['Material']  : undefined) ?? 'ALUMINIO';
+  // El Sheet guarda TIEMPO PRO N (horas) como TOTAL (horas × unidades). El
+  // formulario siempre trabaja en horas POR UNIDAD, así que al recargar un
+  // item existente se divide entre las unidades para mostrar el valor correcto.
+  const cantIt = Number(it.UNIDADES ?? it.CANT ?? 1) || 1;
+  const tiempoInterno = it['TIEMPO_PRC_'+n];
+  const tiempoTotalSheet = it['TIEMPO PRO '+n+' (horas)'];
+  const tiempo = tiempoInterno!=null ? Number(tiempoInterno)
+               : tiempoTotalSheet!=null ? Number(tiempoTotalSheet)/cantIt
+               : 0;
+  return {
+    nombre,
+    tarifa: Number(it['TARIFA_'+n] ?? it['TARIFA PRO '+n] ?? 0),
+    tiempo: Number(tiempo)||0,
+    costo:  Number(it['COSTO_PRC_'+n] ?? it['COSTO PRO '+n] ?? 0),
+    peri: Number(peri)||0,
+    esp:  Number(esp)||0,
+    mat:  mat||'ALUMINIO',
+    diasSe: it['DIAS_SE_'+n] ?? it['DIAS SE '+n] ?? '',
+    descSe: it['DESCRIPCION_SE_'+n] ?? it['DESCRIPCION SE '+n] ?? '',
+    descOtros: it['DESCRIPCION_OTROS_P'+n] ?? it['DESCRIPCION OTROS P'+n] ?? '',
+  };
+}
 function buildPrcRow(idx, it, prcOpts){
-  const prcField=['RUTA_MQ1','RUTA_MQ2'][idx];
+  const n=idx+1;
+  const pr=_prcN(it, n);
   return `<div class="prc-row" id="prc-row-${idx}" style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px">
-    <div class="field" style="margin-bottom:10px"><label>Proceso ${idx+1}</label>
+    <div class="field" style="margin-bottom:10px"><label>Proceso ${n}</label>
       <select id="prc${idx}" onchange="onSelectPrc(${idx})">
         <option value=""></option>
         ${(DB.procesos || [])
@@ -3080,7 +3225,7 @@ function buildPrcRow(idx, it, prcOpts){
             value="${p.ID_PROCESO || nombre}"
             data-costo="${costo}"
             data-nombre="${nombre.replace(/"/g, '&quot;')}"
-            ${(it[prcField] || "") === nombre ? "selected" : ""}
+            ${(pr.nombre || "") === nombre ? "selected" : ""}
         >
             ${nombre} ($${costo.toLocaleString("es-CO")}/hr)
         </option>
@@ -3088,24 +3233,24 @@ function buildPrcRow(idx, it, prcOpts){
 
   }).join("")}
       </select></div>
-    <div id="prc${idx}-extra" style="${it[prcField]?'':'display:none'}">
+    <div id="prc${idx}-extra" style="${pr.nombre?'':'display:none'}">
       <div id="prc${idx}-info" style="background:var(--card2);border-radius:6px;padding:6px 10px;
         font-size:11px;color:var(--muted);margin-bottom:8px">
         Costo/hora: <strong id="prc${idx}-chora">—</strong>
       </div>
-      <div id="prc${idx}-hilo-calc" style="${(it[prcField]||'')==='EROSIONADORA DE HILO'?'':'display:none'};border:1px dashed var(--border);border-radius:8px;padding:10px;margin-bottom:10px">
+      <div id="prc${idx}-hilo-calc" style="${(pr.nombre||'').toUpperCase()==='EROSIONADORA DE HILO'?'':'display:none'};border:1px dashed var(--border);border-radius:8px;padding:10px;margin-bottom:10px">
         <div style="font-size:11px;color:var(--muted);margin-bottom:8px;font-weight:600">🧵 CALCULADORA DE HORAS HILO</div>
         <div class="form-grid">
           <div class="field"><label>Perímetro (mm)</label>
-            <input type="number" id="prc${idx}peri" value="${it['PERIMETRO_HILO_'+(idx+1)]||0}" oninput="calcHorasHilo(${idx})"></div>
+            <input type="number" id="prc${idx}peri" value="${pr.peri||0}" oninput="calcHorasHilo(${idx})"></div>
           <div class="field"><label>Espesor (mm)</label>
-            <input type="number" id="prc${idx}esp" value="${it['ESPESOR_HILO_'+(idx+1)]||0}" oninput="calcHorasHilo(${idx})"></div>
+            <input type="number" id="prc${idx}esp" value="${pr.esp||0}" oninput="calcHorasHilo(${idx})"></div>
           <div class="field span2"><label>Material</label>
             <div class="btn-group-row" id="prc${idx}mat-btns">
-              ${['ALUMINIO','ACERO, BRONCE','TUNGSTENO'].map(m=>`<button type="button" class="btn-seg ${(it['MATERIAL_HILO_'+(idx+1)]||'ALUMINIO')===m?'active':''}"
+              ${['ALUMINIO','ACERO, BRONCE','TUNGSTENO'].map(m=>`<button type="button" class="btn-seg ${(pr.mat||'ALUMINIO')===m?'active':''}"
                 onclick="selectSeg('prc${idx}mat-btns','${m}','prc${idx}matval');calcHorasHilo(${idx})">${m}</button>`).join('')}
             </div>
-            <input type="hidden" id="prc${idx}matval" value="${it['MATERIAL_HILO_'+(idx+1)]||'ALUMINIO'}">
+            <input type="hidden" id="prc${idx}matval" value="${pr.mat||'ALUMINIO'}">
           </div>
           <div class="field span2"><label>Horas Hilo</label>
             <div id="prc${idx}horashilo" style="font-family:var(--mono);font-size:14px;color:var(--gold);padding:4px 0">—</div>
@@ -3116,15 +3261,19 @@ function buildPrcRow(idx, it, prcOpts){
         <div class="field"><label>Tiempo (horas)</label>
           <div class="spin-row">
             <button type="button" class="spin-btn" onclick="spinField('prc${idx}t',-.25)">−</button>
-            <input type="number" id="prc${idx}t" value="${it['TIEMPO_PRC_'+(idx+1)]||0}" step="0.25" oninput="calcCostPrc(${idx})">
+            <input type="number" id="prc${idx}t" value="${pr.tiempo||0}" step="0.25" oninput="calcCostPrc(${idx})">
             <button type="button" class="spin-btn" onclick="spinField('prc${idx}t',.25)">+</button>
           </div>
         </div>
         <div class="field">
-          <label>Costo Proceso ${idx+1}</label>
-          <div id="prc${idx}cost-display" style="font-family:var(--mono);font-size:16px;color:var(--gold);padding:6px">${fmt(it['COSTO_PRC_'+(idx+1)]||0)}</div>
-          <input type="hidden" id="prc${idx}cost" value="${it['COSTO_PRC_'+(idx+1)]||0}">
+          <label>Costo Proceso ${n}</label>
+          <div id="prc${idx}cost-display" style="font-family:var(--mono);font-size:16px;color:var(--gold);padding:6px">${fmt(pr.costo||0)}</div>
+          <input type="hidden" id="prc${idx}cost" value="${pr.costo||0}">
         </div>
+        <div class="field span2"><label>Días Serv. Externo asociado</label>
+          <input id="prc${idx}diasse" value="${pr.diasSe||''}"></div>
+        <div class="field span2"><label>Descripción / Notas del proceso</label>
+          <input id="prc${idx}descotros" value="${pr.descOtros||''}"></div>
       </div>
     </div>
   </div>`;
@@ -3132,15 +3281,23 @@ function buildPrcRow(idx, it, prcOpts){
 
 function addMatRow(){
   const idx=document.querySelectorAll('.mat-row').length;
+  if(idx>=5){toast('Máximo 5 materiales por item','error');return;}
   document.getElementById('mat-rows').insertAdjacentHTML('beforeend',buildMatRow(idx,{}));
 }
 function addSvcRow(){
   const idx=document.querySelectorAll('.svc-row').length;
+  if(idx>=3){toast('Máximo 3 servicios externos por item','error');return;}
   document.getElementById('svc-rows').insertAdjacentHTML('beforeend',buildSvcRow(idx,{}));
 }
 function addPrcRow(){
   const idx=document.querySelectorAll('.prc-row').length;
-  document.getElementById('prc-rows').insertAdjacentHTML('beforeend',buildPrcRow(idx,{},''));
+  if(idx>=10){toast('Máximo 10 procesos por item','error');return;}
+  const prcOpts=(DB.procesos||[]).filter(p=>(p.PROCESO||p.NOMBRE_MAQUINA)&&p.CUADRANTE!=='GENERAL').map(p=>{
+    const nm=p.PROCESO||p.NOMBRE_MAQUINA||'';
+    const costo=Number(p.TARIFA_HR||p.COSTO_HORA||0);
+    return `<option value="${p.ID_PROCESO}" data-costo="${costo}">${nm} ($${costo.toLocaleString('es-CO')}/hr)</option>`;
+  }).join('');
+  document.getElementById('prc-rows').insertAdjacentHTML('beforeend',buildPrcRow(idx,{},prcOpts));
 }
 
 function calcCostMat(idx){
@@ -3155,17 +3312,12 @@ function calcCostMat(idx){
   const dim3=Number(document.getElementById('mat'+idx+'anc')?.value||0);
   const cant=gn('i3')||1;
   let volMM3=0;
-  const d3w=document.getElementById('mat'+idx+'-dim3-wrap');
-  const d1l=document.getElementById('mat'+idx+'-dim1-label');
   if(geo==='Cilindro'){
     const r=dim1/2; volMM3=Math.PI*r*r*dim2;
-    if(d1l) d1l.textContent='Diámetro (mm)';
-    if(d3w) d3w.style.display='none';
   } else {
     volMM3=dim1*dim2*dim3;
-    if(d1l) d1l.textContent='Alto (mm)';
-    if(d3w) d3w.style.display='';
   }
+  toggleMatDims(idx);
   const volTotal=volMM3*cant;
   const pesoGr = densidad * volTotal;
   const pesoKg = pesoGr / 1000;
@@ -3185,7 +3337,17 @@ function onSelectMat(idx){
   const sel=document.getElementById('mat'+idx);
   const opt=sel.options[sel.selectedIndex];
   const extra=document.getElementById('mat'+idx+'-extra');
-  if(!sel.value){if(extra)extra.style.display='none';return;}
+  const especial=document.getElementById('mat'+idx+'-especial');
+  if(!sel.value){
+    if(extra)extra.style.display='none';
+    if(especial)especial.style.display='none';
+    return;
+  }
+  if(sel.value==='ESPECIAL'){
+    toggleMatEspecial(idx);
+    return;
+  }
+  if(especial)especial.style.display='none';
   if(extra)extra.style.display='block';
   const s=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
   s('mat'+idx+'-dens', opt.dataset.densidad||'—');
@@ -3561,50 +3723,92 @@ function viewToggleBtns(mod) {
 document.addEventListener('input',e=>{ if(e.target?.id==='ipunit') e.target._manual=true; });
 
 async function saveItem(exist, cotId){
-  // Recoger materiales (hasta 3)
-  const matData={};
+  const cant=gn('i3')||1;
+
+  // ── Recoger MATERIALES (hasta 5) ────────────────────────────
+  // Volumen/Peso se recalculan aquí mismo con la misma fórmula que calcCostMat,
+  // así llega siempre un valor real (no 0) para VOLUMEN/PESO/ANCHO/ESPESOR.
+  const matRows=[];
   document.querySelectorAll('.mat-row').forEach((_,i)=>{
     const sel=document.getElementById('mat'+i);
+    const esEspecial = sel?.value==='ESPECIAL';
+    if(esEspecial){
+      matRows.push({
+        nombre:   'ESPECIAL',
+        geo:      '',
+        diametro: 0, espesor: 0, largo: 0, ancho: 0, volumen: 0,
+        costo:    Number(document.getElementById('mat'+i+'costesp')?.value||0),
+        cantTotal:Number(document.getElementById('mat'+i+'qtyesp')?.value||0),
+        densidad: 0,
+        peso:     0,
+        esEspecial: true,
+        descEsp:  document.getElementById('mat'+i+'descesp')?.value||'',
+        costEsp:  Number(document.getElementById('mat'+i+'costesp')?.value||0),
+      });
+      return;
+    }
     const opt=sel?.options[sel.selectedIndex];
-    matData['MATERIAL_'+(i+1)]    = sel?.value ? (opt?.textContent||'').trim() : '';
-    matData['MATERIAL_ID_'+(i+1)] = sel?.value||'';
-    matData['GEOMETRIA_'+(i+1)]   = document.getElementById('geo'+i+'val')?.value||'';
-    matData['DIAMETRO_'+(i+1)]    = Number(document.getElementById('mat'+i+'dia')?.value||0);
-    matData['LARGO_'+(i+1)]       = Number(document.getElementById('mat'+i+'lar')?.value||0);
-    matData['ANCHO_'+(i+1)]       = Number(document.getElementById('mat'+i+'anc')?.value||0);
-    matData['COSTO_MAT_'+(i+1)]   = Number(document.getElementById('mat'+i+'cost')?.value||0);
-    // Peso calculado
-    const pesoEl = document.getElementById('mat'+i+'qty');
-    matData['CANT_MAT_'+(i+1)]    = pesoEl ? parseFloat(pesoEl.textContent)||0 : 0;
+    const geo   = document.getElementById('geo'+i+'val')?.value||'Cilindro';
+    const dim1  = Number(document.getElementById('mat'+i+'dia')?.value||0); // diámetro (Cilindro) o espesor/alto (Platina)
+    const largo = Number(document.getElementById('mat'+i+'lar')?.value||0);
+    const ancho = Number(document.getElementById('mat'+i+'anc')?.value||0); // solo Platina
+    let volMM3=0;
+    if(geo==='Cilindro'){ const r=dim1/2; volMM3=Math.PI*r*r*largo; }
+    else { volMM3=dim1*largo*ancho; }
+    const volTotal=volMM3*cant;
+    matRows.push({
+      nombre:   sel?.value ? (opt?.textContent||'').trim() : '',
+      geo,
+      diametro: geo==='Cilindro' ? dim1 : 0,
+      espesor:  geo==='Platina'  ? dim1 : 0,
+      largo,
+      ancho,
+      volumen:  Math.round(volTotal),
+      peso:     Number((volTotal*0)||0), // se sobreescribe abajo con la densidad real
+      costo:    Number(document.getElementById('mat'+i+'cost')?.value||0),
+      cantTotal:(()=>{const el=document.getElementById('mat'+i+'qty'); return el?parseFloat(el.textContent)||0:0;})(),
+      densidad: Number(opt?.dataset?.densidad||0),
+      esEspecial: false,
+      descEsp: '',
+      costEsp: 0,
+    });
   });
-  // Servicios
-  const svcData={};
+  matRows.forEach(m=>{ if(!m.esEspecial) m.peso = Number((m.densidad*m.volumen/1000).toFixed(4)); });
+
+  // ── Recoger SERVICIOS EXTERNOS (hasta 3) ────────────────────
+  const svcRows=[];
   document.querySelectorAll('.svc-row').forEach((_,i)=>{
     const sel=document.getElementById('svc'+i);
     const opt=sel?.options[sel.selectedIndex];
-    svcData['SERVICIO_EXT_'+(i+1)] = sel?.value ? (opt?.textContent||'').trim() : '';
-    svcData['DIAS_SVC_'+(i+1)]     = Number(document.getElementById('svc'+i+'d')?.value||0);
-    svcData['COSTO_SVC_'+(i+1)]    = Number(document.getElementById('svc'+i+'c')?.value||0);
-    svcData['DUREZA_'+(i+1)]       = document.getElementById('svc'+i+'dur')?.value||'';
+    svcRows.push({
+      nombre: sel?.value ? (opt?.textContent||'').trim() : '',
+      dias:   Number(document.getElementById('svc'+i+'d')?.value||0),
+      costo:  Number(document.getElementById('svc'+i+'c')?.value||0),
+      dureza: document.getElementById('svc'+i+'dur')?.value||'',
+      desc:   document.getElementById('svc'+i+'desc')?.value||'',
+    });
   });
-  // Procesos
-  const prcData={};
+
+  // ── Recoger PROCESOS DE MAQUINADO (hasta 10) ────────────────
+  const prcRows=[];
   document.querySelectorAll('.prc-row').forEach((_,i)=>{
     const sel=document.getElementById('prc'+i);
     const opt=sel?.options[sel.selectedIndex];
-    // Tomar el nombre del proceso (texto antes del precio)
     const nombrePrc = sel?.value ? (opt?.textContent||'').split('($')[0].trim() : '';
-    prcData['RUTA_MQ'+(i+1)] = nombrePrc;
-    prcData['TARIFA_'+(i+1)] = Number(opt?.dataset?.costo||0);
-    prcData['TIEMPO_PRC_'+(i+1)] = Number(document.getElementById('prc'+i+'t')?.value||0);
-    prcData['COSTO_PRC_'+(i+1)] = Number(document.getElementById('prc'+i+'cost')?.value||0);
-    // Datos de la calculadora de Horas Hilo (solo aplica si el proceso es EROSIONADORA DE HILO)
-    prcData['PERIMETRO_HILO_'+(i+1)]  = Number(document.getElementById('prc'+i+'peri')?.value||0);
-    prcData['ESPESOR_HILO_'+(i+1)]    = Number(document.getElementById('prc'+i+'esp')?.value||0);
-    prcData['MATERIAL_HILO_'+(i+1)]   = document.getElementById('prc'+i+'matval')?.value||'';
+    prcRows.push({
+      nombre: nombrePrc,
+      tarifa: Number(opt?.dataset?.costo||0),
+      tiempo: Number(document.getElementById('prc'+i+'t')?.value||0),
+      costo:  Number(document.getElementById('prc'+i+'cost')?.value||0),
+      diasSe: document.getElementById('prc'+i+'diasse')?.value||'',
+      descOtros: document.getElementById('prc'+i+'descotros')?.value||'',
+      esHilo: nombrePrc.toUpperCase()==='EROSIONADORA DE HILO',
+      peri:   Number(document.getElementById('prc'+i+'peri')?.value||0),
+      esp:    Number(document.getElementById('prc'+i+'esp')?.value||0),
+      matHilo:document.getElementById('prc'+i+'matval')?.value||'',
+    });
   });
 
-  const cant=gn('i3');
   const precioUnit=Number(document.getElementById('ipunit')?.value||0);
 
   // Buscar info de la cotización para campos heredados
@@ -3619,7 +3823,7 @@ async function saveItem(exist, cotId){
     TIPO:             cotRef?.TIPO||'',
     ASESOR:           cotRef?.ASESOR||'',
     'DESCRIPCION DEL PROYECTO': cotRef?.['DESCRIPCION DEL PROYECTO']||'',
-    EMPRESA:          cotRef?.Empresa||'',
+    EMPRESA:          cotRef?.EMPRESA||cotRef?.Empresa||'',
     CIUDAD:           cotRef?.CIUDAD||'',
     'FECHA EMISION COT.': cotRef?.['FECHA EMISION COT.']||'',
     'FECHA ENTREGA PACTADA': cotRef?.['FECHA ENTREGA PACTADA']||'',
@@ -3628,64 +3832,11 @@ async function saveItem(exist, cotId){
     'COT-ITEM':       (cotId||'') + '-' + gn('i2'),
     UNIDADES:         cant,
     'DESCRIPCION ITEM': gv('i4'),
-    // ── Materiales (hasta 5 reales del Sheets) ─────────────
-    'MATERIAL 1':     matData['MATERIAL_1']||'',
-    'GEOMETRIA 1':    matData['GEOMETRIA_1']||'',
-    'DIAMETRO 1 (mm)':matData['DIAMETRO_1']||0,
-    'LARGO 1 (mm)':   matData['LARGO_1']||0,
-    'ANCHO 1 (mm)':   0,
-    'ESPESOR 1 (mm)': 0,
-    'COSTO MAT 1':    matData['COSTO_MAT_1']||0,
-    'MATERIAL 2':     matData['MATERIAL_2']||'',
-    'GEOMETRIA 2 (mm)': matData['GEOMETRIA_2']||'',
-    'DIAMETRO 2 (mm)':matData['DIAMETRO_2']||0,
-    'LARGO 2 (mm)':   matData['LARGO_2']||0,
-    'ANCHO 2 (mm)':   0,
-    'ESPESOR 2 (mm)': 0,
-    'COSTO MAT 2':    matData['COSTO_MAT_2']||0,
-    'MATERIAL 3':     matData['MATERIAL_3']||'',
-    'GEOMETRIA 3 (mm)': matData['GEOMETRIA_3']||'',
-    'DIAMETRO 3 (mm)':matData['DIAMETRO_3']||0,
-    'LARGO 3 (mm)':   matData['LARGO_3']||0,
-    'ANCHO 3 (mm)':   0,
-    'ESPESOR 3 (mm)': 0,
-    'COSTO MAT 3':    matData['COSTO_MAT_3']||0,
-    // ── Servicios externos (hasta 3) ───────────────────────
-    'SERVICIO EXTERNO 1': svcData['SERVICIO_EXT_1']||'',
-    'DIAS SERVICIO E 1':  svcData['DIAS_SVC_1']||0,
-    'COSTO SERVICIO E 1 (costo total)': svcData['COSTO_SVC_1']||0,
-    'DUREZA 1':           svcData['DUREZA_1']||'',
-    'SERVICIO EXTERNO 2': svcData['SERVICIO_EXT_2']||'',
-    'DIAS SERVICIO E 2':  svcData['DIAS_SVC_2']||0,
-    'COSTO SERVICIO E 2 (costo total)': svcData['COSTO_SVC_2']||0,
-    'DUREZA 2':           svcData['DUREZA_2']||'',
-    'SERVICIO EXTERNO 3': svcData['SERVICIO_EXT_3']||'',
-    'DIAS SERVICIO E 3':  svcData['DIAS_SVC_3']||0,
-    'COSTO SERVICIO E 3 (costo total)': svcData['COSTO_SVC_3']||0,
-    'DUREZA 3':           svcData['DUREZA_3']||'',
     // ── Diseño ─────────────────────────────────────────────
     DISEÑO:           gv('idis'),
     'HORAS DISEÑO (Horas)':   gn('ihrdis'),
     'COSTO HORAS DISEÑO (costo total)': gn('icdis'),
     'COSTO FLETE (Costo total)': gn('iflete'),
-    // ── Procesos de maquinado (hasta 10) ───────────────────
-    'PROCESO 1':      prcData['RUTA_MQ1']||'',
-    'TARIFA PRO 1':   prcData['TARIFA_1']||0,
-    'TIEMPO PRO 1 (horas)': prcData['TIEMPO_PRC_1']||0,
-    'COSTO PRO 1':    prcData['COSTO_PRC_1']||0,
-    'PERIMETRO HILO 1': prcData['PERIMETRO_HILO_1']||0,
-    'ESPESOR HILO 1':    prcData['ESPESOR_HILO_1']||0,
-    'MATERIAL HILO 1':   prcData['MATERIAL_HILO_1']||'',
-    'PROCESO 2':      prcData['RUTA_MQ2']||'',
-    'TARIFA PRO 2':   prcData['TARIFA_2']||0,
-    'TIEMPO PRO 2 (horas)': prcData['TIEMPO_PRC_2']||0,
-    'COSTO PRO 2':    prcData['COSTO_PRC_2']||0,
-    'PERIMETRO HILO 2': prcData['PERIMETRO_HILO_2']||0,
-    'ESPESOR HILO 2':    prcData['ESPESOR_HILO_2']||0,
-    'MATERIAL HILO 2':   prcData['MATERIAL_HILO_2']||'',
-    // ── Rutas de maquinado (para Control Producción) ───────
-    RUTA_MQ1:         prcData['RUTA_MQ1']||'',
-    RUTA_MQ2:         prcData['RUTA_MQ2']||'',
     // ── Precios y costos ───────────────────────────────────
     MinutosManual:    gn('imm'),
     'MARGEN (%)':     gn('imargen'),
@@ -3700,6 +3851,63 @@ async function saveItem(exist, cotId){
     seleccionar:      '',
     PLANO:            '',
   };
+
+  // ── Materiales 1..5 → columnas reales del Sheet ─────────────
+  // OJO: en el Sheet la columna de geometría del material 1 se llama
+  // "GEOMETRIA 1" (sin unidad) y la de 2-5 "GEOMETRIA N (mm)".
+  for(let n=1;n<=5;n++){
+    const m=matRows[n-1]||{nombre:'',geo:'',diametro:0,espesor:0,largo:0,ancho:0,volumen:0,peso:0,costo:0,cantTotal:0,esEspecial:false,descEsp:'',costEsp:0};
+    const geomKey = n===1 ? 'GEOMETRIA 1' : `GEOMETRIA ${n} (mm)`;
+    data[`MATERIAL ${n}`]              = m.nombre||'';
+    data[geomKey]                      = m.geo||'';
+    data[`DIAMETRO ${n} (mm)`]         = m.diametro||0;
+    data[`LARGO ${n} (mm)`]            = m.largo||0;
+    data[`ANCHO ${n} (mm)`]            = m.ancho||0;
+    data[`ESPESOR ${n} (mm)`]          = m.espesor||0;
+    data[`VOLUMEN MAT ${n} (mm³)`]     = m.volumen||0;
+    data[`PESO MAT ${n} (kg)`]         = m.peso||0;
+    // Si el material es ESPECIAL, el costo total ingresado va tanto en
+    // COSTO MAT N (para que sume igual que cualquier otro material) como
+    // en COSTO MAT N ESP (columna específica de AppSheet para especiales).
+    data[`COSTO MAT ${n}`]             = m.costo||0;
+    data[`COSTO MAT ${n} ESP`]         = m.esEspecial ? (m.costEsp||m.costo||0) : 0;
+    data[`DESCRIPCION MAT ESP ${n}`]   = m.esEspecial ? (m.descEsp||'') : '';
+    data[`CANTIDAD TOTAL MATERIAL ${n}`] = m.cantTotal||0;
+  }
+
+  // ── Servicios externos 1..3 ──────────────────────────────────
+  for(let n=1;n<=3;n++){
+    const s=svcRows[n-1]||{nombre:'',dias:0,costo:0,dureza:'',desc:''};
+    data[`SERVICIO EXTERNO ${n}`] = s.nombre||'';
+    data[`DIAS SERVICIO E ${n}`]  = s.dias||0;
+    data[`COSTO SERVICIO E ${n} (costo total)`] = s.costo||0;
+    data[`DUREZA ${n}`]           = s.dureza||'';
+    data[`DESCRIPCION OTROS ${n}`] = s.desc||'';
+  }
+
+  // ── Procesos de maquinado 1..10 ──────────────────────────────
+  // El usuario ingresa las HORAS POR UNIDAD; el Sheet debe recibir el total
+  // (horas × unidades), que es lo que también determina el precio (COSTO PRO N
+  // ya viene multiplicado por unidades desde calcCostPrcSilent).
+  for(let n=1;n<=10;n++){
+    const p=prcRows[n-1]||{nombre:'',tarifa:0,tiempo:0,costo:0,diasSe:'',descOtros:''};
+    data[`PROCESO ${n}`]              = p.nombre||'';
+    data[`TARIFA PRO ${n}`]           = p.tarifa||0;
+    data[`TIEMPO PRO ${n} (horas)`]   = Number(((p.tiempo||0)*cant).toFixed(4));
+    data[`COSTO PRO ${n}`]            = p.costo||0;
+    data[`DIAS SE ${n}`]              = p.diasSe||'';
+    data[`DESCRIPCION OTROS P${n}`]   = p.descOtros||'';
+    data['RUTA_MQ'+n]                 = p.nombre||''; // usado por Control Producción
+  }
+
+  // ── Calculadora de Hilo: columnas GLOBALES únicas por item ──
+  // El Sheet solo tiene 1 columna de Perímetro/Espesor/Material (no por proceso).
+  // Se toma el último proceso EROSIONADORA DE HILO con datos cargados.
+  const hiloRow=[...prcRows].reverse().find(p=>p.esHilo && (p.peri||p.esp));
+  data['Perimetro'] = hiloRow?.peri || 0;
+  data['Espesor']   = hiloRow?.esp  || 0;
+  data['Material']  = hiloRow?.matHilo || '';
+
   try{
     await POST(exist?'updateItem':'createItem',data);
     toast(exist?'Item actualizado':'Item creado');
