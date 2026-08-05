@@ -2713,9 +2713,46 @@ async function formItem(it={}){
     return `<option value="${m.MATERIAL}" data-densidad="${den}" data-preciokg="${pkg}" data-nombre="${nm}">${m.MATERIAL||m.MATERIAL||'—'}</option>`;
   }).join('');
   // Servicios externos
-  const svcOpts=(DB.servicios||[]).map(s=>{
-    const nm=(s.SERVICIO_EXTERNO||s.NOMBRE||'').replace(/"/g,'&quot;');
-    return `<option value="${s.ID_SVC}" data-dias="${s.DIAS||0}" data-costokg="${s.COSTO_KG||s.PRECIO||0}" data-costo2="${s.COSTO_MENOR_2KG||0}" data-costo10="${s.COSTO_MENOR_10KG||0}">${nm||'—'}</option>`;
+const svcOpts = (DB.servicios || []).map(s => {
+
+    const nombre = (
+        s.SERVICIO_EXTERNO ??
+        s["SERVICIO EXTERNO"] ??
+        s.NOMBRE ??
+        ""
+    ).replace(/"/g, '&quot;');
+
+    const costoKg = Number(
+        s.COSTO_KG ??
+        s["COSTO KG"] ??
+        s.PRECIO ??
+        0
+    );
+
+    const costo2 = Number(
+        s.COSTO_MENOR_2KG ??
+        s["COSTO <= 2 KG"] ??
+        0
+    );
+
+    const costo10 = Number(
+        s.COSTO_MENOR_10KG ??
+        s["COSTO <= 10 KG"] ??
+        0
+    );
+
+    return `
+        <option
+            value="${s.ID_SVC || nombre}"
+            data-dias="${s.DIAS || 0}"
+            data-costokg="${costoKg}"
+            data-costo2="${costo2}"
+            data-costo10="${costo10}"
+        >
+            ${nombre}
+        </option>
+    `;
+
   }).join('');
   // Procesos / máquinas (excluyendo categoría GENERAL)
   const prcOpts=(DB.procesos||[]).filter(p=>(p.PROCESO||p.NOMBRE_MAQUINA)&&p.CUADRANTE!=='GENERAL').map(p=>{
@@ -2932,12 +2969,45 @@ function buildMatRow(idx, it){
 }
 
 function buildSvcRow(idx, it){
-  const svcOpts=(DB.servicios||[]).map(s=>`<option value="${s.ID_SVC}"
-    data-dias="${s.DIAS||0}"
-    data-costokg="${s.COSTO_KG||s.PRECIO||0}"
-    data-costo2="${s.COSTO_MENOR_2KG||0}"
-    data-costo10="${s.COSTO_MENOR_10KG||0}"
-    >${s.SERVICIO_EXTERNO||s.NOMBRE||'—'}</option>`).join('');
+  const svcOpts = (DB.servicios || []).map(s => {
+
+    const nombre =
+        s["SERVICIO EXTERNO"] ??
+        s.SERVICIO_EXTERNO ??
+        s.NOMBRE ??
+        "—";
+
+    const costoKg = Number(
+        s["COSTO KG"] ??
+        s.COSTO_KG ??
+        s.PRECIO ??
+        0
+    );
+
+    const costo2 = Number(
+        s["COSTO <= 2 KG"] ??
+        s.COSTO_MENOR_2KG ??
+        0
+    );
+
+    const costo10 = Number(
+        s["COSTO <= 10 KG"] ??
+        s.COSTO_MENOR_10KG ??
+        0
+    );
+
+    return `
+        <option
+            value="${s.ID_SVC || nombre}"
+            data-dias="${s.DIAS || 0}"
+            data-costokg="${costoKg}"
+            data-costo2="${costo2}"
+            data-costo10="${costo10}">
+            ${nombre}
+        </option>
+    `;
+
+  }).join('');
   return `<div class="svc-row" id="svc-row-${idx}" style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px">
     <div class="field" style="margin-bottom:10px"><label>Servicio Externo ${idx+1}</label>
       <select id="svc${idx}" onchange="onSelectSvc(${idx})">
@@ -2979,14 +3049,68 @@ function buildPrcRow(idx, it, prcOpts){
     <div class="field" style="margin-bottom:10px"><label>Proceso ${idx+1}</label>
       <select id="prc${idx}" onchange="onSelectPrc(${idx})">
         <option value=""></option>
-        ${(DB.procesos||[]).filter(p=>(p.PROCESO||p.NOMBRE_MAQUINA)&&p.CUADRANTE!=='GENERAL').map(p=>`<option value="${p.ID_PROCESO}"
-          data-costo="${p.TARIFA_HR||p.COSTO_HORA||0}"
-          ${(it[prcField]||'')===(p.PROCESO||p.NOMBRE_MAQUINA||'')?'selected':''}>${p.PROCESO||p.NOMBRE_MAQUINA||''} ($${Number(p.TARIFA_HR||p.COSTO_HORA||0).toLocaleString('es-CO')}/hr)</option>`).join('')}
+        ${(DB.procesos || [])
+        .filter(p => {
+
+        const cuadrante =
+        p.CUADRANTE ??
+        p["ILUSTRACIÓN CUADRANTE"] ??
+        "";
+
+    return (p.PROCESO || p.NOMBRE_MAQUINA) && cuadrante !== "GENERAL";
+
+    })
+    .map(p => {
+
+    const nombre =
+        p.PROCESO ??
+        p.NOMBRE_MAQUINA ??
+        "";
+
+    const costo =
+        Number(
+            p.TARIFA_HR ??
+            p["TARIFA / HR"] ??
+            p.COSTO_HORA ??
+            0
+        );
+
+    return `
+        <option
+            value="${p.ID_PROCESO || nombre}"
+            data-costo="${costo}"
+            data-nombre="${nombre.replace(/"/g, '&quot;')}"
+            ${(it[prcField] || "") === nombre ? "selected" : ""}
+        >
+            ${nombre} ($${costo.toLocaleString("es-CO")}/hr)
+        </option>
+    `;
+
+  }).join("")}
       </select></div>
     <div id="prc${idx}-extra" style="${it[prcField]?'':'display:none'}">
       <div id="prc${idx}-info" style="background:var(--card2);border-radius:6px;padding:6px 10px;
         font-size:11px;color:var(--muted);margin-bottom:8px">
         Costo/hora: <strong id="prc${idx}-chora">—</strong>
+      </div>
+      <div id="prc${idx}-hilo-calc" style="${(it[prcField]||'')==='EROSIONADORA DE HILO'?'':'display:none'};border:1px dashed var(--border);border-radius:8px;padding:10px;margin-bottom:10px">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:8px;font-weight:600">🧵 CALCULADORA DE HORAS HILO</div>
+        <div class="form-grid">
+          <div class="field"><label>Perímetro (mm)</label>
+            <input type="number" id="prc${idx}peri" value="${it['PERIMETRO_HILO_'+(idx+1)]||0}" oninput="calcHorasHilo(${idx})"></div>
+          <div class="field"><label>Espesor (mm)</label>
+            <input type="number" id="prc${idx}esp" value="${it['ESPESOR_HILO_'+(idx+1)]||0}" oninput="calcHorasHilo(${idx})"></div>
+          <div class="field span2"><label>Material</label>
+            <div class="btn-group-row" id="prc${idx}mat-btns">
+              ${['ALUMINIO','ACERO, BRONCE','TUNGSTENO'].map(m=>`<button type="button" class="btn-seg ${(it['MATERIAL_HILO_'+(idx+1)]||'ALUMINIO')===m?'active':''}"
+                onclick="selectSeg('prc${idx}mat-btns','${m}','prc${idx}matval');calcHorasHilo(${idx})">${m}</button>`).join('')}
+            </div>
+            <input type="hidden" id="prc${idx}matval" value="${it['MATERIAL_HILO_'+(idx+1)]||'ALUMINIO'}">
+          </div>
+          <div class="field span2"><label>Horas Hilo</label>
+            <div id="prc${idx}horashilo" style="font-family:var(--mono);font-size:14px;color:var(--gold);padding:4px 0">—</div>
+          </div>
+        </div>
       </div>
       <div class="form-grid">
         <div class="field"><label>Tiempo (horas)</label>
@@ -3043,7 +3167,8 @@ function calcCostMat(idx){
     if(d3w) d3w.style.display='';
   }
   const volTotal=volMM3*cant;
-  const pesoKg=(densidad*volTotal)/1e6;
+  const pesoGr = densidad * volTotal;
+  const pesoKg = pesoGr / 1000;
   const costo=pesoKg*precioKg;
   const s=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
   s('mat'+idx+'-dens', densidad.toFixed(5));
@@ -3097,7 +3222,36 @@ function onSelectPrc(idx){
   if(extra)extra.style.display='block';
   const el=document.getElementById('prc'+idx+'-chora');
   if(el) el.textContent='$'+Number(opt.dataset.costo||0).toLocaleString('es-CO')+'/hr';
+  // Mostrar/ocultar calculadora de Horas Hilo según el proceso elegido
+  const hiloCalc=document.getElementById('prc'+idx+'-hilo-calc');
+  if(hiloCalc){
+    const esHilo=(opt.dataset.nombre||'')==='EROSIONADORA DE HILO';
+    hiloCalc.style.display=esHilo?'':'none';
+    if(esHilo) calcHorasHilo(idx);
+  }
   calcCostPrc(idx);
+}
+
+// calcHorasHilo: calcula horas de corte en erosionadora de hilo según Perímetro,
+// Espesor y Material, y las vuelca al campo "Tiempo (horas)" del proceso.
+function calcHorasHilo(idx){
+  const peri=Number(document.getElementById('prc'+idx+'peri')?.value||0);
+  const esp=Number(document.getElementById('prc'+idx+'esp')?.value||0);
+  const mat=document.getElementById('prc'+idx+'matval')?.value||'ALUMINIO';
+  const disp=document.getElementById('prc'+idx+'horashilo');
+  let horas=0;
+  if(peri>0 && esp>0){
+    if(mat==='ALUMINIO'){
+      horas=(peri/(60*(-0.08*esp+6)))+0.4;
+    } else if(mat==='ACERO, BRONCE'){
+      horas=(peri/(60*((-1)*Math.log(esp)+5.54)))+0.4;
+    } else if(mat==='TUNGSTENO'){
+      horas=(peri/(60*(7.5*Math.pow(esp,-0.7))))+0.4;
+    }
+  }
+  if(disp) disp.textContent = horas>0 ? horas.toFixed(2) : '—';
+  const tEl=document.getElementById('prc'+idx+'t');
+  if(tEl && horas>0){ tEl.value=horas.toFixed(2); }
 }
 
 // calcCostPrcSilent: actualiza display e hidden SIN llamar recalcItem (evita recursión)
@@ -3444,6 +3598,10 @@ async function saveItem(exist, cotId){
     prcData['TARIFA_'+(i+1)] = Number(opt?.dataset?.costo||0);
     prcData['TIEMPO_PRC_'+(i+1)] = Number(document.getElementById('prc'+i+'t')?.value||0);
     prcData['COSTO_PRC_'+(i+1)] = Number(document.getElementById('prc'+i+'cost')?.value||0);
+    // Datos de la calculadora de Horas Hilo (solo aplica si el proceso es EROSIONADORA DE HILO)
+    prcData['PERIMETRO_HILO_'+(i+1)]  = Number(document.getElementById('prc'+i+'peri')?.value||0);
+    prcData['ESPESOR_HILO_'+(i+1)]    = Number(document.getElementById('prc'+i+'esp')?.value||0);
+    prcData['MATERIAL_HILO_'+(i+1)]   = document.getElementById('prc'+i+'matval')?.value||'';
   });
 
   const cant=gn('i3');
@@ -3515,10 +3673,16 @@ async function saveItem(exist, cotId){
     'TARIFA PRO 1':   prcData['TARIFA_1']||0,
     'TIEMPO PRO 1 (horas)': prcData['TIEMPO_PRC_1']||0,
     'COSTO PRO 1':    prcData['COSTO_PRC_1']||0,
+    'PERIMETRO HILO 1': prcData['PERIMETRO_HILO_1']||0,
+    'ESPESOR HILO 1':    prcData['ESPESOR_HILO_1']||0,
+    'MATERIAL HILO 1':   prcData['MATERIAL_HILO_1']||'',
     'PROCESO 2':      prcData['RUTA_MQ2']||'',
     'TARIFA PRO 2':   prcData['TARIFA_2']||0,
     'TIEMPO PRO 2 (horas)': prcData['TIEMPO_PRC_2']||0,
     'COSTO PRO 2':    prcData['COSTO_PRC_2']||0,
+    'PERIMETRO HILO 2': prcData['PERIMETRO_HILO_2']||0,
+    'ESPESOR HILO 2':    prcData['ESPESOR_HILO_2']||0,
+    'MATERIAL HILO 2':   prcData['MATERIAL_HILO_2']||'',
     // ── Rutas de maquinado (para Control Producción) ───────
     RUTA_MQ1:         prcData['RUTA_MQ1']||'',
     RUTA_MQ2:         prcData['RUTA_MQ2']||'',
