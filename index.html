@@ -530,116 +530,6 @@ kbd{
   }
   .splash-step { color: #6666aa; font-size: 12px; min-height: 18px; text-align: center; }
 
-  
-  /* ── FILTROS AVANZADOS ──────────────────────────────── */
-  .filter-bar {
-    display: flex; flex-wrap: wrap; gap: 8px;
-    padding: 12px 14px; background: var(--surface);
-    border-bottom: 1px solid var(--border);
-    position: sticky; top: 0; z-index: 10;
-  }
-  .filter-bar select, .filter-bar input[type=text],
-  .filter-bar input[type=date] {
-    height: 34px; padding: 0 10px; border-radius: 8px;
-    border: 1.5px solid var(--border); background: var(--bg);
-    color: var(--text); font-size: 12px; outline: none;
-    transition: border .2s;
-  }
-  .filter-bar select:focus, .filter-bar input:focus {
-    border-color: var(--accent);
-  }
-  .filter-bar select { cursor: pointer; }
-  .filter-chip {
-    display: inline-flex; align-items: center; gap: 5px;
-    background: var(--accent); color: #fff;
-    border-radius: 99px; padding: 3px 10px; font-size: 11px;
-    cursor: pointer; user-select: none;
-  }
-  .filter-chip:hover { opacity: .8; }
-  .filter-count {
-    font-size: 11px; color: var(--muted);
-    padding: 0 4px; align-self: center; white-space: nowrap;
-  }
-  .filter-reset {
-    height: 34px; padding: 0 12px; border-radius: 8px;
-    border: 1.5px solid var(--border); background: transparent;
-    color: var(--muted); font-size: 12px; cursor: pointer;
-  }
-  .filter-reset:hover { border-color: var(--danger); color: var(--danger); }
-
-  /* ── TIMELINE HORIZONTAL ────────────────────────────── */
-  .timeline-wrap {
-    overflow-x: auto; padding: 16px 0 8px;
-    -webkit-overflow-scrolling: touch;
-  }
-  .timeline {
-    display: flex; position: relative;
-    min-width: max-content; padding: 0 20px;
-  }
-  .tl-item {
-    display: flex; flex-direction: column;
-    align-items: center; min-width: 110px; position: relative;
-  }
-  .tl-item:not(:last-child)::after {
-    content: ''; position: absolute;
-    top: 16px; left: calc(50% + 16px);
-    width: calc(100% - 32px); height: 2px;
-    background: var(--border);
-  }
-  .tl-item.done:not(:last-child)::after { background: var(--accent); }
-  .tl-dot-wrap {
-    width: 32px; height: 32px; border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 13px; font-weight: 700; z-index: 1;
-    background: var(--border); color: var(--muted);
-    border: 2px solid var(--border);
-  }
-  .tl-item.done .tl-dot-wrap {
-    background: var(--accent); color: #fff; border-color: var(--accent);
-  }
-  .tl-item.now .tl-dot-wrap {
-    background: var(--gold); color: #000; border-color: var(--gold);
-    box-shadow: 0 0 0 4px rgba(255,193,7,.2);
-  }
-  .tl-item.danger .tl-dot-wrap {
-    background: var(--danger); color: #fff; border-color: var(--danger);
-  }
-  .tl-label {
-    font-size: 10px; color: var(--muted); margin-top: 6px;
-    text-align: center; max-width: 90px; line-height: 1.3;
-  }
-  .tl-item.done .tl-label { color: var(--accent); font-weight: 600; }
-  .tl-item.now .tl-label  { color: var(--gold);   font-weight: 700; }
-  .tl-date {
-    font-size: 9px; color: var(--muted); margin-top: 2px;
-    text-align: center;
-  }
-
-  /* ── TIMELINE VERTICAL (para detalle OP) ────────────── */
-  .tl-vertical { padding: 8px 0; }
-  .tl-v-item {
-    display: flex; gap: 12px; align-items: flex-start;
-    padding: 6px 0; position: relative;
-  }
-  .tl-v-item:not(:last-child) .tl-v-line {
-    position: absolute; left: 11px; top: 28px;
-    width: 2px; height: calc(100% - 4px);
-    background: var(--border);
-  }
-  .tl-v-item.done .tl-v-line { background: var(--accent); }
-  .tl-v-dot {
-    width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 11px; font-weight: 700;
-    background: var(--border); color: var(--muted);
-  }
-  .tl-v-item.done .tl-v-dot { background: var(--accent); color: #fff; }
-  .tl-v-item.now  .tl-v-dot { background: var(--gold);   color: #000; }
-  .tl-v-item.pend .tl-v-dot { background: var(--border);  color: var(--muted); }
-  .tl-v-content { flex: 1; }
-  .tl-v-title { font-size: 12px; font-weight: 600; color: var(--text); }
-  .tl-v-date  { font-size: 11px; color: var(--muted); margin-top: 1px; }
-
   </style>
 </head>
 <body>
@@ -1069,32 +959,12 @@ async function cotizaciones(){
     if(!DB.cotizaciones) await load('cotizaciones','getCotizaciones');
     if(!DB.clientes)     await load('clientes','getClientes');
     updateBadges();
-
-    const all=[...DB.cotizaciones].sort((a,b)=>Number(b.COTIZACION||0)-Number(a.COTIZACION||0));
-    const data = filterData('cotizaciones', all);
-
-    // Opciones únicas para filtros
-    const estados   = [...new Set(all.map(c=>c.ESTADO).filter(Boolean))].sort();
-    const tipos     = [...new Set(all.map(c=>c.TIPO).filter(Boolean))].sort();
-    const asesores  = [...new Set(all.map(c=>c.ASESOR).filter(Boolean))].sort();
-    const ciudades  = [...new Set(all.map(c=>c.CIUDAD).filter(Boolean))].sort();
-
-    const fb = filterBar('cotizaciones', [
-      { key:'__search__', label:'Buscar empresa, descripción...', type:'text' },
-      { key:'ESTADO',   label:'Estado',   type:'select', opts:estados  },
-      { key:'TIPO',     label:'Tipo',     type:'select', opts:tipos    },
-      { key:'ASESOR',   label:'Asesor',   type:'select', opts:asesores },
-      { key:'CIUDAD',   label:'Ciudad',   type:'select', opts:ciudades },
-      { key:'__desde__',label:'Desde',    type:'date' },
-      { key:'__hasta__',label:'Hasta',    type:'date' },
-    ]);
-
-    if(!all.length){ setContent(empty('Sin cotizaciones')); return; }
-
-    setContent(fb + `<div class="card-list">
-      ${data.length ? data.map(c=>{
+    const data=[...DB.cotizaciones].sort((a,b)=>Number(b.ID_COT||0)-Number(a.ID_COT||0));
+    if(!data.length){ setContent(empty('Sin cotizaciones')); return; }
+    setContent(`<div class="card-list">
+      ${data.map(c=>{
         const dias=Number(c['LEAD TIME COT'])||0;
-        return `<div class="list-card" onclick="detailCot('${c.COTIZACION}')">
+        return `<div class="list-card" data-id="${c.ID_COT}" onclick="detailCot('${c.COTIZACION}')">
           <div class="lc-top">
             <div>
               <div class="lc-id">COT-${c.COTIZACION}</div>
@@ -1110,11 +980,11 @@ async function cotizaciones(){
             ${bEst(c.ESTADO)}
             <span style="font-size:11px;color:var(--muted)">Lead: ${dias}d</span>
             <span style="font-size:11px;color:var(--muted)">${c.ASESOR||''}</span>
+            ${c.ESTADO==='EN PROCESO'?'<span class="badge verde">OP activa</span>':''}
           </div>
         </div>`;
-      }).join('') : empty('Sin resultados para los filtros aplicados')}
+      }).join('')}
     </div>`);
-    updateFilterCount('cotizaciones', data.length, all.length);
   }catch(e){ setContent(`<div class="empty"><div class="empty-icon">⚠️</div><p>${e.message}</p></div>`); }
 }
 
@@ -1142,19 +1012,17 @@ async function detailCot(id){
   }
   const colorPlazo = diasRestantes==null?'var(--muted)':diasRestantes<0?'var(--danger)':diasRestantes<5?'var(--warn)':'var(--accent)';
 
-  // ── Timeline de estado COT (usando timelineH) ──
-  const COT_STEPS = [
-    { label:'En Espera',  key:'EN ESPERA'  },
-    { label:'Aprobada',   key:'APROBADA'   },
-    { label:'En Proceso', key:'EN PROCESO' },
-    { label:'Terminado',  key:'TERMINADO'  },
-    { label:'Facturada',  key:'FACTURADA'  },
-  ];
-  const timelineHtml = timelineH(COT_STEPS, c.ESTADO, {
-    'EN ESPERA':  c['FECHA EMISION COT.'],
-    'APROBADA':   c['FECHA ENTREGA PACTADA'],
-    'FACTURADA':  c['FECHA ENTREGA PACTADA'],
-  });
+  // ── Timeline de estado ──
+  const pasos=['EN ESPERA','APROBADA','EN PROCESO','TERMINADO','FACTURADA'];
+  const rechazada=['RECHAZADA','ANULADA'].includes(c.ESTADO);
+  const idxActual=pasos.indexOf(c.ESTADO);
+  const timelineHtml = rechazada
+    ? `<div class="cot-timeline"><div class="tl-step danger"><div class="tl-dot">✕</div><div class="tl-label">${c.ESTADO}</div></div></div>`
+    : `<div class="cot-timeline">${pasos.map((p,i)=>{
+        const cls = i<idxActual?'done':i===idxActual?'now':'';
+        const icon = i<idxActual?'✓':(i+1);
+        return `<div class="tl-step ${cls}"><div class="tl-line"></div><div class="tl-dot">${icon}</div><div class="tl-label">${p.split(' ')[0]}</div></div>`;
+      }).join('')}</div>`;
 
   const itemsHtml = its.length ? its.map(it=>`
     <div class="item-card" onclick="detailItem('${it.ID_ITEM}')">
@@ -1884,40 +1752,12 @@ async function produccion(){
     if(!DB.produccion)   await load('produccion','getControlProduccion');
     if(!DB.cotizaciones) await load('cotizaciones','getCotizaciones');
     updateBadges();
-
-    const all=[...DB.produccion].sort((a,b)=>Number(b.OP||0)-Number(a.OP||0));
-    const data = filterData('produccion', all);
-
-    const estados    = [...new Set(all.map(o=>o.ESTADO).filter(Boolean))].sort();
-    const tipos      = [...new Set(all.map(o=>o.TIPO).filter(Boolean))].sort();
-    const asesores   = [...new Set(all.map(o=>o.ASESOR).filter(Boolean))].sort();
-    const prioridades= ['Alta','Media','Baja'];
-    const semanas    = [...new Set(all.map(o=>o.SEMANA).filter(Boolean))].sort((a,b)=>b-a);
-
-    const fb = filterBar('produccion', [
-      { key:'__search__', label:'Buscar OP, cliente, descripción...', type:'text' },
-      { key:'ESTADO',    label:'Estado',    type:'select', opts:estados    },
-      { key:'TIPO',      label:'Tipo',      type:'select', opts:tipos      },
-      { key:'PRIORIDAD', label:'Prioridad', type:'select', opts:prioridades},
-      { key:'ASESOR',    label:'Asesor',    type:'select', opts:asesores   },
-      { key:'SEMANA',    label:'Semana',    type:'select', opts:semanas    },
-      { key:'DISEÑADOR', label:'Diseñador', type:'select',
-        opts:[...new Set(all.map(o=>o.DISEÑADOR).filter(Boolean))].sort() },
-    ]);
-
-    if(!all.length){setContent(empty('Sin órdenes de producción'));return;}
-
-    setContent(fb + `<div class="card-list">
-      ${data.length ? data.map(op=>{
+    const data=[...DB.produccion].sort((a,b)=>Number(b.ID_OP||0)-Number(a.ID_OP||0));
+    if(!data.length){setContent(empty('Sin órdenes de producción'));return;}
+    setContent(`<div class="card-list">
+      ${data.map(op=>{
         const pct=Number(op['%AVANCE'])||0;
-        // Mini timeline de estado OP
-        const OP_ESTADOS=['PENDIENTE MP','EN PROCESO','PAUSADO','TERMINADO','ENTREGADO'];
-        const iE = OP_ESTADOS.indexOf(op.ESTADO);
-        const miniTL = OP_ESTADOS.map((e,i)=>{
-          const c = i<iE?'var(--accent)':i===iE?'var(--gold)':'var(--border)';
-          return `<div style="width:${100/OP_ESTADOS.length}%;height:4px;background:${c};border-radius:2px"></div>`;
-        }).join('');
-
+        const cot=cotInfo(op.COT);
         return `<div class="list-card" onclick="detailOP('${op.OP}')">
           <div class="lc-top">
             <div>
@@ -1928,20 +1768,17 @@ async function produccion(){
             <div style="text-align:right;flex-shrink:0">
               ${bTipo(op.TIPO)}<br>
               ${diasTag(op['DÍAS ENTREGA'])}
-              ${op.PRIORIDAD?`<br><span class="badge ${op.PRIORIDAD==='Alta'?'rojo':op.PRIORIDAD==='Media'?'naranja':'gris'}">${op.PRIORIDAD}</span>`:''}
             </div>
           </div>
-          <div style="margin:6px 0 2px">${prog(pct)}<span style="font-size:11px;color:var(--muted)">${pct}% avance</span></div>
-          <div style="display:flex;gap:3px;margin-bottom:6px">${miniTL}</div>
+          <div style="margin:6px 0">${prog(pct)}<span style="font-size:11px;color:var(--muted)">${pct}% avance</span></div>
           <div class="lc-meta">
-            ${bEst(op.ESTADO)}
-            ${op.DISEÑADOR?`<span style="font-size:11px;color:var(--muted)">✏️ ${op.DISEÑADOR}</span>`:''}
-            <span style="font-size:11px;color:var(--muted)">S${op.SEMANA||'—'}</span>
+            ${bEst(op.ESTADO)} ${bSem(op.SEMAFORO)}
+            ${op.PRIORIDAD?`<span class="badge ${op.PRIORIDAD==='Alta'?'rojo':op.PRIORIDAD==='Media'?'naranja':'gris'}">${op.PRIORIDAD}</span>`:''}
+            ${cot?`<span style="font-size:11px;color:var(--muted)">${fmt(cot.PRECIO_TOTAL)}</span>`:''}
           </div>
         </div>`;
-      }).join('') : empty('Sin resultados para los filtros aplicados')}
+      }).join('')}
     </div>`);
-    updateFilterCount('produccion', data.length, all.length);
   }catch(e){setContent(`<div class="empty"><div class="empty-icon">⚠️</div><p>${e.message}</p></div>`);}
 }
 
@@ -1977,23 +1814,9 @@ async function detailOP(id){
       ${dr('Hilo',op['EROSIONADORA DE HILO R']||'—')} ${dr('Total Hrs R',op['TOTAL HRS R']||'—')}
     </div>
     <div class="dp-section">
-      <h4>🗓 Línea de Tiempo — Etapas OP</h4>
-      ${timelineV([
-        { label:'Ingeniería y Planeación', done: op['INGENIERIA Y PLANEACIÓN']==='TRUE',
-          date: op['FECHA ENTREGA\nPLANEACIÓN\nDD/MM/AA']||op['FECHA ENTREGA PLANEACION'],
-          now: op['INGENIERIA Y PLANEACIÓN']!=='TRUE' && op.ESTADO!=='PENDIENTE MP' },
-        { label:'MP / Insumos',            done: (op['MP\nINSUMOS']||op['MP INSUMOS'])==='TRUE',
-          date: op['FECHA ENTREGA\nDD/MM/AA']||op['FECHA ENTREGA MP'],
-          now: (op['MP\nINSUMOS']||op['MP INSUMOS'])!=='TRUE' && op['INGENIERIA Y PLANEACIÓN']==='TRUE' },
-        { label:'Servicio Externo',        done: op['SERVICIO EXTERNO']==='TRUE',
-          date: op['FECHA ENTREGA\nDD/MM/AA2']||op['FECHA ENTREGA SVC'] },
-        { label:'Entrega de Producción',   done: (op['ENTREGA DE PRODUCCIÓN']||op['ENTREGA DE PRODUCCION'])==='TRUE',
-          date: op['FECHA ENTREGA\nDD/MM/AA3']||op['FECHA ENTREGA PROD2'] },
-        { label:'Calidad',                 done: op['CALIDAD']==='TRUE',
-          date: op['FECHA \nCALIDAD\nDD/MM/AA']||op['FECHA CALIDAD'] },
-        { label:'Liberación / Despacho',   done: op['LIBERACION']==='TRUE' || op.DESPACHO==='TRUE',
-          date: op['FECHA DE DESPACHO'] },
-      ])}
+      <h4>Checklist</h4>
+      ${dr('MP / Insumos',chk(op['MP\nINSUMOS']||op['MP INSUMOS']))} ${dr('Servicio Externo',chk(op.SERVICIO_EXTERNO))}
+      ${dr('Entrega Prod.',chk(op['ENTREGA DE PRODUCCIÓN']||op['ENTREGA DE PRODUCCION']))} ${dr('Ingeniería',chk(op['INGENIERIA Y PLANEACIÓN']))}
     </div>
     ${cot?`<div class="dp-section">
       <h4>Cotización Vinculada</h4>
@@ -2846,135 +2669,6 @@ function recalcItem(){
 }
 
 // Marcar precio manual si el usuario lo toca
-
-// ══════════════════════════════════════════════════════════
-//  FILTROS AVANZADOS — estado compartido por módulo
-// ══════════════════════════════════════════════════════════
-const _F = {}; // filtros activos por módulo
-
-function applyFilter(mod, key, val) {
-  if (!_F[mod]) _F[mod] = {};
-  if (!val || val === 'TODOS') delete _F[mod][key];
-  else _F[mod][key] = val;
-  // Re-renderizar el módulo con filtros
-  const mods = { cotizaciones, produccion, clientes, remisiones, materiales, servicios, procesos };
-  if (mods[mod]) mods[mod]();
-}
-
-function resetFilters(mod) {
-  _F[mod] = {};
-  const mods = { cotizaciones, produccion, clientes, remisiones, materiales, servicios, procesos };
-  if (mods[mod]) mods[mod]();
-}
-
-function filterData(mod, data) {
-  const f = _F[mod] || {};
-  return data.filter(row => {
-    for (const [key, val] of Object.entries(f)) {
-      if (!val) continue;
-      const rv = String(row[key] || '').toLowerCase();
-      if (key === '__search__') {
-        // Búsqueda libre en todos los campos
-        const q = val.toLowerCase();
-        const all = Object.values(row).join(' ').toLowerCase();
-        if (!all.includes(q)) return false;
-      } else if (key === '__desde__') {
-        const d = new Date(row['FECHA EMISION COT.'] || row['FECHA INICIO'] || 0);
-        if (d < new Date(val)) return false;
-      } else if (key === '__hasta__') {
-        const d = new Date(row['FECHA EMISION COT.'] || row['FECHA INICIO'] || 0);
-        if (d > new Date(val + 'T23:59:59')) return false;
-      } else {
-        if (!rv.includes(val.toLowerCase())) return false;
-      }
-    }
-    return true;
-  });
-}
-
-function filterBar(mod, fields) {
-  // fields: [{key, label, type:'select'|'date'|'text', opts:[]}]
-  const f = _F[mod] || {};
-  return `<div class="filter-bar">
-    ${fields.map(fd => {
-      if (fd.type === 'select') {
-        return `<select onchange="applyFilter('${mod}','${fd.key}',this.value)" title="${fd.label}">
-          <option value="TODOS">${fd.label}</option>
-          ${(fd.opts||[]).map(o=>`<option value="${o}" ${f[fd.key]===o?'selected':''}>${o}</option>`).join('')}
-        </select>`;
-      } else if (fd.type === 'date') {
-        return `<input type="date" title="${fd.label}"
-          value="${f[fd.key]||''}"
-          onchange="applyFilter('${mod}','${fd.key}',this.value)"
-          placeholder="${fd.label}">`;
-      } else {
-        return `<input type="text" placeholder="🔍 ${fd.label}" style="min-width:160px"
-          value="${f['__search__']||''}"
-          oninput="applyFilter('${mod}','__search__',this.value)">`;
-      }
-    }).join('')}
-    <button class="filter-reset" onclick="resetFilters('${mod}')">✕ Limpiar</button>
-    <span class="filter-count" id="fc-${mod}"></span>
-  </div>`;
-}
-
-function updateFilterCount(mod, shown, total) {
-  const el = document.getElementById('fc-' + mod);
-  if (el) el.textContent = shown < total ? `${shown} de ${total}` : `${total} registros`;
-}
-
-// ══════════════════════════════════════════════════════════
-//  TIMELINE HORIZONTAL — para estados de procesos
-// ══════════════════════════════════════════════════════════
-function timelineH(steps, current, fechas) {
-  // steps: [{label, key}], current: string estado actual, fechas: {key: fecha}
-  const iCur = steps.findIndex(s => s.label === current || s.key === current);
-  const isDanger = ['RECHAZADA','ANULADA','CANCELADO'].includes(current);
-
-  if (isDanger) return `
-    <div class="timeline-wrap"><div class="timeline">
-      <div class="tl-item danger">
-        <div class="tl-dot-wrap">✕</div>
-        <div class="tl-label">${current}</div>
-      </div>
-    </div></div>`;
-
-  return `<div class="timeline-wrap"><div class="timeline">
-    ${steps.map((s, i) => {
-      const cls = i < iCur ? 'done' : i === iCur ? 'now' : '';
-      const icon = i < iCur ? '✓' : (i + 1);
-      const fecha = fechas && fechas[s.key] ? `<div class="tl-date">${fmtDate(fechas[s.key])}</div>` : '';
-      return `<div class="tl-item ${cls}">
-        <div class="tl-dot-wrap">${icon}</div>
-        <div class="tl-label">${s.label}</div>
-        ${fecha}
-      </div>`;
-    }).join('')}
-  </div></div>`;
-}
-
-// ══════════════════════════════════════════════════════════
-//  TIMELINE VERTICAL — para checklist de OP
-// ══════════════════════════════════════════════════════════
-function timelineV(steps) {
-  // steps: [{label, done:bool, date, now:bool}]
-  return `<div class="tl-vertical">
-    ${steps.map((s, i) => {
-      const cls = s.done ? 'done' : s.now ? 'now' : 'pend';
-      const icon = s.done ? '✓' : s.now ? '●' : (i + 1);
-      return `<div class="tl-v-item ${cls}">
-        <div class="tl-v-line"></div>
-        <div class="tl-v-dot">${icon}</div>
-        <div class="tl-v-content">
-          <div class="tl-v-title">${s.label}</div>
-          ${s.date ? `<div class="tl-v-date">${fmtDate(s.date)}</div>` : ''}
-        </div>
-      </div>`;
-    }).join('')}
-  </div>`;
-}
-
-
 document.addEventListener('input',e=>{ if(e.target?.id==='ipunit') e.target._manual=true; });
 
 async function saveItem(exist, cotId){
@@ -3059,26 +2753,12 @@ async function clientes(){
   try{
     if(!DB.clientes) await load('clientes','getClientes');
     if(!DB.cotizaciones) await load('cotizaciones','getCotizaciones');
-
-    const all=[...DB.clientes].sort((a,b)=>(a.Empresa||'').localeCompare(b.Empresa||''));
-    const data = filterData('clientes', all);
-
-    const ciudades = [...new Set(all.map(c=>c.Ciudad).filter(Boolean))].sort();
-    const asesores = [...new Set(all.map(c=>c['ASESOR ENCARGADO']).filter(Boolean))].sort();
-    const fcfs     = [...new Set(all.map(c=>c.FCF).filter(Boolean))].sort();
-
-    const fb = filterBar('clientes', [
-      { key:'__search__', label:'Buscar empresa, NIT, ciudad...', type:'text' },
-      { key:'Ciudad',    label:'Ciudad',  type:'select', opts:ciudades },
-      { key:'ASESOR ENCARGADO', label:'Asesor', type:'select', opts:asesores },
-      { key:'FCF',       label:'FCF',     type:'select', opts:fcfs },
-    ]);
-
-    if(!all.length){setContent(empty('Sin clientes'));return;}
-    setContent(fb + `<div class="card-list">
-      ${data.length ? data.map(c=>{
+    const data=[...DB.clientes].sort((a,b)=>(a.EMPRESA||'').localeCompare(b.EMPRESA||''));
+    if(!data.length){setContent(empty('Sin clientes'));return;}
+    setContent(`<div class="card-list">
+      ${data.map(c=>{
         const cots=(DB.cotizaciones||[]).filter(x=>String(x.Empresa||'').toUpperCase()===String(c.Empresa||'').toUpperCase());
-        const total=cots.reduce((s,x)=>s+Number(x['PRECIO TOTAL']||0),0);
+        const total=cots.reduce((s,x)=>s+Number(x.PRECIO_TOTAL||0),0);
         return `<div class="list-card" onclick="detailCliente('${c.ID}')">
           <div class="lc-top">
             <div>
@@ -3095,9 +2775,8 @@ async function clientes(){
             <span class="badge gris">${c['Condición de pago (días)']||'—'}</span>
           </div>
         </div>`;
-      }).join('') : empty('Sin resultados para los filtros')}
+      }).join('')}
     </div>`);
-    updateFilterCount('clientes', data.length, all.length);
   }catch(e){setContent(`<div class="empty"><div class="empty-icon">⚠️</div><p>${e.message}</p></div>`);}
 }
 
@@ -3170,27 +2849,11 @@ async function remisiones(){
     if(!DB.remisiones)         await load('remisiones','getRemisiones');
     if(!DB.cotizaciones)       await load('cotizaciones','getCotizaciones');
     if(!DB.elementosRemision)  await load('elementosRemision','getElementosRemision');
-
-    const all=[...DB.remisiones].sort((a,b)=>String(b.REMISION||'').localeCompare(String(a.REMISION||'')));
-    const data = filterData('remisiones', all);
-
-    const estados  = [...new Set(all.map(r=>r.ESTADO).filter(Boolean))].sort();
-    const asesores = [...new Set(all.map(r=>r.ASESOR).filter(Boolean))].sort();
-    const tipos    = [...new Set(all.map(r=>r.TIPO).filter(Boolean))].sort();
-
-    const fb = filterBar('remisiones', [
-      { key:'__search__', label:'Buscar remisión, empresa...', type:'text' },
-      { key:'ESTADO',  label:'Estado', type:'select', opts:estados  },
-      { key:'ASESOR',  label:'Asesor', type:'select', opts:asesores },
-      { key:'TIPO',    label:'Tipo',   type:'select', opts:tipos    },
-      { key:'__desde__', label:'Desde', type:'date' },
-      { key:'__hasta__', label:'Hasta', type:'date' },
-    ]);
-
-    if(!all.length){setContent(empty('Sin remisiones'));return;}
-    setContent(fb + `<div class="card-list">
-      ${data.length ? data.map(r=>{
-        const cot=cotInfo(r.COTIZACION||r.COT_ID);
+    const data=[...DB.remisiones].sort((a,b)=>String(b.ID_REMISION||'').localeCompare(String(a.ID_REMISION||'')));
+    if(!data.length){setContent(empty('Sin remisiones'));return;}
+    setContent(`<div class="card-list">
+      ${data.map(r=>{
+        const cot=cotInfo(r.COT_ID);
         return `<div class="list-card" onclick="detailRem('${r.REMISION}')">
           <div class="lc-top">
             <div>
@@ -3421,109 +3084,858 @@ async function materiales(){
   loading();
   try{
     if(!DB.materiales) await load('materiales','getMateriales');
-    const all = DB.materiales;
-    const data = filterData('materiales', all);
-
-    const tratamientos = [...new Set(all.map(m=>m.TRATAMIENTOS).filter(Boolean))].sort();
-
-    const fb = filterBar('materiales', [
-      { key:'__search__', label:'Buscar material...', type:'text' },
-      { key:'TRATAMIENTOS', label:'Tratamiento', type:'select', opts:tratamientos },
-    ]);
-
-    if(!all.length){setContent(empty('Sin materiales'));return;}
-    setContent(fb + `<div class="card-list">
-      ${data.length ? data.map(m=>`<div class="list-card" onclick="formMat(${JSON.stringify(m).replace(/`/g,'\'+'`')})">
+    const data=DB.materiales;
+    if(!data.length){setContent(empty('Sin materiales'));return;}
+    setContent(`<div class="card-list">
+      ${data.map(m=>`<div class="list-card" onclick="detailMat('${m.MATERIAL}')">
         <div class="lc-top">
           <div>
+            <div class="lc-id">${m.REFERENCIA||'—'} · ${m.UNIDAD||'—'}</div>
             <div class="lc-title">${m.MATERIAL||'—'}</div>
-            <div class="lc-sub">${m.TRATAMIENTOS||'Sin tratamiento'}</div>
+            <div class="lc-sub">${m.PROVEEDOR||''}</div>
           </div>
-          <div style="text-align:right">
-            <div style="font-family:var(--mono);font-weight:700;color:var(--gold)">${fmt(m['PRECIO KG'])}<span style="font-size:10px;color:var(--muted)">/kg</span></div>
-            <div style="font-size:11px;color:var(--muted)">ρ ${m['Densidad g/mm3']||'—'} g/mm³</div>
+          <div style="text-align:right;flex-shrink:0">
+            <div style="font-family:var(--mono);font-size:13px;color:var(--gold)">${fmt(m['PRECIO KG'])}</div>
+            <div style="font-size:12px;color:${Number(m.STOCK)<5?'var(--warn)':'var(--muted)'}">Stock: ${m.STOCK||0}</div>
           </div>
         </div>
-        <div class="lc-meta">
-          <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();formMat(${JSON.stringify(m).replace(/`/g,'\'+'`')})">✏️ Editar</button>
-          <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="event.stopPropagation();deleteMat('${m.MATERIAL}')">🗑</button>
-        </div>
-      </div>`).join('') : empty('Sin resultados')}
+      </div>`).join('')}
     </div>`);
-    updateFilterCount('materiales', data.length, all.length);
   }catch(e){setContent(`<div class="empty"><div class="empty-icon">⚠️</div><p>${e.message}</p></div>`);}
 }
 
+function detailMat(id){
+  const m=(DB.materiales||[]).find(x=>String(x.ID_MAT)===String(id)); if(!m) return;
+  openDetail(m.MATERIAL||id,`
+    <div class="dp-section"><h4>Material</h4>
+      ${dr('Referencia',m.REFERENCIA)} ${dr('Nombre',m.NOMBRE)} ${dr('Unidad',m.UNIDAD)}
+      ${dr('Precio Unitario',fmt(m['PRECIO KG']))} ${dr('Stock',m.STOCK)}
+      ${dr('Proveedor',m.PROVEEDOR)} ${dr('Descripción',m.DESCRIPCION)}
+    </div>`,
+    `<button class="btn btn-ghost btn-sm" onclick="formMaterial(${JSON.stringify(m).replace(/"/g,'&quot;')})">✏️</button>
+     <button class="btn btn-danger btn-sm" onclick="deleteMat('${id}')">🗑</button>`);
+}
+
+function formMaterial(m={}){
+  const isNew=!m.MATERIAL;
+  openModal(isNew?'Nuevo Material':'Editar '+m.NOMBRE,`
+    <div class="form-grid">
+      <div class="field"><label>Referencia</label><input id="m0" value="${m.REFERENCIA||''}"></div>
+      <div class="field span2" style="grid-column:unset;grid-column:1/-1 !important"><label>Nombre</label><input id="m1" value="${m.MATERIAL||''}"></div>
+      <div class="field"><label>Unidad</label>
+        <select id="m2">${['KG','MT','UN','CM','MM','LT','GL','M2','M3'].map(u=>`<option ${m.UNIDAD===u?'selected':''}>${u}</option>`).join('')}</select></div>
+      <div class="field"><label>Precio Unitario</label><input type="number" id="m3" value="${m['PRECIO KG']||0}"></div>
+      <div class="field"><label>Stock</label><input type="number" id="m4" value="${m.STOCK||0}"></div>
+      <div class="field"><label>Proveedor</label><input id="m5" value="${m.PROVEEDOR||''}"></div>
+      <div class="field span2"><label>Descripción</label><textarea id="m6">${m.DESCRIPCION||''}</textarea></div>
+    </div>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+     <button class="btn btn-primary" onclick="saveMat('${m.MATERIAL||''}')">
+       ${isNew?'Crear':'Guardar'}</button>`);
+}
+
+async function saveMat(exist){
+  const data={ID_MAT:exist||undefined,REFERENCIA:gv('m0'),NOMBRE:gv('m1'),UNIDAD:gv('m2'),
+    PRECIO_UNITARIO:gn('m3'),STOCK:gn('m4'),PROVEEDOR:gv('m5'),DESCRIPCION:gv('m6')};
+  try{ await POST(exist?'updateMaterial':'createMaterial',data); toast('Guardado'); closeModal(); DB.materiales=null; materiales(); }
+  catch(e){toast(e.message,'error');}
+}
+
+async function deleteMat(id){
+  if(!confirm('¿Eliminar?'))return;
+  try{ await POST('deleteMaterial',{ID_MAT:id}); toast('Eliminado'); DB.materiales=null; materiales(); closeDetail(); }
+  catch(e){toast(e.message,'error');}
+}
+
+// ══════════════════════════════════════════════════════════════
+//   SERVICIOS
+// ══════════════════════════════════════════════════════════════
 async function servicios(){
   loading();
   try{
     if(!DB.servicios) await load('servicios','getServicios');
-    const all = DB.servicios;
-    const data = filterData('servicios', all);
-
-    const fb = filterBar('servicios', [
-      { key:'__search__', label:'Buscar servicio...', type:'text' },
-    ]);
-
-    if(!all.length){setContent(empty('Sin servicios'));return;}
-    setContent(fb + `<div class="card-list">
-      ${data.length ? data.map(svc=>`<div class="list-card" onclick="formSvc(${JSON.stringify(svc).replace(/`/g,'\'+'`')})">
+    const data=DB.servicios;
+    if(!data.length){setContent(empty('Sin servicios'));return;}
+    setContent(`<div class="card-list">
+      ${data.map(s=>`<div class="list-card">
         <div class="lc-top">
           <div>
-            <div class="lc-title">${svc['SERVICIO EXTERNO']||'—'}</div>
-            <div class="lc-sub">${svc['MATERIALES APLICABLES']||'—'}</div>
+            <div class="lc-id">${s.TIPO||'—'}</div>
+            <div class="lc-title">${s.NOMBRE||'—'}</div>
+            <div class="lc-sub">${s.PROVEEDOR||''}</div>
           </div>
-          <div style="text-align:right">
-            <span class="badge ${svc.ACTIVO==='FALSE'?'gris':'verde'}">${svc.ACTIVO==='FALSE'?'Inactivo':'Activo'}</span>
-            <div style="font-family:var(--mono);font-size:12px;color:var(--gold);margin-top:4px">${fmt(svc['COSTO KG'])}<span style="font-size:10px;color:var(--muted)">/kg</span></div>
+          <div style="text-align:right;flex-shrink:0">
+            <div style="font-family:var(--mono);font-size:13px;color:var(--gold)">${fmt(s.PRECIO)}</div>
+            ${s.ACTIVO==='N'?'<span class="badge rojo">Inactivo</span>':'<span class="badge verde">Activo</span>'}
           </div>
         </div>
-        <div class="lc-meta">
-          <span style="font-size:11px;color:var(--muted)">⏱ ${svc.DIAS||0} días</span>
-          <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();formSvc(${JSON.stringify(svc).replace(/`/g,'\'+'`')})">✏️ Editar</button>
-          <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="event.stopPropagation();deleteSvc('${svc['SERVICIO EXTERNO']}')">🗑</button>
+        <div class="lc-actions">
+          <button class="btn btn-ghost btn-sm" onclick="formServicio(${JSON.stringify(s).replace(/"/g,'&quot;')})">✏️ Editar</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteSvc('${s.ID_SVC}')">🗑</button>
         </div>
-      </div>`).join('') : empty('Sin resultados')}
+      </div>`).join('')}
     </div>`);
-    updateFilterCount('servicios', data.length, all.length);
   }catch(e){setContent(`<div class="empty"><div class="empty-icon">⚠️</div><p>${e.message}</p></div>`);}
 }
 
+function formServicio(s={}){
+  const isNew=!s.ID_SVC;
+  openModal(isNew?'Nuevo Servicio':'Editar '+s.NOMBRE,`
+    <div class="form-grid">
+      <div class="field span2"><label>Nombre</label><input id="sv0" value="${s.NOMBRE||''}"></div>
+      <div class="field"><label>Tipo</label><input id="sv1" value="${s.TIPO||''}" placeholder="Tratamiento térmico, Cromado…"></div>
+      <div class="field"><label>Precio</label><input type="number" id="sv2" value="${s.PRECIO||0}"></div>
+      <div class="field"><label>Proveedor</label><input id="sv3" value="${s.PROVEEDOR||''}"></div>
+      <div class="field"><label>Activo</label>
+        <select id="sv4"><option value="Y" ${s.ACTIVO!=='N'?'selected':''}>Sí</option><option value="N" ${s.ACTIVO==='N'?'selected':''}>No</option></select></div>
+      <div class="field span2"><label>Descripción</label><textarea id="sv5">${s.DESCRIPCION||''}</textarea></div>
+    </div>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+     <button class="btn btn-primary" onclick="saveSvc('${s.ID_SVC||''}')">
+       ${isNew?'Crear':'Guardar'}</button>`);
+}
+
+async function saveSvc(exist){
+  const data={ID_SVC:exist||undefined,NOMBRE:gv('sv0'),TIPO:gv('sv1'),
+    PRECIO:gn('sv2'),PROVEEDOR:gv('sv3'),ACTIVO:gv('sv4'),DESCRIPCION:gv('sv5')};
+  try{ await POST(exist?'updateServicio':'createServicio',data); toast('Guardado'); closeModal(); DB.servicios=null; servicios(); }
+  catch(e){toast(e.message,'error');}
+}
+async function deleteSvc(id){
+  if(!confirm('¿Eliminar?'))return;
+  try{ await POST('deleteServicio',{ID_SVC:id}); toast('Eliminado'); DB.servicios=null; servicios(); }
+  catch(e){toast(e.message,'error');}
+}
+
+// ══════════════════════════════════════════════════════════════
+//   PROCESOS / MÁQUINAS
+// ══════════════════════════════════════════════════════════════
 async function procesos(){
   loading();
   try{
     if(!DB.procesos) await load('procesos','getProcesos');
-    const all = DB.procesos;
-    const data = filterData('procesos', all);
+    const data=DB.procesos;
+    // Color por cuadrante
+    const CQ_COLOR={'CNC':'#42a5f5','EDM':'#7c3aed','HILO':'#e91e8c','FRESA':'#f0b429',
+      'BANCO':'#4caf65','RECTIFICADO':'#ff9800','SOLDADURA':'#ef5350','TORNO':'#00bcd4','GENERAL':'#aaa'};
 
-    const cuadrantes = [...new Set(all.map(p=>p.CUADRANTE).filter(Boolean))].sort();
+    // Agrupar por cuadrante
+    const grupos={};
+    data.forEach(p=>{
+      const cq=p.CUADRANTE||p.TIPO||'GENERAL';
+      if(!grupos[cq]) grupos[cq]=[];
+      grupos[cq].push(p);
+    });
 
-    const fb = filterBar('procesos', [
-      { key:'__search__',  label:'Buscar proceso, máquina...', type:'text' },
-      { key:'CUADRANTE',   label:'Cuadrante', type:'select', opts:cuadrantes },
-    ]);
+    if(!data.length){
+      setContent(`<div class="empty"><div class="empty-icon">⚙️</div>
+        <p>Sin procesos cargados</p>
+        <button class="btn btn-primary" style="margin-top:12px" onclick="toast('Ejecuta setupERPConSeed() en Apps Script para cargar el catálogo','ok')">
+          ℹ️ Cómo cargar el catálogo
+        </button></div>`);
+      return;
+    }
 
-    if(!all.length){setContent(empty('Sin procesos'));return;}
-    setContent(fb + `<div class="card-list">
-      ${data.length ? data.map(prc=>`<div class="list-card" onclick="formPrc(${JSON.stringify(prc).replace(/`/g,'\'+'`')})">
-        <div class="lc-top">
-          <div>
-            <div class="lc-title">${prc.PROCESO||'—'}</div>
-            <div class="lc-sub">${prc.CUADRANTE||'Sin cuadrante'}</div>
-          </div>
-          <div style="text-align:right">
-            <div style="font-family:var(--mono);font-weight:700;color:var(--gold)">${fmt(prc['TARIFA / HR'])}<span style="font-size:10px;color:var(--muted)">/hr</span></div>
-          </div>
-        </div>
-        <div class="lc-meta">
-          <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();formPrc(${JSON.stringify(prc).replace(/`/g,'\'+'`')})">✏️ Editar</button>
-          <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="event.stopPropagation();deletePrc('${prc.PROCESO}')">🗑</button>
-        </div>
-      </div>`).join('') : empty('Sin resultados')}
-    </div>`);
-    updateFilterCount('procesos', data.length, all.length);
+    // KPI por cuadrante
+    const kpisHtml = Object.entries(grupos).map(([cq,ps])=>`
+      <div class="kpi-card" style="border-left:3px solid ${CQ_COLOR[cq]||'#aaa'}">
+        <div class="kpi-label" style="color:${CQ_COLOR[cq]||'#aaa'}">${cq}</div>
+        <div class="kpi-value" style="color:${CQ_COLOR[cq]||'#aaa'};font-size:20px">${ps.length}</div>
+        <div class="kpi-sub">${ps.filter(p=>p.TARIFA_HR||p.COSTO_HORA).length} con tarifa</div>
+      </div>`).join('');
+
+    setContent(`
+      <div class="kpi-grid" style="margin-bottom:16px">${kpisHtml}</div>
+      <div class="card-list">
+        ${data.map(p=>{
+          const cq=p.CUADRANTE||p.TIPO||'GENERAL';
+          const color=CQ_COLOR[cq]||'#aaa';
+          const tarifa=Number(p.TARIFA_HR||p.COSTO_HORA||0);
+          const esServExt=(p.PROCESO||p.NOMBRE_MAQUINA||'').startsWith('SE ');
+          return `<div class="list-card" style="border-left:3px solid ${color}">
+            <div class="lc-top">
+              <div>
+                <div class="lc-id" style="display:flex;gap:6px;align-items:center">
+                  <span class="badge" style="color:${color};background:${color}18;border:1px solid ${color}44">${cq}</span>
+                  ${esServExt?'<span class="badge gris" style="font-size:9px">SERV. EXT.</span>':''}
+                </div>
+                <div class="lc-title">${p.PROCESO||p.NOMBRE_MAQUINA||'—'}</div>
+                <div class="lc-sub">${p.OPERARIO||''}${p.DESCRIPCION?' · '+p.DESCRIPCION:''}</div>
+              </div>
+              <div style="text-align:right;flex-shrink:0">
+                ${tarifa>0?`<div style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--gold)">$${tarifa.toLocaleString('es-CO')}/hr</div>`:''}
+                ${(p.DISPONIBLE||'Y')==='N'?'<span class="badge rojo" style="font-size:10px">No disp.</span>':''}
+              </div>
+            </div>
+            <div class="lc-actions">
+              <button class="btn btn-ghost btn-sm" onclick="formProceso(${JSON.stringify(p).replace(/"/g,'&quot;')})">✏️ Editar</button>
+              <button class="btn btn-danger btn-sm" onclick="deletePrc('${p.ID_PROCESO}')">🗑</button>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>`);
   }catch(e){setContent(`<div class="empty"><div class="empty-icon">⚠️</div><p>${e.message}</p></div>`);}
 }
+
+function formProceso(p={}){
+  const isNew=!p.ID_PROCESO;
+  const cuadrantes=['CNC','EDM','HILO','FRESA','BANCO','RECTIFICADO','SOLDADURA','TORNO','GENERAL'];
+  openModal(isNew?'Nuevo Proceso / Máquina':'Editar '+(p.PROCESO||p.NOMBRE_MAQUINA||''),`
+    <div class="form-grid">
+      <div class="field span2"><label>Proceso / Máquina</label>
+        <input id="pr0" value="${p.PROCESO||p.NOMBRE_MAQUINA||''}" placeholder="ej. CENTRO DE MECANIZADO"></div>
+      <div class="field"><label>Cuadrante</label>
+        <select id="pr1">${cuadrantes.map(t=>`<option ${(p.CUADRANTE||p.TIPO||'')=== t?'selected':''}>${t}</option>`).join('')}</select></div>
+      <div class="field"><label>Tarifa / Hora ($)</label>
+        <input type="number" id="pr2" value="${p.TARIFA_HR||p.COSTO_HORA||0}" step="100"></div>
+      <div class="field"><label>Disponible</label>
+        <select id="pr3">
+          <option value="Y" ${(p.DISPONIBLE||'Y')!=='N'?'selected':''}>Sí</option>
+          <option value="N" ${p.DISPONIBLE==='N'?'selected':''}>No</option>
+        </select></div>
+      <div class="field"><label>Operario</label>
+        <input id="pr4" value="${p.OPERARIO||''}"></div>
+      <div class="field span2"><label>Descripción</label>
+        <textarea id="pr5">${p.DESCRIPCION||''}</textarea></div>
+    </div>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+     <button class="btn btn-primary" onclick="savePrc('${p.ID_PROCESO||''}')">
+       ${isNew?'Crear':'Guardar'}</button>`);
+}
+
+async function savePrc(exist){
+  const data={ID_PROCESO:exist||undefined,PROCESO:gv('pr0'),NOMBRE_MAQUINA:gv('pr0'),CUADRANTE:gv('pr1'),TIPO:gv('pr1'),
+    TARIFA_HR:gn('pr2'),COSTO_HORA:gn('pr2'),DISPONIBLE:gv('pr3'),OPERARIO:gv('pr4'),DESCRIPCION:gv('pr5')};
+  try{ await POST(exist?'updateProceso':'createProceso',data); toast('Guardado'); closeModal(); DB.procesos=null; procesos(); }
+  catch(e){toast(e.message,'error');}
+}
+async function deletePrc(id){
+  if(!confirm('¿Eliminar?'))return;
+  try{ await POST('deleteProceso',{ID_PROCESO:id}); toast('Eliminado'); DB.procesos=null; procesos(); }
+  catch(e){toast(e.message,'error');}
+}
+
+// ╔══════════════════════════════════════════════════════════════
+//   DRIVE UPLOAD ENGINE
+// ╚══════════════════════════════════════════════════════════════
+
+// Configuración de tipos de archivo
+const UPLOAD_TYPES = {
+  imagen_op:  { label:'📸 Imagen Pieza',    accept:'image/*',           icon:'📸', folder:'IMAGENES_OP' },
+  plano:      { label:'📐 Plano / CAD',     accept:'.pdf,.dwg,.dxf,.step,.stp,.iges,.igs,image/*', icon:'📐', folder:'PLANOS' },
+  pdf_cot:    { label:'📄 PDF Cotización',  accept:'application/pdf',   icon:'📄', folder:'PDF_COTIZACION' },
+  pdf_rem:    { label:'📦 PDF Remisión',    accept:'application/pdf',   icon:'📦', folder:'PDF_REMISION' },
+  pdf_op:     { label:'🏭 PDF Orden Prod.', accept:'application/pdf',   icon:'🏭', folder:'PDF_OP' },
+  general:    { label:'📎 Archivo',         accept:'*/*',               icon:'📎', folder:'GENERAL' },
+};
+
+// Estado temporal de archivos subidos en la sesión actual
+const UPLOADED_FILES = {}; // key: zoneId → array de { url, directUrl, thumbnailUrl, nombre, tipo, fileId }
+
+// ── Renderizar zona de carga ───────────────────────────────────
+// tipo:      clave de UPLOAD_TYPES
+// zoneId:    ID único para este componente (ej. 'op-imagen-13514')
+// recordId:  ID del registro (ej. '13514')
+// recordSheet, recordField, idKey: para auto-guardar URL en el Sheet
+// existingUrls: array de URLs ya guardadas para mostrar
+function renderUploadZone(tipo, zoneId, recordId, recordSheet, recordField, idKey, existingUrls=[]) {
+  const cfg = UPLOAD_TYPES[tipo] || UPLOAD_TYPES.general;
+
+  // Convertir URL de Drive a thumbnail viewable
+  function driveThumb(url){
+    if(!url) return url;
+    // ya es thumbnail
+    if(url.includes('thumbnail?id=')) return url;
+    // formato uc?export=view&id=XXX
+    const m1=url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+    if(m1) return `https://drive.google.com/thumbnail?id=${m1[1]}&sz=w400`;
+    // formato /file/d/XXX/
+    const m2=url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+    if(m2) return `https://drive.google.com/thumbnail?id=${m2[1]}&sz=w400`;
+    return url;
+  }
+  const existingHTML = existingUrls.filter(Boolean).map(url => {
+    const isImg = /\.(jpg|jpeg|png|gif|webp)/i.test(url) || url.includes('thumbnail') || url.includes('uc?export=view') || url.includes('drive.google.com');
+    if(isImg) {
+      const thumbUrl = driveThumb(url);
+      return `<div class="file-thumb-wrap">
+        <img src="${thumbUrl}" class="file-thumb"
+          onclick="window.open('${url}','_blank')"
+          onerror="this.style.opacity='0.4';this.title='No se pudo cargar la imagen';this.onclick=()=>window.open('${url}','_blank')">
+      </div>`;
+    } else {
+      const name = decodeURIComponent(url.split('/').pop()||'Archivo');
+      return `<div class="file-doc" onclick="window.open('${url}','_blank')">
+        <span class="fd-icon">${cfg.icon}</span>
+        <span class="fd-name">${name}</span>
+        <span style="font-size:11px;color:var(--muted)">↗</span>
+      </div>`;
+    }
+  }).join('');
+
+  // Guardar contexto en el DOM para que el listener global de paste lo encuentre
+  return `<div>
+    <div class="upload-zone" id="zone-${zoneId}"
+      tabindex="0"
+      data-upload-tipo="${tipo}"
+      data-upload-zone="${zoneId}"
+      data-upload-record="${recordId}"
+      data-upload-sheet="${recordSheet}"
+      data-upload-field="${recordField}"
+      data-upload-idkey="${idKey}"
+      ondragover="event.preventDefault();this.classList.add('drag')"
+      ondragleave="this.classList.remove('drag')"
+      ondrop="onFileDrop(event,'${tipo}','${zoneId}','${recordId}','${recordSheet}','${recordField}','${idKey}')"
+      onfocus="this.classList.add('paste-ready');window._activeUploadZone='${zoneId}'"
+      onblur="this.classList.remove('paste-ready')">
+      <input type="file" accept="${cfg.accept}" multiple
+        onchange="onFileSelect(this,'${tipo}','${zoneId}','${recordId}','${recordSheet}','${recordField}','${idKey}')">
+      <div class="uz-icon">${cfg.icon}</div>
+      <div class="uz-label">${cfg.label}</div>
+      <div class="uz-sub">Toca para elegir · Arrastra · o Pega</div>
+      <div class="uz-paste-hint">📋 <kbd>Ctrl</kbd>+<kbd>V</kbd> para pegar imagen del portapapeles</div>
+      <div class="upload-progress" id="prog-${zoneId}">
+        <div class="upload-progress-fill" id="progfill-${zoneId}" style="width:0%"></div>
+      </div>
+    </div>
+    <div class="file-preview-grid" id="preview-${zoneId}">${existingHTML}</div>
+  </div>`;
+}
+
+// ── Handlers de selección/drop ────────────────────────────────
+function onFileDrop(event, tipo, zoneId, recordId, recordSheet, recordField, idKey) {
+  event.preventDefault();
+  document.getElementById('zone-'+zoneId)?.classList.remove('drag');
+  const files = Array.from(event.dataTransfer.files);
+  processFiles(files, tipo, zoneId, recordId, recordSheet, recordField, idKey);
+}
+
+function onFileSelect(input, tipo, zoneId, recordId, recordSheet, recordField, idKey) {
+  processFiles(Array.from(input.files), tipo, zoneId, recordId, recordSheet, recordField, idKey);
+  input.value = ''; // reset para permitir reseleccionar el mismo archivo
+}
+
+async function processFiles(files, tipo, zoneId, recordId, recordSheet, recordField, idKey) {
+  if(!files.length) return;
+
+  const progWrap = document.getElementById('prog-'+zoneId);
+  const progFill = document.getElementById('progfill-'+zoneId);
+  if(progWrap) progWrap.style.display='block';
+
+  for(let i=0; i<files.length; i++) {
+    const file = files[i];
+    if(progFill) progFill.style.width = Math.round(((i)/files.length)*100)+'%';
+
+    try {
+      // Validar tamaño (máx 10MB por archivo)
+      if(file.size > 25 * 1024 * 1024) {
+        toast(`${file.name}: máximo 25MB por archivo`, 'error');
+        continue;
+      }
+
+      // Leer como base64
+      const base64 = await fileToBase64(file);
+      const mimeType = file.type || 'application/octet-stream';
+
+      // Nombre con timestamp para evitar colisiones
+      const ext = file.name.split('.').pop();
+      const ts  = new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);
+      const nombre = `${tipo}_${recordId}_${ts}.${ext}`;
+
+      // Subir al servidor
+      const result = await POST('uploadFile', {
+        tipo, nombre, base64, mimeType,
+        recordId, recordField, recordSheet, idKey
+      });
+
+      // Mostrar preview inmediato
+      addFilePreview(zoneId, result, tipo);
+      if(!UPLOADED_FILES[zoneId]) UPLOADED_FILES[zoneId]=[];
+      UPLOADED_FILES[zoneId].push(result);
+
+      toast(`✓ ${file.name} guardado en Drive`);
+    } catch(e) {
+      const msg = e.message||'';
+      if(msg.includes('Acceso denegado') || msg.includes('DriveApp') || msg.includes('denegado')) {
+        toast('⚠️ Sin permisos de Drive — Re-despliega el script como Web App y autoriza los permisos', 'error');
+      } else {
+        toast(`Error subiendo ${file.name}: ${msg}`, 'error');
+      }
+      console.error('uploadFile error:', e);
+    }
+  }
+
+  if(progFill) progFill.style.width='100%';
+  setTimeout(()=>{ if(progWrap) progWrap.style.display='none'; if(progFill) progFill.style.width='0%'; }, 800);
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload  = () => resolve(reader.result.split(',')[1]); // solo base64, sin el prefijo
+    reader.onerror = () => reject(new Error('Error leyendo archivo'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function addFilePreview(zoneId, result, tipo) {
+  const container = document.getElementById('preview-'+zoneId);
+  if(!container) return;
+  const isImg = /^image\//.test(result.mimeType||'') || result.directUrl || result.thumbnailUrl;
+  // Preferir thumbnailUrl, luego directUrl (ambos de Drive)
+  const imgSrc = result.thumbnailUrl || result.directUrl || '';
+
+  if(isImg && imgSrc) {
+    container.insertAdjacentHTML('beforeend',`
+      <div class="file-thumb-wrap">
+        <img src="${imgSrc}" class="file-thumb"
+          onclick="window.open('${result.fileUrl}','_blank')"
+          onerror="this.style.opacity='0.4';this.title='Click para abrir';this.onclick=()=>window.open('${result.fileUrl}','_blank')">
+      </div>`);
+  } else {
+    const icon = (UPLOAD_TYPES[tipo]||{}).icon||'📎';
+    container.insertAdjacentHTML('beforeend',`
+      <div class="file-doc" onclick="window.open('${result.fileUrl}','_blank')">
+        <span class="fd-icon">${icon}</span>
+        <span class="fd-name">${result.nombre||'Archivo'}</span>
+        <span style="font-size:11px;color:var(--muted)">↗</span>
+      </div>`);
+  }
+}
+
+// ╔══════════════════════════════════════════════════════════════
+//   CLIPBOARD PASTE ENGINE
+//   Funciona en:
+//   1. Zonas de upload (.upload-zone enfocadas)  → sube a Drive
+//   2. Editor rico (.rich-editor)                → inserta inline como Word
+//   3. Cualquier lugar del modal abierto         → detecta zona activa
+// ╚══════════════════════════════════════════════════════════════
+
+// Zona de upload activa (se actualiza al hacer focus)
+window._activeUploadZone = null;
+
+// ── Listener global de paste ──────────────────────────────────
+document.addEventListener('paste', async function(e) {
+  const items = Array.from(e.clipboardData?.items || []);
+  const imageItem = items.find(it => it.type.startsWith('image/'));
+  if(!imageItem) return; // solo imágenes; texto normal pasa sin tocar
+
+  // ── Caso 1: el foco está en un .rich-editor ──
+  const focusedEl = document.activeElement;
+  if(focusedEl && focusedEl.classList.contains('rich-editor')) {
+    e.preventDefault();
+    const blob = imageItem.getAsFile();
+    if(!blob) return;
+    // Insertar preview local inmediato (data URL, no necesita Drive)
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const dataUrl = ev.target.result;
+      // Guardar también en Drive si hay contexto
+      const cotId = focusedEl.dataset.cotId;
+      if(cotId) {
+        uploadPastedImageToDrive(blob, 'pdf_cot', cotId, 'COTIZACIONES', 'IMG_DESC_URL', 'ID_COT')
+          .then(result => {
+            // Reemplazar data URL temporal con URL de Drive
+            const imgs = focusedEl.querySelectorAll(`img[src="${dataUrl}"]`);
+            imgs.forEach(img => img.src = result.directUrl || dataUrl);
+          }).catch(()=>{}); // Si falla Drive, la imagen data URL queda igual
+      }
+      // Insertar en el contenteditable
+      const img = document.createElement('img');
+      img.src = dataUrl;
+      img.style.maxWidth = '100%';
+      img.style.borderRadius = '6px';
+      img.style.margin = '4px 0';
+      img.title = 'Imagen pegada — se subirá a Drive';
+      const sel = window.getSelection();
+      if(sel && sel.rangeCount) {
+        const range = sel.getRangeAt(0);
+        range.deleteContents();
+        range.insertNode(img);
+        range.setStartAfter(img);
+        range.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(range);
+      } else {
+        focusedEl.appendChild(img);
+      }
+    };
+    reader.readAsDataURL(blob);
+    return;
+  }
+
+  // ── Caso 2: hay una zona de upload activa o enfocada ──
+  const zoneId = window._activeUploadZone;
+  let zone = zoneId ? document.getElementById('zone-'+zoneId) : null;
+
+  // Si no hay zona activa por focus, buscar la zona visible en el modal
+  if(!zone) {
+    zone = document.querySelector('.overlay.open .upload-zone, #dp .upload-zone:first-of-type');
+  }
+  if(!zone) return;
+
+  e.preventDefault();
+  const blob = imageItem.getAsFile();
+  if(!blob) return;
+
+  // Leer los datos del contexto desde el data-* del elemento
+  const tipo      = zone.dataset.uploadTipo      || 'imagen_op';
+  const zid       = zone.dataset.uploadZone      || 'paste-zone';
+  const recordId  = zone.dataset.uploadRecord    || 'unknown';
+  const sheet     = zone.dataset.uploadSheet     || '';
+  const field     = zone.dataset.uploadField     || '';
+  const idKey     = zone.dataset.uploadIdkey     || '';
+
+  // Flash visual en la zona
+  zone.classList.add('drag');
+  setTimeout(()=>zone.classList.remove('drag'), 400);
+
+  toast('📋 Procesando imagen pegada…');
+  await uploadPastedImageToDrive(blob, tipo, recordId, sheet, field, idKey, zid);
+});
+
+// ── Subir un blob (del portapapeles) a Drive ──────────────────
+async function uploadPastedImageToDrive(blob, tipo, recordId, recordSheet, recordField, idKey, zoneId='paste-zone') {
+  try {
+    const base64   = await fileToBase64(blob);
+    const mimeType = blob.type || 'image/png';
+    const ext      = mimeType.split('/')[1] || 'png';
+    const ts       = new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);
+    const nombre   = `paste_${tipo}_${recordId}_${ts}.${ext}`;
+
+    const result = await POST('uploadFile', {
+      tipo, nombre, base64, mimeType,
+      recordId, recordField: recordField||'IMAGEN_URL',
+      recordSheet: recordSheet||'',
+      idKey: idKey||''
+    });
+
+    // Añadir preview a la zona si existe
+    addFilePreview(zoneId, result, tipo);
+    if(!UPLOADED_FILES[zoneId]) UPLOADED_FILES[zoneId]=[];
+    UPLOADED_FILES[zoneId].push(result);
+
+    toast('✓ Imagen pegada subida a Drive');
+    return result;
+  } catch(e) {
+    const msg = e.message||'';
+    if(msg.includes('Acceso denegado') || msg.includes('DriveApp') || msg.includes('denegado')) {
+      toast('⚠️ Sin permisos de Drive — Redesplegar el script en GAS y autorizar', 'error');
+    } else {
+      toast('Error subiendo imagen: '+msg, 'error');
+    }
+    throw e;
+  }
+}
+
+// ╔══════════════════════════════════════════════════════════════
+//   RICH DESCRIPTION EDITOR
+//   Reemplaza el <textarea> de descripción en formCot por un
+//   contenteditable que acepta texto + imágenes pegadas
+// ╚══════════════════════════════════════════════════════════════
+
+// Renderizar editor rico
+function renderRichEditor(id, cotId, initialHtml='', placeholder='Descripción del proyecto…') {
+  return `<div class="rich-editor-wrap">
+    <div
+      id="${id}"
+      class="rich-editor"
+      contenteditable="true"
+      data-cot-id="${cotId}"
+      data-placeholder="${placeholder}"
+      oninput="onRichEditorInput(this)"
+    >${initialHtml}</div>
+    <div class="rich-editor-hint">
+      <span>📋 <kbd>Ctrl</kbd>+<kbd>V</kbd> pega imágenes directamente</span>
+      <span style="margin-left:auto">🖼️ Arrastra imágenes aquí también</span>
+    </div>
+  </div>`;
+}
+
+// Manejar drag & drop en el editor rico
+document.addEventListener('dragover', e => {
+  if(e.target.classList.contains('rich-editor')) e.preventDefault();
+});
+document.addEventListener('drop', e => {
+  if(!e.target.classList.contains('rich-editor')) return;
+  e.preventDefault();
+  const files = Array.from(e.dataTransfer.files).filter(f=>f.type.startsWith('image/'));
+  files.forEach(file => {
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const img = document.createElement('img');
+      img.src = ev.target.result;
+      img.style.cssText = 'max-width:100%;border-radius:6px;margin:4px 0;display:block';
+      e.target.appendChild(img);
+    };
+    reader.readAsDataURL(file);
+  });
+});
+
+function onRichEditorInput(el) {
+  // Placeholder logic
+  el.dataset.empty = el.innerHTML===''?'true':'false';
+}
+
+// Obtener HTML del editor rico (para guardar)
+function getRichEditorValue(id) {
+  const el = document.getElementById(id);
+  return el ? el.innerHTML : '';
+}
+
+// ── Botones de acción rápida para archivos (en detail panels) ──
+// Genera la fila de botones de upload para un registro
+function uploadActionBtns(recordId, recordSheet, idKey) {
+  // Buscar si ya hay imágenes/archivos guardados para mostrar miniatura
+  const sheetMap = {
+    'CONTROL_PRODUCCION': DB.produccion||DB.ops||[],
+    'COTIZACIONES': DB.cotizaciones||[],
+    'ITEMS': DB.items||[],
+    'REMISIONES': DB.remisiones||[],
+  };
+  const records = sheetMap[recordSheet]||[];
+  const rec = records.find(r=>String(r[idKey]||'')===String(recordId));
+
+  function toThumbUrl(url){
+    if(!url) return '';
+    if(url.includes('thumbnail?id=')) return url;
+    const m1=url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+    if(m1) return `https://drive.google.com/thumbnail?id=${m1[1]}&sz=w120`;
+    const m2=url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+    if(m2) return `https://drive.google.com/thumbnail?id=${m2[1]}&sz=w120`;
+    return '';
+  }
+
+  function miniThumb(field, label, tipo) {
+    const url = rec&&rec[field]||'';
+    if(!url) return '';
+    const thumbUrl = toThumbUrl(url);
+    if(!thumbUrl) return `<div style="margin-top:6px;font-size:11px;color:var(--accent);cursor:pointer" onclick="openUploadModal('${tipo}','${recordId}','${recordSheet}','${field}','${idKey}')">📄 ${label} guardado ↗</div>`;
+    return `<div style="margin-top:8px;cursor:pointer;display:inline-block;margin-right:8px" onclick="openUploadModal('${tipo}','${recordId}','${recordSheet}','${field}','${idKey}')">
+      <div style="font-size:10px;color:var(--muted);margin-bottom:3px">${label}</div>
+      <img src="${thumbUrl}" style="height:70px;width:70px;border-radius:6px;border:2px solid var(--border);object-fit:cover;display:block"
+        onerror="this.parentElement.innerHTML='<a href=\"${url}\" target=\"_blank\" style=\"font-size:11px\">📄 Ver ${label}</a>'">
+    </div>`;
+  }
+
+  const thumbnails = [
+    miniThumb('IMAGEN_URL','Foto','imagen_op'),
+    miniThumb('PLANO_URL','Plano','plano'),
+    miniThumb('PDF_URL','PDF OP','pdf_op'),
+  ].filter(Boolean).join('');
+
+  return `
+    <div style="display:flex;gap:8px;flex-wrap:wrap;padding:12px 0;border-top:1px solid var(--border);margin-top:8px">
+      <button class="btn btn-ghost btn-sm" onclick="openUploadModal('imagen_op','${recordId}','${recordSheet}','IMAGEN_URL','${idKey}')">
+        📸 Foto Pieza
+      </button>
+      <button class="btn btn-ghost btn-sm" onclick="openUploadModal('plano','${recordId}','${recordSheet}','PLANO_URL','${idKey}')">
+        📐 Plano
+      </button>
+      <button class="btn btn-ghost btn-sm" onclick="openUploadModal('pdf_op','${recordId}','${recordSheet}','PDF_URL','${idKey}')">
+        📄 PDF OP
+      </button>
+    </div>
+    ${thumbnails ? `<div style="padding:4px 0 8px">${thumbnails}</div>` : ''}
+  `;
+}
+
+function openUploadModal(tipo, recordId, recordSheet, recordField, idKey) {
+  const cfg = UPLOAD_TYPES[tipo] || UPLOAD_TYPES.general;
+
+  // Leer URLs ya guardadas en el registro desde el cache DB
+  let existingUrls = [];
+  try {
+    const sheetMap = {
+      'CONTROL_PRODUCCION': DB.produccion||DB.ops||[],
+      'COTIZACIONES': DB.cotizaciones||[],
+      'ITEMS': DB.items||[],
+      'REMISIONES': DB.remisiones||[],
+      'CLIENTES': DB.clientes||[],
+    };
+    const records = sheetMap[recordSheet] || [];
+    // Buscar el registro por su PK (idKey)
+    const rec = records.find(r => String(r[idKey]||'') === String(recordId));
+    if(rec && rec[recordField]) {
+      // El campo puede tener múltiples URLs separadas por coma o salto de línea
+      existingUrls = String(rec[recordField]).split(/[,\n]+/).map(u=>u.trim()).filter(Boolean);
+    }
+  } catch(e) { /* silenciar error de lectura de cache */ }
+
+  openModal(`${cfg.icon} Subir ${cfg.label} — ${recordId}`,`
+    <p style="font-size:12px;color:var(--muted);margin-bottom:12px">
+      Los archivos se guardan en Google Drive y el enlace queda vinculado al registro.
+    </p>
+    ${renderUploadZone(tipo,'modal-upload',recordId,recordSheet,recordField,idKey,existingUrls)}
+    <div style="margin-top:10px;font-size:11px;color:var(--muted);display:flex;gap:12px;flex-wrap:wrap">
+      <span>📁 Máx. 25MB por archivo</span>
+      <span>🖼️ Múltiples archivos</span>
+      <span>📋 <kbd>Ctrl</kbd>+<kbd>V</kbd> pega directamente</span>
+    </div>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cerrar</button>`);
+  // Auto-focus la zona para activar el listener de paste
+  setTimeout(()=>{
+    const zone = document.getElementById('zone-modal-upload');
+    if(zone){ zone.focus(); window._activeUploadZone='modal-upload'; }
+  }, 150);
+}
+
+// ── Integración en detailOP: agregar botones de upload ────────
+// Esta función se llama desde detailOP para añadir la sección de archivos
+function dpUploadSection(opId) {
+  return `
+    <div class="dp-section">
+      <h4>📁 Archivos en Drive</h4>
+      ${uploadActionBtns(opId, 'CONTROL_PRODUCCION', 'ID_OP')}
+    </div>`;
+}
+
+// ── Sección de upload en COT detail ───────────────────────────
+function dpUploadSectionCot(cotId) {
+  return `
+    <div class="dp-section">
+      <h4>📄 Documentos</h4>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;padding:12px 0;border-top:1px solid var(--border);margin-top:8px">
+        <button class="btn btn-primary btn-sm" onclick="generarPDFCotizacion('${cotId}')">
+          🖨️ Generar PDF COT
+        </button>
+        <button class="btn btn-ghost btn-sm" onclick="openUploadModal('pdf_cot','${cotId}','COTIZACIONES','PDF_URL','ID_COT')">
+          📄 Subir PDF
+        </button>
+        <button class="btn btn-ghost btn-sm" onclick="openUploadModal('plano','${cotId}','COTIZACIONES','PLANO_URL','ID_COT')">
+          📐 Plano
+        </button>
+        <button class="btn btn-ghost btn-sm" onclick="openUploadModal('general','${cotId}','COTIZACIONES','DOC_URL','ID_COT')">
+          📎 Otro
+        </button>
+      </div>
+    </div>`;
+}
+
+// ── Sección de upload en Remisiones ───────────────────────────
+function dpUploadSectionRem(remId) {
+  return `
+    <div class="dp-section">
+      <h4>📄 Documentos</h4>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;padding:12px 0;border-top:1px solid var(--border);margin-top:8px">
+        <button class="btn btn-primary btn-sm" onclick="generarPDFRemision('${remId}')">
+          🖨️ Generar PDF Remisión
+        </button>
+        <button class="btn btn-ghost btn-sm" onclick="openUploadModal('pdf_rem','${remId}','REMISIONES','PDF_URL','ID_REMISION')">
+          📦 Subir PDF
+        </button>
+        <button class="btn btn-ghost btn-sm" onclick="openUploadModal('general','${remId}','REMISIONES','DOC_URL','ID_REMISION')">
+          📎 Otro Archivo
+        </button>
+      </div>
+    </div>`;
+}
+
+// ── Sección de upload en Items (planos técnicos) ───────────────
+function dpUploadSectionItem(itemId) {
+  return `
+    <div class="dp-section">
+      <h4>📁 Archivos en Drive</h4>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;padding:12px 0;border-top:1px solid var(--border);margin-top:8px">
+        <button class="btn btn-ghost btn-sm" onclick="openUploadModal('plano','${itemId}','ITEMS','PLANO_URL','ID_ITEM')">
+          📐 Plano Técnico
+        </button>
+        <button class="btn btn-ghost btn-sm" onclick="openUploadModal('imagen_op','${itemId}','ITEMS','IMAGEN_URL','ID_ITEM')">
+          📸 Imagen Referencia
+        </button>
+      </div>
+    </div>`;
+}
+
+// ╔══════════════════════════════════════════════════════════════
+//   MÓDULO: CONTROL DISEÑO
+//   - KPIs de diseñadores
+//   - Torta SVG por diseñador
+//   - Vista OP→Cliente con items
+//   - Alertas 2 días hábiles para pedido de materiales
+//   - Tab: PENDIENTE DISEÑO | CONTROL ITEMS
+// ╚══════════════════════════════════════════════════════════════
+
+// ── Días hábiles entre dos fechas ────────────────────────────
+function diasHabilesDesde(fechaStr) {
+  if(!fechaStr) return 999;
+  const inicio = new Date(fechaStr);
+  const hoy = new Date();
+  if(isNaN(inicio)) return 999;
+  let dias = 0;
+  const cur = new Date(inicio);
+  while(cur < hoy) {
+    const dow = cur.getDay();
+    if(dow !== 0 && dow !== 6) dias++; // lunes–viernes
+    cur.setDate(cur.getDate()+1);
+  }
+  return dias;
+}
+
+// ── Semáforo de alerta MP ─────────────────────────────────────
+// Verde: MP pedido ✓  |  Naranja: <2 días  |  Rojo: ≥2 días sin pedir
+function alertaMP(it) {
+  // Si ya pidió materiales
+  if(it.MP_INSUMOS==='Y' || it.MP_INSUMOS==='S' || it.ESTADO_PROD==='ENTREGADO' || it.ESTADO_PROD==='TERMINADO') {
+    return { color:'verde', icon:'✅', label:'MP pedido', urgente:false };
+  }
+  const diasOP = diasHabilesDesde(it.FECHA_INICIO_OP || it.FECHA_EMISION_OP || it.FECHA_INICIO);
+  if(diasOP >= 2) {
+    return { color:'rojo',   icon:'🚨', label:`⚠️ ${diasOP}d sin pedir MP`, urgente:true };
+  }
+  if(diasOP >= 1) {
+    return { color:'naranja',icon:'⚠️', label:`${diasOP}d — pedir hoy`,     urgente:false };
+  }
+  return { color:'azul', icon:'🔵', label:'Recién asignado', urgente:false };
+}
+
+// ── Mini torta SVG (sin canvas) ───────────────────────────────
+function pieSVG(data, size=160) {
+  // data = [{label, value, color}]
+  const total = data.reduce((s,d)=>s+d.value, 0);
+  if(!total) return '<p style="color:var(--muted);font-size:12px;text-align:center">Sin datos</p>';
+  const cx=size/2, cy=size/2, r=size/2-8;
+  let angle = -Math.PI/2;
+  const slices = data.map(d => {
+    const pct = d.value/total;
+    const a0  = angle;
+    const a1  = angle + pct*2*Math.PI;
+    angle     = a1;
+    const x0=cx+r*Math.cos(a0), y0=cy+r*Math.sin(a0);
+    const x1=cx+r*Math.cos(a1), y1=cy+r*Math.sin(a1);
+    const lg  = pct>0.5?1:0;
+    const mid = (a0+a1)/2;
+    const lx  = cx+(r*0.68)*Math.cos(mid);
+    const ly  = cy+(r*0.68)*Math.sin(mid);
+    return `<path d="M${cx},${cy} L${x0},${y0} A${r},${r} 0 ${lg},1 ${x1},${y1} Z"
+              fill="${d.color}" stroke="var(--bg)" stroke-width="2">
+              <title>${d.label}: ${d.value}</title></path>
+            ${pct>0.08?`<text x="${lx}" y="${ly}" text-anchor="middle" dominant-baseline="middle"
+              font-size="10" fill="#fff" font-weight="700">${d.value}</text>`:''}`;
+  }).join('');
+  const legend = data.map(d=>`
+    <div style="display:flex;align-items:center;gap:6px;font-size:12px">
+      <div style="width:12px;height:12px;border-radius:3px;background:${d.color};flex-shrink:0"></div>
+      <span style="flex:1">${d.label}</span>
+      <span style="font-family:var(--mono);font-weight:700">${d.value}</span>
+    </div>`).join('');
+  return `<div style="display:flex;flex-direction:column;align-items:center;gap:12px">
+    <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">${slices}</svg>
+    <div style="display:flex;flex-direction:column;gap:5px;width:100%;padding:0 8px">${legend}</div>
+  </div>`;
+}
+
+// ── Paleta de colores para diseñadores ────────────────────────
+const DIS_COLORS = ['#7c3aed','#f0b429','#42a5f5','#ef5350','#4caf65','#ff9800','#e91e8c','#00bcd4'];
+function disColor(name, allNames) {
+  const idx = allNames.indexOf(name);
+  return DIS_COLORS[idx % DIS_COLORS.length];
+}
+
+// ═══════════════════════════════════════════════════════════════
+//   FUNCIÓN PRINCIPAL
+// ═══════════════════════════════════════════════════════════════
+let _disTab = 0; // 0=Pendiente Diseño, 1=Control Items
 
 async function controlDiseno() {
   loading();
