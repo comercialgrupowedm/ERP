@@ -653,18 +653,21 @@ kbd{
   }
   .data-tbl thead {
     position: sticky; top: 0; z-index: 5;
-    background: #1a1a2e;
+    background: #0f1b3d;
   }
   .data-tbl thead th {
-    padding: 10px 12px; text-align: left;
-    color: #ffffff !important; font-weight: 700; font-size: 11px;
-    letter-spacing: .5px; white-space: nowrap;
+    padding: 10px 14px; text-align: left;
+    color: #e8f0fe !important; font-weight: 700; font-size: 11px;
+    letter-spacing: .6px; white-space: nowrap;
     cursor: pointer; user-select: none;
-    border-right: 1px solid rgba(255,255,255,.15);
+    border-right: 1px solid rgba(255,255,255,.12);
+    border-bottom: 2px solid #1a56db;
     transition: background .15s;
-    text-shadow: 0 1px 2px rgba(0,0,0,.5);
+    text-transform: uppercase;
   }
-  .data-tbl thead th:hover { background: #2a2a4e; }
+  .data-tbl thead th:hover { background: #1a2d5a; color:#fff !important; }
+  .data-tbl thead th.sort-asc  { background: #1a3a6b; }
+  .data-tbl thead th.sort-desc { background: #1a3a6b; }
   .data-tbl thead th.sort-asc::after  { content: ' ▲'; color: var(--accent); }
   .data-tbl thead th.sort-desc::after { content: ' ▼'; color: var(--accent); }
   .data-tbl tbody tr {
@@ -1088,6 +1091,16 @@ async function dashboard(){
 
     if(isFirstLoad) splashProgress('procesos');
     if(!DB.procesos)     DB.procesos     = await GET('getProcesos');
+
+    // Precargar items en splash para que detailCot sea instantáneo
+    if(isFirstLoad){
+      splashStep = '📦 Cargando elementos...';
+      const bar2 = document.getElementById('splash-bar');
+      const txt2 = document.getElementById('splash-step');
+      if(bar2) bar2.style.width = '97%';
+      if(txt2) txt2.textContent = '📦 Cargando elementos...';
+    }
+    if(!DB.items) DB.items = await GET('getItems');
 
     const kpis=await GET('kpis');
     updateBadges();
@@ -2260,22 +2273,27 @@ async function produccion(){
 }
 
 async function detailOP(id){
-  const op=(DB.produccion||[]).find(x=>String(x.ID_OP)===String(id)); if(!op) return;
+  // Buscar OP por campo OP o ID_OP
+  const op=(DB.produccion||[]).find(x=>String(x.OP)===String(id)||String(x.ID_OP)===String(id));
+  if(!op){ toast('OP no encontrada: '+id,'error'); return; }
   const cot=cotInfo(op.COT);
-  if(!DB.items) DB.items=await GET('getItems');
-  const its=DB.items.filter(x=>String(x.OP_ID)===String(id));
+  // Items vinculados: por COT + ITEM number (sin esperar si ya están en cache)
+  const its = (DB.items||[]).filter(x=>String(x.COTIZACION)===String(op.COT)&&String(x.ITEM)===String(op.ITEM));
   const pct=Number(op['%AVANCE'])||0;
-  openDetail(`OP-${id}`,`
+  const procActual = calcProcActual(op);
+  openDetail(`OP-${op.OP||id}`,`
     <div class="dp-section">
       <h4>Identificación</h4>
-      ${dr('OP','<strong>OP-'+op.ID_OP+'</strong>')} ${dr('Cotización',op.COT?`<span onclick="detailCot('${op.COT}')" style="color:var(--accent);cursor:pointer;text-decoration:underline">COT-${op.COT}</span>`:'—')}
+      ${dr('OP','<strong style="color:var(--accent);font-size:16px">OP-'+( op.OP||id)+'</strong>')}
+      ${dr('Cotización',op.COT?`<span onclick="detailCot('${op.COT}')" style="color:var(--accent);cursor:pointer;text-decoration:underline">COT-${op.COT}</span>`:'—')}
       ${dr('Cliente',op.CLIENTE)} ${dr('Tipo',bTipo(op.TIPO))}
+      ${dr('Item #',op.ITEM||'—')} ${dr('Descripción',op.DESCRIPCION||'—')}
     </div>
     <div class="dp-section">
       <h4>Estado de Producción</h4>
-      ${dr('Estado',bEst(op.ESTADO))} ${dr('Semáforo',bSem(op.SEMAFORO))}
+      ${dr('Estado',bEst(op.ESTADO))}
       ${dr('Avance',pct+'% '+prog(pct))} ${dr('Días Entrega',diasTag(op['DÍAS ENTREGA']))}
-      ${dr('Prioridad',op.PRIORIDAD||'—')} ${dr('Ruta',op.RUTA||'—')}
+      ${dr('Prioridad',op.PRIORIDAD||'—')} ${dr('Proceso Actual','<strong style="color:var(--gold)">'+procActual+'</strong>')}
     </div>
     <div class="dp-section">
       <h4>Fechas</h4>
@@ -4135,6 +4153,8 @@ async function procesos(){
   }catch(e){setContent(`<div class="empty"><div class="empty-icon">⚠️</div><p>${e.message}</p></div>`);}
 }
 
+var _disTab = 'pendiente'; // tab activa en Control Diseño
+
 async function controlDiseno() {
   loading();
   try {
@@ -4152,32 +4172,36 @@ function renderDiseno(tab) {
   const items = DB.items || [];
   const ops   = DB.produccion || [];
 
-  // Items activos en producción con diseñador
-  const activos = items.filter(it =>
-    it.DISEÑADOR &&
-    it.ESTADO_PROD !== 'TERMINADO' &&
-    it.ESTADO_PROD !== 'ENTREGADO'
+  // OPs activas (no terminadas/entregadas) — fuente real de datos
+  const opsActivas = ops.filter(op =>
+    op.ESTADO !== 'TERMINADO' && op.ESTADO !== 'ENTREGADO' && op.ESTADO !== 'FACTURADO'
   );
 
-  // Alertas urgentes
-  const urgentes = activos.filter(it => alertaMP(it).urgente);
-  // Pendientes diseño: sin diseñador asignado
-  const sinDis   = items.filter(it => !it.DISEÑADOR && it.ESTADO_PROD === 'EN PROCESO');
+  // Items activos: cruzar con OPs (usar OPs como fuente principal)
+  const activos = opsActivas.filter(op => op.DISEÑADOR);
 
-  // Agrupar activos por diseñador para la torta
+  // Sin diseñador asignado
+  const sinDis = opsActivas.filter(op => !op.DISEÑADOR);
+
+  // Urgentes: días entrega < 2 o tipo UR
+  const urgentes = opsActivas.filter(op =>
+    Number(op['DÍAS ENTREGA']||99) < 2 || String(op.TIPO||'').includes('UR')
+  );
+
+  // Agrupar OPs activas por diseñador
   const porDis = {};
-  activos.forEach(it => {
-    const d = it.DISEÑADOR || 'Sin asignar';
+  opsActivas.forEach(op => {
+    const d = op.DISEÑADOR || 'Sin asignar';
     porDis[d] = (porDis[d]||0)+1;
   });
   const disNames   = Object.keys(porDis).sort();
   const torta      = disNames.map(d=>({ label:d, value:porDis[d], color:disColor(d,disNames) }));
 
-  // Horas totales por diseñador
+  // Horas totales por diseñador (desde OPs)
   const hrsDis = {};
-  activos.forEach(it=>{
-    const d=it.DISEÑADOR||'Sin asignar';
-    hrsDis[d]=(hrsDis[d]||0)+Number(it['HORAS DISEÑO (Horas)']||it['HORAS TOTAL']||0);
+  opsActivas.forEach(op=>{
+    const d=op.DISEÑADOR||'Sin asignar';
+    hrsDis[d]=(hrsDis[d]||0)+Number(op['HORAS TOTAL']||0);
   });
 
   setContent(`
@@ -4231,19 +4255,19 @@ function renderTabPendienteDis(activos, sinDis, torta, disNames, hrsDis, urgente
 
   // Cards por diseñador con horas y alertas
   const diseñadorCards = disNames.map(dis => {
-    const susItems = activos.filter(it=>it.DISEÑADOR===dis);
-    const alerts   = susItems.filter(it=>alertaMP(it).urgente).length;
-    const hrs      = hrsDis[dis]||0;
-    const color    = disColor(dis,disNames);
+    const susOps  = opsActivas.filter(op=>op.DISEÑADOR===dis);
+    const alerts  = susOps.filter(op=>String(op.TIPO||'').includes('UR')||Number(op['DÍAS ENTREGA']||99)<2).length;
+    const hrs     = hrsDis[dis]||0;
+    const color   = disColor(dis,disNames);
     return `<div class="list-card" onclick="filtrarItemsDis('${dis}')"
       style="border-left:4px solid ${color}">
       <div class="lc-top">
         <div>
           <div class="lc-title" style="color:${color}">${dis}</div>
-          <div class="lc-sub">${susItems.length} item(s) activos · ${hrs.toFixed(1)}h diseño</div>
+          <div class="lc-sub">${susOps.length} OP(s) activas · ${hrs.toFixed(1)}h total</div>
         </div>
         <div style="text-align:right">
-          ${alerts?`<span class="badge rojo">🚨 ${alerts} sin MP</span>`:'<span class="badge verde">✅ Al día</span>'}
+          ${alerts?`<span class="badge rojo">🚨 ${alerts} urgentes</span>`:'<span class="badge verde">✅ Al día</span>'}
         </div>
       </div>
     </div>`;
