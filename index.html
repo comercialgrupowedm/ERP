@@ -232,22 +232,6 @@ td.mono{font-family:var(--mono);font-size:11px}
 .badge.azul{background:#e6f0fd;color:#1d4ed8;border:1px solid #b3d0f7}
 .badge.gris{background:#eef1f4;color:#5b6b7a;border:1px solid #d3dbe2}
 .badge.urg{background:#f7e6fb;color:#9c27b0;border:1px solid #e6b8ef}
-.badge-clickable{cursor:pointer;position:relative}
-.badge-clickable:active{opacity:.7}
-
-/* ═══ MENÚ ESTADO (dropdown) ══════════════ */
-#estado-menu{
-  position:fixed;z-index:500;background:var(--surface);border:1px solid var(--border);
-  border-radius:var(--r);box-shadow:0 8px 28px rgba(30,41,59,.18);
-  padding:6px;min-width:160px;max-height:260px;overflow-y:auto;
-}
-#estado-menu .em-item{
-  display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;
-  cursor:pointer;font-size:13px;font-weight:600;user-select:none;
-}
-#estado-menu .em-item:active{background:var(--card2)}
-#estado-menu .em-item.current{background:var(--card2)}
-#estado-menu .em-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
 
 /* ═══ BOTONES ════════════════════════════= */
 .btn{
@@ -578,16 +562,6 @@ td.mono{font-family:var(--mono);font-size:11px}
   .cot-action-grid{grid-template-columns:repeat(4,1fr);gap:12px 4px}
   .cot-action-ic{width:46px;height:46px;font-size:19px}
 }
-
-/* ══ QUICK ACTIONS — VISTA ITEM ══════════════════════════════════ */
-.item-qa-bar{display:flex;gap:14px;overflow-x:auto;padding:2px 2px 16px;margin-bottom:10px;border-bottom:1px solid var(--border);-webkit-overflow-scrolling:touch}
-.item-qa-bar::-webkit-scrollbar{display:none}
-.item-qa-btn{display:flex;flex-direction:column;align-items:center;gap:6px;background:none;border:none;flex-shrink:0;cursor:pointer;font-size:10.5px;font-weight:700;color:var(--muted);width:62px;padding:0}
-.item-qa-btn:active .item-qa-ico{transform:scale(.92)}
-.item-qa-btn:disabled{opacity:.4;cursor:not-allowed}
-.item-qa-ico{width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:19px;color:#fff;transition:transform .1s;box-shadow:0 2px 6px rgba(0,0,0,.25)}
-.item-qa-btn span:last-child{text-align:center;line-height:1.2}
-.item-qa-plano-chip{display:inline-flex;align-items:center;gap:5px;color:var(--accent);font-weight:600;cursor:pointer;text-decoration:underline}
 
 /* ══ ITEMS TABLE EN DETALLE COT ══════════════════════════════════ */
 .it-row-actions{display:flex;gap:4px;opacity:0;transition:opacity .12s}
@@ -1063,9 +1037,9 @@ const FAB_ACTIONS = {
   remisiones:()=>formRemision({}),
   produccion:()=>formOP({}),
   items:()=>formItem({}),
-  procesos:()=>formProceso({}),
-  materiales:()=>formMaterial({}),
-  servicios:()=>formServicio({})
+  procesos:()=>formPrc({}),
+  materiales:()=>formMat({}),
+  servicios:()=>formSvc({})
 };
 
 // ══ OVERLAY DE ACCIÓN EN CURSO ═══════════════════════════════════
@@ -1325,74 +1299,6 @@ function bEst(e){
     'TERMINADO':'verde','ENTREGADO':'azul','PENDIENTE MP':'naranja',
     'BORRADOR':'gris','ENVIADA':'azul','RECIBIDA':'verde','PAUSADO':'gris','CANCELADO':'rojo'};
   return `<span class="badge ${m[e]||'gris'}">${e||'—'}</span>`;
-}
-// ══ MENÚ DE CAMBIO DE ESTADO (badge clickable) ══════════════════
-const ESTADOS_POR_TIPO = {
-  cotizaciones: ['EN ESPERA','APROBADA','RECHAZADA'],
-  produccion:   ['PENDIENTE MP','EN PROCESO','PAUSADO','TERMINADO','ENTREGADO','CANCELADO'],
-  remisiones:   ['BORRADOR','ENVIADA','RECIBIDA','FACTURADA','ANULADA'],
-};
-const COLOR_DOT = {verde:'#1e7d32',rojo:'#c62828',naranja:'#b5650a',azul:'#1d4ed8',gris:'#5b6b7a',urg:'#9c27b0'};
-function bEstColor(e){
-  const m={'APROBADA':'verde','EN ESPERA':'naranja','EN PROCESO':'azul',
-    'RECHAZADA':'rojo','FACTURADA':'gris','ANULADA':'rojo',
-    'TERMINADO':'verde','ENTREGADO':'azul','PENDIENTE MP':'naranja',
-    'BORRADOR':'gris','ENVIADA':'azul','RECIBIDA':'verde','PAUSADO':'gris','CANCELADO':'rojo'};
-  return COLOR_DOT[m[e]||'gris'];
-}
-function closeEstadoMenu(){
-  const m=document.getElementById('estado-menu');
-  if(m) m.remove();
-  document.removeEventListener('click', closeEstadoMenu, true);
-}
-function openEstadoMenu(ev, tipo, id, estadoActual){
-  ev.stopPropagation();
-  ev.preventDefault();
-  closeEstadoMenu();
-  const opts = ESTADOS_POR_TIPO[tipo]||[];
-  if(!opts.length) return;
-  if(tipo==='cotizaciones' && !opts.includes(estadoActual)){
-    toast('Este estado se actualiza automáticamente desde Producción','error');
-    return;
-  }
-  const menu = document.createElement('div');
-  menu.id='estado-menu';
-  menu.innerHTML = opts.map(e=>`
-    <div class="em-item ${e===estadoActual?'current':''}" onclick="event.stopPropagation();closeEstadoMenu();cambiarEstado('${tipo}','${id}','${e}')">
-      <span class="em-dot" style="background:${bEstColor(e)}"></span>${e}
-    </div>`).join('');
-  document.body.appendChild(menu);
-  // Posicionar cerca del click, sin salirse de la pantalla
-  const r = ev.currentTarget.getBoundingClientRect();
-  const mw = 180, mh = menu.offsetHeight||220;
-  let left = r.left, top = r.bottom+4;
-  if(left+mw>window.innerWidth) left = window.innerWidth-mw-8;
-  if(top+mh>window.innerHeight) top = r.top-mh-4;
-  menu.style.left = Math.max(8,left)+'px';
-  menu.style.top = Math.max(8,top)+'px';
-  setTimeout(()=>document.addEventListener('click', closeEstadoMenu, true), 0);
-}
-async function cambiarEstado(tipo, id, nuevoEstado){
-  const CONFIG = {
-    cotizaciones: { db:'cotizaciones', idKey:'COTIZACION', action:'updateCotizacion', reload:cotizaciones },
-    produccion:   { db:'produccion',   idKey:'OP',          action:'updateOP',         reload:(typeof produccion==='function'?produccion:null) },
-    remisiones:   { db:'remisiones',   idKey:'REMISION',    action:'updateRemision',   reload:(typeof remisiones==='function'?remisiones:null) },
-  };
-  const cfg = CONFIG[tipo];
-  if(!cfg) return;
-  const item = (DB[cfg.db]||[]).find(x=>String(x[cfg.idKey])===String(id));
-  if(!item) return;
-  if(item.ESTADO===nuevoEstado) return;
-  const anterior = item.ESTADO;
-  item.ESTADO = nuevoEstado; // optimista
-  try{
-    await POST(cfg.action, {...item, ESTADO:nuevoEstado});
-    toast(`Estado actualizado a "${nuevoEstado}"`,'ok');
-  }catch(e){
-    item.ESTADO = anterior; // revertir
-    toast('Error al actualizar estado: '+e.message,'error');
-  }
-  if(typeof cfg.reload==='function') cfg.reload();
 }
 function bTipo(t){
   if(!t) return '';
@@ -1673,7 +1579,7 @@ async function cotizaciones(){
                   <span style="color:var(--accent);font-weight:700">COT-${c.COTIZACION||'—'}</span>
                 </td>
                 <td>${opVinc.length?`<span style="color:var(--gold);font-weight:700;font-size:12px">OP-${opVinc[0].OP}${opVinc.length>1?' +'.concat(opVinc.length-1):''}</span>`:'<span style="color:var(--muted)">—</span>'}</td>
-                <td class="badge-clickable" onclick="openEstadoMenu(event,'cotizaciones','${c.COTIZACION}','${c.ESTADO}')">${bEst(c.ESTADO)}</td>
+                <td>${bEst(c.ESTADO)}</td>
                 <td>${bTipo(c.TIPO)}</td>
                 <td style="max-width:180px;font-weight:600">${c.Empresa||c.EMPRESA||'—'}</td>
                 <td style="max-width:220px">${c['DESCRIPCION DEL PROYECTO']||'—'}</td>
@@ -1708,7 +1614,7 @@ async function cotizaciones(){
               </div>
             </div>
             <div class="lc-meta">
-              <span class="badge-clickable" onclick="openEstadoMenu(event,'cotizaciones','${c.COTIZACION}','${c.ESTADO}')">${bEst(c.ESTADO)}</span>
+              ${bEst(c.ESTADO)}
               <span style="font-size:11px;color:var(--muted)">Lead: ${dias}d</span>
               <span style="font-size:11px;color:var(--muted)">${c.ASESOR||''}</span>
             </div>
@@ -3306,37 +3212,13 @@ function detailItem(id){
   const it=(DB.items||[]).find(x=>String(x.ID_ITEM)===String(id)); if(!it) return;
   const cot=cotInfo(it.COTIZACION);
   const op=(DB.produccion||[]).find(x=>String(x.ID_OP)===String(it.OP_ID));
-  const tieneOPYa = !!(it.OP_ID || op);
   openDetail(`Item ${it.ITEM||''} — COT-${it.COTIZACION||''}`,`
-    <div class="item-qa-bar">
-      <button class="item-qa-btn" ${tieneOPYa?'disabled title="Este ítem ya tiene OP"':''} onclick="qaCrearOP('${it.COTIZACION}')">
-        <span class="item-qa-ico" style="background:#1565c0">🏭</span>
-        <span>Crear OP</span>
-      </button>
-      <button class="item-qa-btn" onclick="duplicarItemMismaCot('${id}')">
-        <span class="item-qa-ico" style="background:#2e7d32">🧾</span>
-        <span>Duplicar<br>Item</span>
-      </button>
-      <button class="item-qa-btn" onclick="subirPlanoItem('${id}')">
-        <span class="item-qa-ico" style="background:#00695c">📐</span>
-        <span>Subir<br>Plano</span>
-      </button>
-      <button class="item-qa-btn" onclick="clonarElementoItem('${id}')">
-        <span class="item-qa-ico" style="background:#6a1b9a">🧬</span>
-        <span>Clonar<br>Elem.</span>
-      </button>
-      <button class="item-qa-btn" onclick="modalCopiarItem('${id}','${it.COTIZACION}')">
-        <span class="item-qa-ico" style="background:#37474f">📤</span>
-        <span>A otra<br>COT</span>
-      </button>
-    </div>
     <div class="dp-section">
       <h4>Identificación</h4>
       ${dr('Item #',it.ITEM)} ${dr('Cantidad',it.CANT)}
       ${dr('COT',cot?`<span onclick="detailCot('${cot.COTIZACION}')" style="color:var(--accent);cursor:pointer;text-decoration:underline">COT-${cot.COTIZACION} · ${cot.EMPRESA}</span>`:'—')}
       ${dr('OP',op?`<span onclick="detailOP('${op.OP}')" style="color:var(--accent);cursor:pointer;text-decoration:underline">OP-${op.OP}</span>`:'—')}
       ${dr('Diseñador',it.DISEÑADOR||'—')}
-      ${dr('Plano',it.PLANO?`<span class="item-qa-plano-chip" onclick="verPlanoItem('${id}')">📎 Ver archivo adjunto</span>`:'<span style="color:var(--muted)">Sin plano cargado</span>')}
     </div>
     <div class="dp-section">
       <h4>Descripción</h4>
@@ -4845,122 +4727,6 @@ async function deleteItem(id){
 }
 
 // ══════════════════════════════════════════════════════════════
-//   ACCIONES RÁPIDAS — VISTA ITEM
-//   (Crear OP · Duplicar en misma COT · Subir plano · Clonar elemento)
-// ══════════════════════════════════════════════════════════════
-
-// Crear OP a partir del item (delega en el flujo existente a nivel COT,
-// ya que la OP se genera por cotización agrupando todos sus items).
-function qaCrearOP(cotId){
-  if(!cotId){ toast('Este ítem no tiene cotización asociada','error'); return; }
-  const c=(DB.cotizaciones||[]).find(x=>String(x.COTIZACION)===String(cotId));
-  if(!c){ toast('Cotización no encontrada','error'); return; }
-  if(c.ESTADO!=='APROBADA'){
-    toast('La cotización debe estar APROBADA para crear una OP','error');
-    return;
-  }
-  modalCrearOP(cotId);
-}
-
-// Duplicar item dentro de la MISMA cotización: copia exacta de todos los
-// campos (materiales, servicios, procesos, precios) y solo cambia el
-// número de item (siguiente consecutivo disponible en esa COT).
-async function duplicarItemMismaCot(id){
-  const it=(DB.items||[]).find(x=>String(x.ID_ITEM)===String(id));
-  if(!it){ toast('Ítem no encontrado','error'); return; }
-  const cotId=it.COTIZACION||it.ID_PEDIDO;
-  const itsCot=(DB.items||[]).filter(x=>String(x.COTIZACION)===String(cotId)||String(x.ID_PEDIDO)===String(cotId));
-  const nextNum=Math.max(0,...itsCot.map(x=>Number(x.ITEM)||0))+1;
-
-  const newItem={...it};
-  delete newItem.ID_ITEM;
-  newItem.ITEM=nextNum;
-  newItem['COT-ITEM']=(cotId||'')+'-'+nextNum;
-  newItem.OP_ID='';               // el duplicado nace sin OP asignada
-  newItem.ESTADO_PROD='';
-  newItem.ITEM_SALT='';
-  newItem.MATE_SALT='';
-
-  try{
-    const saved=await POST('createItem',newItem);
-    toast(`✅ Item duplicado como #${nextNum}`);
-    const newId=saved?.ID_ITEM||saved?.id||null;
-    DB.items=(DB.items||[]).concat({...newItem, ID_ITEM:newId||('tmp_'+Date.now())});
-    if(cotId) await recalcularTotalesCot(cotId);
-    // Sincronizar en segundo plano y refrescar
-    setTimeout(async()=>{try{DB.items=await GET('getItems');}catch(e){}},1500);
-    if(cotId) detailCot(cotId); else closeDetail();
-  }catch(e){toast(e.message,'error');}
-}
-
-// Clonar elemento: abre el formulario de item pre-cargado con los datos
-// del actual (materiales, servicios, procesos, medidas) pero SIN id, para
-// que el usuario pueda ajustar lo que cambie (medidas, material, etc.)
-// antes de guardarlo como un item nuevo en la misma cotización.
-function clonarElementoItem(id){
-  const it=(DB.items||[]).find(x=>String(x.ID_ITEM)===String(id));
-  if(!it){ toast('Ítem no encontrado','error'); return; }
-  const cotId=it.COTIZACION||it.ID_PEDIDO;
-  const itsCot=(DB.items||[]).filter(x=>String(x.COTIZACION)===String(cotId)||String(x.ID_PEDIDO)===String(cotId));
-  const nextNum=Math.max(0,...itsCot.map(x=>Number(x.ITEM)||0))+1;
-
-  const clon={...it};
-  delete clon.ID_ITEM;
-  clon.ITEM=nextNum;
-  clon.OP_ID='';
-  clon.ESTADO_PROD='';
-  formItem(clon);
-  toast('🧬 Editando copia — ajusta lo que necesites y guarda');
-}
-
-// Subir plano técnico (imagen o PDF) asociado al item. Se guarda como
-// archivo embebido (misma técnica ya usada para las imágenes pegadas en
-// la descripción) mediante una actualización parcial del item.
-function subirPlanoItem(id){
-  const input=document.createElement('input');
-  input.type='file';
-  input.accept='image/*,.pdf';
-  input.style.display='none';
-  input.onchange=async()=>{
-    const file=input.files?.[0];
-    if(!file) return;
-    if(file.size>4*1024*1024){
-      toast('El archivo supera 4MB, comprímelo o sube un enlace externo','error');
-      return;
-    }
-    try{
-      const dataUrl=await new Promise((res,rej)=>{
-        const r=new FileReader();
-        r.onload=()=>res(r.result);
-        r.onerror=()=>rej(new Error('No se pudo leer el archivo'));
-        r.readAsDataURL(file);
-      });
-      await POST('updateItem',{ID_ITEM:id, PLANO:dataUrl, NOMBRE_PLANO:file.name});
-      const it=(DB.items||[]).find(x=>String(x.ID_ITEM)===String(id));
-      if(it){ it.PLANO=dataUrl; it.NOMBRE_PLANO=file.name; }
-      toast('📐 Plano subido correctamente');
-      detailItem(id);
-    }catch(e){toast(e.message,'error');}
-    finally{ input.remove(); }
-  };
-  document.body.appendChild(input);
-  input.click();
-}
-
-// Ver el plano ya cargado (imagen o PDF) en una pestaña nueva.
-function verPlanoItem(id){
-  const it=(DB.items||[]).find(x=>String(x.ID_ITEM)===String(id));
-  if(!it?.PLANO){ toast('Este ítem no tiene plano cargado','error'); return; }
-  const w=window.open('');
-  if(!w){ toast('El navegador bloqueó la ventana emergente','error'); return; }
-  if(String(it.PLANO).startsWith('data:application/pdf')){
-    w.document.write(`<iframe src="${it.PLANO}" style="border:0;width:100vw;height:100vh"></iframe>`);
-  }else{
-    w.document.write(`<body style="margin:0;background:#111;display:flex;align-items:center;justify-content:center;min-height:100vh"><img src="${it.PLANO}" style="max-width:100%;max-height:100vh"></body>`);
-  }
-}
-
-// ══════════════════════════════════════════════════════════════
 //   COPIAR ITEM A OTRA COTIZACIÓN
 // ══════════════════════════════════════════════════════════════
 let _copiarItemId=null, _copiarItemDestId=null;
@@ -5211,6 +4977,113 @@ async function saveCliente(exist){
 async function deleteCliente(id){
   if(!confirm('¿Eliminar cliente?'))return;
   try{ await POST('deleteCliente',{ID:id}); toast('Eliminado'); DB.clientes=null; clientes(); closeDetail(); }
+  catch(e){toast(e.message,'error');}
+}
+
+// ══════════════════════════════════════════════════════════════
+//   MATERIALES (CRUD)
+// ══════════════════════════════════════════════════════════════
+function formMat(m={}){
+  const isNew=!m.MATERIAL;
+  const origKey=(m.MATERIAL||'').replace(/'/g,"\\'");
+  openModal(isNew?'Nuevo Material':'Editar '+m.MATERIAL,`
+    <div class="form-grid">
+      <div class="field span2"><label>Material</label><input id="mt0" value="${m.MATERIAL||''}"></div>
+      <div class="field"><label>Densidad (g/mm³)</label><input id="mt1" type="number" step="any" value="${m['Densidad g/mm3']||''}"></div>
+      <div class="field"><label>Precio/kg</label><input id="mt2" type="number" step="any" value="${m['PRECIO KG']||''}"></div>
+      <div class="field span2"><label>Tratamientos</label><input id="mt3" value="${m.TRATAMIENTOS||''}"></div>
+    </div>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+     <button class="btn btn-primary" onclick="saveMat('${origKey}')">
+       ${isNew?'Crear Material':'Guardar'}</button>`);
+}
+
+async function saveMat(exist){
+  const data={
+    ID:exist||undefined,
+    MATERIAL:gv('mt0'),
+    'Densidad g/mm3':gn('mt1'),
+    'PRECIO KG':gn('mt2'),
+    TRATAMIENTOS:gv('mt3')
+  };
+  try{ await POST(exist?'updateMaterial':'createMaterial',data); toast('Guardado'); closeModal(); DB.materiales=null; materiales(); }
+  catch(e){toast(e.message,'error');}
+}
+async function deleteMat(id){
+  if(!confirm('¿Eliminar material?'))return;
+  try{ await POST('deleteMaterial',{ID:id,MATERIAL:id}); toast('Eliminado'); DB.materiales=null; materiales(); }
+  catch(e){toast(e.message,'error');}
+}
+
+// ══════════════════════════════════════════════════════════════
+//   SERVICIOS EXTERNOS (CRUD)
+// ══════════════════════════════════════════════════════════════
+function formSvc(s={}){
+  const isNew=!s['SERVICIO EXTERNO'];
+  const origKey=(s['SERVICIO EXTERNO']||'').replace(/'/g,"\\'");
+  openModal(isNew?'Nuevo Servicio':'Editar '+s['SERVICIO EXTERNO'],`
+    <div class="form-grid">
+      <div class="field span2"><label>Servicio Externo</label><input id="sv0" value="${s['SERVICIO EXTERNO']||''}"></div>
+      <div class="field"><label>Días</label><input id="sv1" type="number" step="any" value="${s.DIAS||''}"></div>
+      <div class="field"><label>Costo/kg</label><input id="sv2" type="number" step="any" value="${s['COSTO KG']||''}"></div>
+      <div class="field"><label>Costo ≤2kg</label><input id="sv3" type="number" step="any" value="${s['COSTO <= 2 KG']||''}"></div>
+      <div class="field"><label>Costo ≤10kg</label><input id="sv4" type="number" step="any" value="${s['COSTO <= 10 KG']||''}"></div>
+      <div class="field span2"><label>Materiales Aplicables</label><input id="sv5" value="${s['MATERIALES APLICABLES']||''}"></div>
+    </div>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+     <button class="btn btn-primary" onclick="saveSvc('${origKey}')">
+       ${isNew?'Crear Servicio':'Guardar'}</button>`);
+}
+
+async function saveSvc(exist){
+  const data={
+    ID:exist||undefined,
+    'SERVICIO EXTERNO':gv('sv0'),
+    DIAS:gn('sv1'),
+    'COSTO KG':gn('sv2'),
+    'COSTO <= 2 KG':gn('sv3'),
+    'COSTO <= 10 KG':gn('sv4'),
+    'MATERIALES APLICABLES':gv('sv5')
+  };
+  try{ await POST(exist?'updateServicio':'createServicio',data); toast('Guardado'); closeModal(); DB.servicios=null; servicios(); }
+  catch(e){toast(e.message,'error');}
+}
+async function deleteSvc(id){
+  if(!confirm('¿Eliminar servicio?'))return;
+  try{ await POST('deleteServicio',{ID:id,'SERVICIO EXTERNO':id}); toast('Eliminado'); DB.servicios=null; servicios(); }
+  catch(e){toast(e.message,'error');}
+}
+
+// ══════════════════════════════════════════════════════════════
+//   PROCESOS (CRUD)
+// ══════════════════════════════════════════════════════════════
+function formPrc(p={}){
+  const isNew=!p.PROCESO;
+  const origKey=(p.PROCESO||'').replace(/'/g,"\\'");
+  openModal(isNew?'Nuevo Proceso':'Editar '+p.PROCESO,`
+    <div class="form-grid">
+      <div class="field span2"><label>Proceso / Máquina</label><input id="pr0" value="${p.PROCESO||''}"></div>
+      <div class="field"><label>Cuadrante</label><input id="pr1" value="${p.CUADRANTE||''}"></div>
+      <div class="field"><label>Tarifa/hr</label><input id="pr2" type="number" step="any" value="${p['TARIFA / HR']||''}"></div>
+    </div>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+     <button class="btn btn-primary" onclick="savePrc('${origKey}')">
+       ${isNew?'Crear Proceso':'Guardar'}</button>`);
+}
+
+async function savePrc(exist){
+  const data={
+    ID:exist||undefined,
+    PROCESO:gv('pr0'),
+    CUADRANTE:gv('pr1'),
+    'TARIFA / HR':gn('pr2')
+  };
+  try{ await POST(exist?'updateProceso':'createProceso',data); toast('Guardado'); closeModal(); DB.procesos=null; procesos(); }
+  catch(e){toast(e.message,'error');}
+}
+async function deletePrc(id){
+  if(!confirm('¿Eliminar proceso?'))return;
+  try{ await POST('deleteProceso',{ID:id,PROCESO:id}); toast('Eliminado'); DB.procesos=null; procesos(); }
   catch(e){toast(e.message,'error');}
 }
 
@@ -5663,89 +5536,6 @@ async function procesos(){
     updateFilterCount('procesos', data.length, all.length);
   }catch(e){setContent(`<div class="empty"><div class="empty-icon">⚠️</div><p>${e.message}</p></div>`);}
 }
-
-// ══════════════════════════════════════════════════════════════
-//   CRUD — MATERIALES / SERVICIOS / PROCESOS
-// ══════════════════════════════════════════════════════════════
-function formMaterial(m={}){
-  const isNew=!m.MATERIAL;
-  openModal(isNew?'Nuevo Material':'Editar '+m.MATERIAL,`
-    <div class="form-grid">
-      <div class="field span2"><label>Material</label><input id="mt0" value="${m.MATERIAL||''}" ${isNew?'':'readonly'}></div>
-      <div class="field"><label>Densidad g/mm³</label><input type="number" step="any" id="mt1" placeholder="0" value="${m['Densidad g/mm3']??''}"></div>
-      <div class="field"><label>Precio/kg</label><input type="number" step="any" id="mt2" placeholder="0" value="${m['PRECIO KG']??''}"></div>
-      <div class="field span2"><label>Tratamientos</label><input id="mt3" value="${m.TRATAMIENTOS||''}"></div>
-    </div>`,
-    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
-     <button class="btn btn-primary" onclick="saveMaterial('${isNew?'':m.MATERIAL}')">
-       ${isNew?'Crear Material':'Guardar'}</button>`);
-}
-async function saveMaterial(exist){
-  const data={MATERIAL:exist||gv('mt0'),'Densidad g/mm3':gv('mt1'),'PRECIO KG':gv('mt2'),TRATAMIENTOS:gv('mt3')};
-  try{ await POST(exist?'updateMaterial':'createMaterial',data); toast('Guardado'); closeModal(); DB.materiales=null; materiales(); }
-  catch(e){toast(e.message,'error');}
-}
-async function deleteMaterial(id){
-  if(!confirm('¿Eliminar material?'))return;
-  try{ await POST('deleteMaterial',{MATERIAL:id}); toast('Eliminado'); DB.materiales=null; materiales(); closeDetail(); }
-  catch(e){toast(e.message,'error');}
-}
-function formMat(m){ formMaterial(m||{}); }
-function deleteMat(id){ deleteMaterial(id); }
-
-function formServicio(s={}){
-  const isNew=!s['SERVICIO EXTERNO'];
-  openModal(isNew?'Nuevo Servicio Externo':'Editar '+s['SERVICIO EXTERNO'],`
-    <div class="form-grid">
-      <div class="field span2"><label>Servicio Externo</label><input id="sv0" value="${s['SERVICIO EXTERNO']||''}" ${isNew?'':'readonly'}></div>
-      <div class="field"><label>Días</label><input type="number" step="any" id="sv1" placeholder="0" value="${s.DIAS??''}"></div>
-      <div class="field"><label>Costo/kg</label><input type="number" step="any" id="sv2" placeholder="0" value="${s['COSTO KG']??''}"></div>
-      <div class="field"><label>Costo ≤2kg</label><input type="number" step="any" id="sv3" placeholder="0" value="${s['COSTO <= 2 KG']??''}"></div>
-      <div class="field"><label>Costo ≤10kg</label><input type="number" step="any" id="sv4" placeholder="0" value="${s['COSTO <= 10 KG']??''}"></div>
-      <div class="field span2"><label>Materiales aplicables</label><input id="sv5" value="${s['MATERIALES APLICABLES']||''}"></div>
-    </div>`,
-    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
-     <button class="btn btn-primary" onclick="saveServicio('${isNew?'':s['SERVICIO EXTERNO']}')">
-       ${isNew?'Crear Servicio':'Guardar'}</button>`);
-}
-async function saveServicio(exist){
-  const data={'SERVICIO EXTERNO':exist||gv('sv0'),DIAS:gv('sv1'),'COSTO KG':gv('sv2'),
-    'COSTO <= 2 KG':gv('sv3'),'COSTO <= 10 KG':gv('sv4'),'MATERIALES APLICABLES':gv('sv5')};
-  try{ await POST(exist?'updateServicio':'createServicio',data); toast('Guardado'); closeModal(); DB.servicios=null; servicios(); }
-  catch(e){toast(e.message,'error');}
-}
-async function deleteServicio(id){
-  if(!confirm('¿Eliminar servicio?'))return;
-  try{ await POST('deleteServicio',{'SERVICIO EXTERNO':id}); toast('Eliminado'); DB.servicios=null; servicios(); closeDetail(); }
-  catch(e){toast(e.message,'error');}
-}
-function formSvc(s){ formServicio(s||{}); }
-function deleteSvc(id){ deleteServicio(id); }
-
-function formProceso(p={}){
-  const isNew=!p.PROCESO;
-  openModal(isNew?'Nuevo Proceso':'Editar '+p.PROCESO,`
-    <div class="form-grid">
-      <div class="field span2"><label>Proceso / Máquina</label><input id="pr0" value="${p.PROCESO||''}" ${isNew?'':'readonly'}></div>
-      <div class="field"><label>Cuadrante</label><input id="pr1" value="${p.CUADRANTE||''}"></div>
-      <div class="field"><label>Tarifa/hr</label><input type="number" step="any" id="pr2" placeholder="0" value="${p['TARIFA / HR']??''}"></div>
-    </div>`,
-    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
-     <button class="btn btn-primary" onclick="saveProceso('${isNew?'':p.PROCESO}')">
-       ${isNew?'Crear Proceso':'Guardar'}</button>`);
-}
-async function saveProceso(exist){
-  const data={PROCESO:exist||gv('pr0'),CUADRANTE:gv('pr1'),'TARIFA / HR':gv('pr2')};
-  try{ await POST(exist?'updateProceso':'createProceso',data); toast('Guardado'); closeModal(); DB.procesos=null; procesos(); }
-  catch(e){toast(e.message,'error');}
-}
-async function deleteProceso(id){
-  if(!confirm('¿Eliminar proceso?'))return;
-  try{ await POST('deleteProceso',{PROCESO:id}); toast('Eliminado'); DB.procesos=null; procesos(); closeDetail(); }
-  catch(e){toast(e.message,'error');}
-}
-function formPrc(p){ formProceso(p||{}); }
-function deletePrc(id){ deleteProceso(id); }
 
 var _disTab = 'pendiente'; // tab activa en Control Diseño
 
