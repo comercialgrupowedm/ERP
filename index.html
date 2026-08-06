@@ -1328,7 +1328,7 @@ function bEst(e){
 }
 // ══ MENÚ DE CAMBIO DE ESTADO (badge clickable) ══════════════════
 const ESTADOS_POR_TIPO = {
-  cotizaciones: ['EN ESPERA','APROBADA','EN PROCESO','TERMINADO','FACTURADA','RECHAZADA','ANULADA'],
+  cotizaciones: ['EN ESPERA','APROBADA','RECHAZADA'],
   produccion:   ['PENDIENTE MP','EN PROCESO','PAUSADO','TERMINADO','ENTREGADO','CANCELADO'],
   remisiones:   ['BORRADOR','ENVIADA','RECIBIDA','FACTURADA','ANULADA'],
 };
@@ -1351,6 +1351,10 @@ function openEstadoMenu(ev, tipo, id, estadoActual){
   closeEstadoMenu();
   const opts = ESTADOS_POR_TIPO[tipo]||[];
   if(!opts.length) return;
+  if(tipo==='cotizaciones' && !opts.includes(estadoActual)){
+    toast('Este estado se actualiza automáticamente desde Producción','error');
+    return;
+  }
   const menu = document.createElement('div');
   menu.id='estado-menu';
   menu.innerHTML = opts.map(e=>`
