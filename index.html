@@ -1241,26 +1241,27 @@ const ACTION_TO_KEY = {
   getServicios:'servicios', getProcesos:'procesos', getItems:'items',
 };
 
-async function GET(action, id='', _retry=1) {
+async function GET(action, id='', extraParams={}, _retry=1) {
   try{
-    const r = await _fetchTimeout(
-      `${API}?action=${action}${id?'&id='+encodeURIComponent(id):''}&_t=${Date.now()}`
-    );
+    let url = `${API}?action=${action}${id?'&id='+encodeURIComponent(id):''}`;
+    Object.keys(extraParams||{}).forEach(k=>{ url += `&${k}=${encodeURIComponent(extraParams[k])}`; });
+    url += `&_t=${Date.now()}`;
+    const r = await _fetchTimeout(url);
     if(!r.ok) throw new Error('HTTP '+r.status);
     const j = await r.json();
     if (!j.ok) throw new Error(j.error);
-    // Guardar en caché local si es una colección principal
-    if(ACTION_TO_KEY[action] && !id) cacheSet(ACTION_TO_KEY[action], j.data);
+    // Guardar en caché local si es una colección principal (solo la carga por defecto, sin filtros extra)
+    if(ACTION_TO_KEY[action] && !id && !Object.keys(extraParams||{}).length) cacheSet(ACTION_TO_KEY[action], j.data);
     return j.data;
   }catch(e){
     if(_retry > 0 && (e.name==='AbortError' || e.message?.includes('fetch'))){
       // 1 reintento automático ante timeout o error de red
       console.warn(`GET ${action} falló (${e.message}), reintentando…`);
       await new Promise(r=>setTimeout(r,1200));
-      return GET(action, id, _retry-1);
+      return GET(action, id, extraParams, _retry-1);
     }
     // Fallback: devolver datos del caché aunque estén viejos
-    if(ACTION_TO_KEY[action] && !id){
+    if(ACTION_TO_KEY[action] && !id && !Object.keys(extraParams||{}).length){
       const stale = cacheGetStale(ACTION_TO_KEY[action]);
       if(stale){ console.warn(`GET ${action}: usando caché stale`); return stale; }
     }
@@ -1991,7 +1992,7 @@ async function dashboard(){
 async function cotizaciones(){
   loading();
   try{
-    if(!DB.cotizaciones) await load('cotizaciones','getCotizaciones');
+    if(!DB.cotizaciones) DB.cotizaciones = await GET('getCotizaciones', '', {rango:RANGO_STATE.cotizaciones});
     if(!DB.clientes)     await load('clientes','getClientes');
     updateBadges();
 
@@ -2020,7 +2021,7 @@ async function cotizaciones(){
     const isTable = getView('cotizaciones') === 'table';
 
     if (isTable) {
-      setContent(moduleBanner('📋','Cotizaciones','Gestión de cotizaciones y presupuestos','','linear-gradient(135deg,#1d4ed8,#3b82f6)')+fb + viewToggleBtns('cotizaciones') + `
+      setContent(moduleBanner('📋','Cotizaciones','Gestión de cotizaciones y presupuestos',rangoSelector('cotizaciones'),'linear-gradient(135deg,#1d4ed8,#3b82f6)')+fb + viewToggleBtns('cotizaciones') + `
       <div class="tbl-wrap">
         <table class="data-tbl">
           <thead><tr>
@@ -2080,7 +2081,7 @@ async function cotizaciones(){
         </table>
       </div>`);
     } else {
-      setContent(moduleBanner('📋','Cotizaciones','Gestión de cotizaciones y presupuestos','','linear-gradient(135deg,#1d4ed8,#3b82f6)')+fb + viewToggleBtns('cotizaciones') + `<div class="card-list">
+      setContent(moduleBanner('📋','Cotizaciones','Gestión de cotizaciones y presupuestos',rangoSelector('cotizaciones'),'linear-gradient(135deg,#1d4ed8,#3b82f6)')+fb + viewToggleBtns('cotizaciones') + `<div class="card-list">
         ${sorted.length ? sorted.map(c=>{
           const dias=Number(c['LEAD TIME COT'])||0;
           return `<div class="list-card" onclick="detailCot('${c.COTIZACION}')">
@@ -3191,10 +3192,44 @@ async function deleteCot(id){
 // ══════════════════════════════════════════════════════════════
 //   CONTROL PRODUCCIÓN (OPs)
 // ══════════════════════════════════════════════════════════════
+// Rango de carga por módulo: '3m' (default, rápido) | '6m' | '1y' | 'todo'
+// Los registros "abiertos" (no en estado cerrado) siempre aparecen, sin importar el rango.
+const RANGO_STATE = { produccion:'3m', cotizaciones:'3m', remisiones:'3m', elementos:'3m' };
+const RANGO_OPCIONES = [
+  { key:'3m',   label:'3 meses' },
+  { key:'6m',   label:'6 meses' },
+  { key:'1y',   label:'1 año'   },
+  { key:'todo', label:'Todo'    },
+];
+
+function rangoSelector(modulo){
+  const actual = RANGO_STATE[modulo];
+  return `<div style="display:flex;gap:4px;align-items:center;background:rgba(255,255,255,.1);border-radius:8px;padding:3px" title="Los que no están cerrados siempre se muestran, sin importar el rango">
+    ${RANGO_OPCIONES.map(r=>`
+      <button class="btn btn-sm" onclick="cambiarRango('${modulo}','${r.key}')"
+        style="${r.key===actual
+          ? 'background:#fff;color:#1a1a2e;font-weight:700'
+          : 'background:transparent;color:#fff;opacity:.8'};border:none;padding:5px 10px;border-radius:6px;font-size:12px">
+        ${r.label}
+      </button>`).join('')}
+  </div>`;
+}
+
+async function cambiarRango(modulo, rango){
+  if(rango === RANGO_STATE[modulo]) return;
+  RANGO_STATE[modulo] = rango;
+  DB[modulo] = null; // fuerza recarga con el nuevo rango
+  toast('⏳ Cargando ' + (RANGO_OPCIONES.find(r=>r.key===rango)?.label || rango) + '…');
+  if(modulo === 'produccion')   await produccion();
+  if(modulo === 'cotizaciones') await cotizaciones();
+  if(modulo === 'remisiones')   await remisiones();
+  if(modulo === 'elementos')    await items();
+}
+
 async function produccion(){
   loading();
   try{
-    if(!DB.produccion)   await load('produccion','getControlProduccion');
+    if(!DB.produccion) DB.produccion = await GET('getControlProduccion', '', {rango:RANGO_STATE.produccion});
     if(!DB.cotizaciones) await load('cotizaciones','getCotizaciones');
     updateBadges();
 
@@ -3224,7 +3259,7 @@ async function produccion(){
     const isTable = getView('produccion') === 'table';
 
     if (isTable) {
-      setContent(moduleBanner('🏭','Control Producción','Seguimiento de órdenes de producción','','linear-gradient(135deg,#7c3aed,#a78bfa)')+fb + viewToggleBtns('produccion') + `
+      setContent(moduleBanner('🏭','Control Producción','Seguimiento de órdenes de producción',rangoSelector('produccion'),'linear-gradient(135deg,#7c3aed,#a78bfa)')+fb + viewToggleBtns('produccion') + `
       <div class="tbl-wrap">
         <table class="data-tbl">
           <thead><tr>
@@ -3296,7 +3331,7 @@ async function produccion(){
       </div>`);
       _initLazyThumbs(); // ← activar lazy load de thumbnails
     } else {
-      setContent(moduleBanner('🏭','Control Producción','Seguimiento de órdenes de producción','','linear-gradient(135deg,#7c3aed,#a78bfa)')+fb + viewToggleBtns('produccion') + `<div class="card-list">
+      setContent(moduleBanner('🏭','Control Producción','Seguimiento de órdenes de producción',rangoSelector('produccion'),'linear-gradient(135deg,#7c3aed,#a78bfa)')+fb + viewToggleBtns('produccion') + `<div class="card-list">
         ${sorted.length ? sorted.map(op=>{
           const pct=Number(op['%AVANCE'])||0;
           const OP_ESTADOS=['PENDIENTE MP','EN PROCESO','PAUSADO','TERMINADO','ENTREGADO'];
@@ -4294,19 +4329,72 @@ async function deleteOP(id){
 async function items(){
   loading();
   try{
-    if(!DB.items)        await load('items','getItems');
+    if(!DB.items)        DB.items = await GET('getItems', '', {rango:RANGO_STATE.elementos});
     if(!DB.cotizaciones) await load('cotizaciones','getCotizaciones');
     if(!DB.produccion)   await load('produccion','getControlProduccion');
-    const data=[...DB.items].sort((a,b)=>Number(b.COT_ID||0)-Number(a.COT_ID||0));
-    if(!data.length){setContent(empty('Sin items'));return;}
-    setContent(moduleBanner('🔩','Ítems / Elementos','Detalle técnico de cada ítem cotizado','','linear-gradient(135deg,#b45309,#fbbf24)')+`<div class="card-list">
-      ${data.map(it=>{
+    updateBadges();
+
+    const all=[...DB.items].sort((a,b)=>Number(b.COTIZACION||0)-Number(a.COTIZACION||0));
+    const data = filterData('items', all);
+
+    // Opciones únicas para filtros
+    const estados = [...new Set(all.map(it=>it.ESTADO_PROD).filter(Boolean))].sort();
+    const disenadores = [...new Set(all.map(it=>it.DISEÑADOR).filter(Boolean))].sort();
+
+    const fb = filterBar('items', [
+      { key:'__search__', label:'Buscar descripción, empresa...', type:'text' },
+      { key:'ESTADO_PROD', label:'Estado',     type:'select', opts:estados     },
+      { key:'DISEÑADOR',   label:'Diseñador',  type:'select', opts:disenadores },
+    ]);
+
+    if(!all.length){ setContent(empty('Sin items')); return; }
+
+    const sorted = sortData('items', data);
+    const isTable = getView('items') === 'table';
+
+    if (isTable) {
+      setContent(moduleBanner('🔩','Ítems / Elementos','Detalle técnico de cada ítem cotizado',rangoSelector('elementos'),'linear-gradient(135deg,#b45309,#fbbf24)')+fb + viewToggleBtns('items') + `
+      <div class="tbl-wrap">
+        <table class="data-tbl">
+          <thead><tr>
+            ${thSort('items','ITEM','Item')}
+            <th>COT</th>
+            <th>OP</th>
+            ${thSort('items','DESCRIPCION','Descripción')}
+            ${thSort('items','ESTADO_PROD','Estado')}
+            ${thSort('items','CANT','Cant')}
+            ${thSort('items','PRECIO SIN IVA','Precio')}
+            ${thSort('items','DISEÑADOR','Diseñador')}
+            ${thSort('items','DIAS_ENTREGA','Días Entrega')}
+          </tr></thead>
+          <tbody>
+            ${sorted.length ? sorted.map(it=>{
+              const cot=cotInfo(it.COTIZACION);
+              const op=(DB.produccion||[]).find(x=>String(x.COT)===String(it.COTIZACION)&&String(x.ITEM)===String(it.ITEM));
+              return `<tr onclick="detailItem('${it.ID_ITEM}')">
+                <td><span style="color:var(--accent);font-weight:700">Item ${it.ITEM||'—'}</span></td>
+                <td>${cot?`COT-${cot.COTIZACION} · ${cot.EMPRESA}`:'—'}</td>
+                <td>${op?`OP-${op.OP}`:'—'}</td>
+                <td style="max-width:220px">${it.DESCRIPCION||'Sin descripción'}</td>
+                <td>${bEst(it.ESTADO_PROD)}</td>
+                <td class="td-num">${it.CANT||0}</td>
+                <td class="td-num">${fmt(it['PRECIO SIN IVA']||it['PRECIO UNITARIO'])}</td>
+                <td>${it.DISEÑADOR||'—'}</td>
+                <td>${diasTag(it.DIAS_ENTREGA)}</td>
+              </tr>`;
+            }).join('') : '<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--muted)">Sin resultados</td></tr>'}
+          </tbody>
+        </table>
+      </div>`);
+    } else {
+      setContent(moduleBanner('🔩','Ítems / Elementos','Detalle técnico de cada ítem cotizado',rangoSelector('elementos'),'linear-gradient(135deg,#b45309,#fbbf24)')+fb + viewToggleBtns('items') + `<div class="card-list">
+      ${sorted.length ? sorted.map(it=>{
         const cot=cotInfo(it.COTIZACION);
-        const op=(DB.produccion||[]).find(x=>String(x.ID_OP)===String(it.OP_ID));
+        const op=(DB.produccion||[]).find(x=>String(x.COT)===String(it.COTIZACION)&&String(x.ITEM)===String(it.ITEM));
         return `<div class="list-card" onclick="detailItem('${it.ID_ITEM}')">
           <div class="lc-top">
             <div>
-              <div class="lc-id">Item ${it.ITEM||'—'} · COT-${it.COTIZACION||'—'} · OP-${it.OP_ID||'—'}</div>
+              <div class="lc-id">Item ${it.ITEM||'—'} · COT-${it.COTIZACION||'—'} ${op?'· OP-'+op.OP:''}</div>
               <div class="lc-title">${it.DESCRIPCION||'Sin descripción'}</div>
               <div class="lc-sub">${cot?cot.EMPRESA:''} ${op?'· '+op.ESTADO:''}</div>
             </div>
@@ -4321,8 +4409,10 @@ async function items(){
             ${diasTag(it.DIAS_ENTREGA)}
           </div>
         </div>`;
-      }).join('')}
-    </div>`);
+      }).join('') : empty('Sin resultados')}
+      </div>`);
+    }
+    updateFilterCount('items', sorted.length, all.length);
   }catch(e){setContent(`<div class="empty"><div class="empty-icon">⚠️</div><p>${e.message}</p></div>`);}
 }
 
@@ -5382,7 +5472,7 @@ function applyFilter(mod, key, val) {
   if (!val || val === 'TODOS') delete _F[mod][key];
   else _F[mod][key] = val;
 
-  const mods = { cotizaciones, produccion, clientes, remisiones, materiales, servicios, procesos };
+  const mods = { cotizaciones, produccion, clientes, remisiones, materiales, servicios, procesos, items };
   if (!mods[mod]) return;
 
   if (key === '__search__') {
@@ -5406,7 +5496,7 @@ function resetFilters(mod) {
   if (panel) panel.classList.remove('open');
   const btn = document.getElementById('ftb-'+mod);
   if (btn) btn.classList.remove('active');
-  const mods = { cotizaciones, produccion, clientes, remisiones, materiales, servicios, procesos };
+  const mods = { cotizaciones, produccion, clientes, remisiones, materiales, servicios, procesos, items };
   if (mods[mod]) mods[mod]();
 }
 
@@ -5600,7 +5690,7 @@ function getView(mod) { return _VIEW[mod] || 'table'; }
 
 function toggleView(mod) {
   _VIEW[mod] = getView(mod) === 'table' ? 'cards' : 'table';
-  const mods = { cotizaciones, produccion, clientes, remisiones, materiales, servicios, procesos };
+  const mods = { cotizaciones, produccion, clientes, remisiones, materiales, servicios, procesos, items };
   if (mods[mod]) mods[mod]();
 }
 
@@ -5611,7 +5701,7 @@ function sortTable(mod, col) {
   } else {
     _SORT[mod] = { col, dir: 'asc' };
   }
-  const mods = { cotizaciones, produccion, clientes, remisiones, materiales, servicios, procesos };
+  const mods = { cotizaciones, produccion, clientes, remisiones, materiales, servicios, procesos, items };
   if (mods[mod]) mods[mod]();
 }
 
@@ -6355,7 +6445,7 @@ async function deletePrc(id){
 async function remisiones(){
   loading();
   try{
-    if(!DB.remisiones)         await load('remisiones','getRemisiones');
+    if(!DB.remisiones) DB.remisiones = await GET('getRemisiones', '', {rango:RANGO_STATE.remisiones});
     if(!DB.cotizaciones)       await load('cotizaciones','getCotizaciones');
     if(!DB.elementosRemision)  await load('elementosRemision','getElementosRemision');
 
@@ -6376,7 +6466,7 @@ async function remisiones(){
     ]);
 
     if(!all.length){setContent(empty('Sin remisiones'));return;}
-    setContent(moduleBanner("🚚","Remisiones","Despachos y entregas","","linear-gradient(135deg,#047857,#34d399)")+fb + `<div class="card-list">
+    setContent(moduleBanner("🚚","Remisiones","Despachos y entregas",rangoSelector('remisiones'),"linear-gradient(135deg,#047857,#34d399)")+fb + `<div class="card-list">
       ${data.length ? data.map(r=>{
         const cot=cotInfo(r.COTIZACION||r.COT_ID);
         return `<div class="list-card" onclick="detailRem('${r.REMISION}')">
