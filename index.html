@@ -1523,6 +1523,13 @@ async function POST(action, data={}) {
     hideBusy();
   }
 }
+// POST sin overlay central — para llamadas en background con barra de progreso propia
+async function POST_SILENT(action, data={}) {
+  const r = await fetch(API,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({action,data})});
+  const j = await r.json();
+  if (!j.ok) throw new Error(j.error);
+  return j.data;
+}
 // Pasos de carga con etiquetas y porcentajes
 const LOAD_STEPS = {
   cotizaciones:       { label: '📋 Cargando cotizaciones...',      pct: 12 },
@@ -8730,18 +8737,22 @@ function _cmpItemRowHtml(it, i) {
     oninput="_cmpCalcTotalCot()">`;
 
   // textarea rico con soporte Ctrl+V imágenes — auto-grow
-  const richArea = (id, val, ph, minRows=3) => `<div id="${id}-wrap"
-    style="position:relative;width:100%;min-height:${minRows*22}px;background:var(--surface);
-      border:1px solid var(--border);border-radius:6px;padding:6px 8px;
-      box-sizing:border-box;cursor:text;outline:none;font-size:12px;line-height:1.6;
-      color:var(--text);white-space:pre-wrap;word-break:break-word;-webkit-user-select:text;user-select:text"
-    contenteditable="true"
-    id="${id}"
-    onpaste="_cmpPasteItem(event,${id.split('-').pop()})"
-    onfocus="this.style.borderColor='var(--accent)'"
-    onblur="this.style.borderColor=''"
-    oninput="_cmpCalcTotalCot()"
-    >${String(val||'').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>`;
+  const richArea = (id, val, ph, minRows=3) => {
+    const rows = Math.max(minRows, (String(val||'').split('\n').length));
+    const safeVal = String(val||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return `<div id="${id}"
+      contenteditable="true"
+      style="width:100%;min-height:${rows*24}px;background:var(--surface);
+        border:1px solid var(--border);border-radius:6px;padding:8px;
+        box-sizing:border-box;font-size:12px;line-height:1.7;
+        color:var(--text);white-space:pre-wrap;word-break:break-word;
+        -webkit-user-select:text;user-select:text;outline:none"
+      onpaste="_cmpPasteItem(event,'${id}')"
+      onfocus="this.style.borderColor='var(--accent)'"
+      onblur="this.style.borderColor=''"
+      oninput="_cmpCalcTotalCot()"
+      >${safeVal||`<span style="color:var(--muted);pointer-events:none">${ph}</span>`}</div>`;
+  };
 
   return `
   <div id="cmp-item-wrap-${i}" style="border:2px solid ${incluir?(isMat?'var(--border)':'#065f4640'):'#ef444440'};
@@ -9045,49 +9056,64 @@ function _cmpRemItem(i) {
 function _cmpReadField(id) {
   const el = document.getElementById(id);
   if(!el) return '';
-  // contenteditable: extraer texto preservando saltos de línea
   if(el.isContentEditable || el.contentEditable==='true') {
-    // Convertir BR y DIV a saltos de linea, limpiar HTML
+    // Si solo tiene el span placeholder, está vacío
+    if(el.children.length===1 && el.children[0].tagName==='SPAN' && !el.textContent.trim()) return '';
+    // Clonar para no modificar el DOM
     const clone = el.cloneNode(true);
-    clone.querySelectorAll('img').forEach(img => {
-      img.replaceWith(`[img:${img.dataset.base64||img.src}]`);
+    // Eliminar spans de placeholder
+    clone.querySelectorAll('span[style*="pointer-events:none"]').forEach(s=>s.remove());
+    // Imágenes → marcador con base64
+    clone.querySelectorAll('img').forEach(img=>{
+      img.replaceWith('[img:' + (img.dataset.base64||img.src) + ']');
     });
-    clone.querySelectorAll('br').forEach(br => br.replaceWith('\n'));
-    clone.querySelectorAll('div,p').forEach(d => {
+    // BR → salto de línea
+    clone.querySelectorAll('br').forEach(br=>br.replaceWith('\n'));
+    // DIV/P → agregar salto antes si no es el primero
+    clone.querySelectorAll('div,p').forEach(d=>{
       if(d.previousSibling) d.insertAdjacentText('beforebegin','\n');
     });
-    return clone.textContent||'';
+    return (clone.textContent||'').trim();
   }
   return el.value||'';
 }
 
 // Leer formulario → devuelve array de ítems estructurados
 function _cmpLeerFormulario() {
-  const items = (window._cmpItems||[]).map((it,i)=>{
-    const sel = document.getElementById(`cmp-tipo-sel-${i}`)?.value||'';
+  const items = (window._cmpItems||[]).map((it, i) => {
+    // Leer selector del DOM (puede haber cambiado); fallback al valor en memoria
+    const sel = document.getElementById(`cmp-tipo-sel-${i}`)?.value || it.nombre || '';
     if(!sel) return null;
-    const cant    = Number(document.getElementById(`cmp-cant-${i}`)?.value||0);
-    const costCot = Number(document.getElementById(`cmp-cot-${i}`)?.value||0);
-    // cmp-mesp-${i} es ahora contenteditable para todos los tipos
-    const descRich = _cmpReadField(`cmp-mesp-${i}`);
-    if(it.tipo==='mat'){
-      const esEsp = sel==='ESPECIAL';
+
+    const cant    = Number(document.getElementById(`cmp-cant-${i}`)?.value ?? it.cant ?? 0);
+    const costCot = Number(document.getElementById(`cmp-cot-${i}`)?.value ?? it.costCot ?? 0);
+    const descRich = _cmpReadField(`cmp-mesp-${i}`) || '';
+
+    if(it.tipo === 'mat'){
+      const esEsp = sel === 'ESPECIAL';
+      // descEsp: lo que escribió el usuario en el richArea (o fallback al valor en memoria)
+      const descEsp = esEsp ? (descRich || it.descEsp || '') : '';
       return {
-        tipo:'mat', nombre:sel, esEspecial:esEsp,
-        descEsp: esEsp ? descRich : '',
-        geo:    esEsp?'':(document.getElementById(`cmp-geo-${i}`)?.value||'Cilindro'),
-        dim1:   esEsp?0:Number(document.getElementById(`cmp-d1-${i}`)?.value||0),
-        lar:    esEsp?0:Number(document.getElementById(`cmp-lar-${i}`)?.value||0),
-        anc:    esEsp?0:Number(document.getElementById(`cmp-anc-${i}`)?.value||0),
-        cant, costCot, unidad:'kg',
-        notas: esEsp?'':(descRich||'')  // para normal, el richArea es notas/medidas
+        tipo: 'mat',
+        nombre: sel,
+        esEspecial: esEsp,
+        descEsp,
+        geo:  esEsp ? '' : (document.getElementById(`cmp-geo-${i}`)?.value || it.geo || 'Cilindro'),
+        dim1: esEsp ? 0  : Number(document.getElementById(`cmp-d1-${i}`)?.value  || it.dim1 || 0),
+        lar:  esEsp ? 0  : Number(document.getElementById(`cmp-lar-${i}`)?.value || it.lar  || 0),
+        anc:  esEsp ? 0  : Number(document.getElementById(`cmp-anc-${i}`)?.value || it.anc  || 0),
+        cant, costCot, unidad: 'kg',
+        notas: esEsp ? '' : (descRich || it.notas || ''),
+        incluir: it.incluir !== false   // ← preservar flag del array en memoria
       };
     } else {
       return {
-        tipo:'svc', nombre:sel,
-        cant, costCot, unidad:'días',
-        dureza: document.getElementById(`cmp-dur-${i}`)?.value||'',
-        notas: descRich
+        tipo: 'svc',
+        nombre: sel,
+        cant, costCot, unidad: 'días',
+        dureza: document.getElementById(`cmp-dur-${i}`)?.value || it.dureza || '',
+        notas: descRich || it.notas || '',
+        incluir: it.incluir !== false
       };
     }
   }).filter(Boolean);
@@ -9095,7 +9121,7 @@ function _cmpLeerFormulario() {
 }
 
 // ── Pegar imagen en campo de descripción de ítem específico ─────────────
-function _cmpPasteItem(event, i) {
+function _cmpPasteItem(event, fieldId) {
   const items = (event.clipboardData||window.clipboardData)?.items||[];
   let hasImg = false;
   for(const item of items){
@@ -9108,8 +9134,8 @@ function _cmpPasteItem(event, i) {
         const img = document.createElement('img');
         img.src = e.target.result;
         img.style.cssText = 'max-width:100%;border-radius:6px;margin:4px 0;display:block';
-        img.dataset.base64 = e.target.result;  // guardar para recuperar al leer
-        const el = event.target;
+        img.dataset.base64 = e.target.result;
+        const el = event.target;  // el contenteditable donde ocurrió el paste
         if(el){
           el.focus();
           const sel = window.getSelection();
@@ -9117,7 +9143,6 @@ function _cmpPasteItem(event, i) {
             const range = sel.getRangeAt(0);
             range.deleteContents();
             range.insertNode(img);
-            // mover cursor después de la imagen
             const r2 = document.createRange();
             r2.setStartAfter(img); r2.collapse(true);
             sel.removeAllRanges(); sel.addRange(r2);
@@ -9226,81 +9251,128 @@ async function _cmpConfirmar(idqr){
     const { items: itemsFormulario } = _cmpLeerFormulario();
     if(!itemsFormulario.length){ toast('Agrega al menos un ítem al pedido','warn'); if(btn){btn.disabled=false;btn.textContent='🧱 Confirmar Pedido';} return; }
 
-    const totalCotOC = itemsFormulario.reduce((s,fit)=>s+Number(fit.costCot||0),0);
+    // 3) Ítems incluidos
+    const itemsIncluidos = itemsFormulario.filter(fit => fit.incluir !== false);
+    if(!itemsIncluidos.length){
+      toast('Todos los ítems están excluidos','warn');
+      if(btn){btn.disabled=false;btn.textContent='🧱 Confirmar Pedido';}
+      return;
+    }
+    const esFusionado = window._cmpFusionado;  // true = 1 fila total, false = 1 fila por ítem
 
-    // 3) Resumen automático desde los ítems
-    const resumenAuto2 = itemsFormulario.map((fit,n)=>{
+    // Helper: descripción limpia de un ítem
+    const _fitDesc = (fit) => {
       if(fit.tipo==='mat'){
-        const desc = fit.esEspecial?fit.descEsp:fit.nombre;
-        const dims = !fit.esEspecial&&fit.geo==='Cilindro'&&fit.dim1?`⌀${fit.dim1}×L${fit.lar}mm`:(!fit.esEspecial&&fit.dim1?`${fit.dim1}×${fit.anc}×${fit.lar}mm`:'');
-        return `${n+1}. 🪨 ${desc}${dims?' '+dims:''}${fit.cant?' — '+fit.cant+' kg':''}${fit.costCot?' — $'+Number(fit.costCot).toLocaleString('es-CO'):''}`;
+        const desc = fit.esEspecial ? (fit.descEsp||'Material especial') : fit.nombre;
+        const dims = !fit.esEspecial&&fit.geo==='Cilindro'&&fit.dim1
+          ? `⌀${fit.dim1}×L${fit.lar}mm`
+          : (!fit.esEspecial&&fit.dim1?`${fit.dim1}×${fit.anc}×${fit.lar}mm`:'');
+        const cantStr = fit.cant ? ` — Cant: ${fit.cant}` : '';
+        const costStr = fit.costCot ? ` — $${Number(fit.costCot).toLocaleString('es-CO')}` : '';
+        return `${desc}${dims?' '+dims:''}${cantStr}${costStr}`;
       } else {
-        return `${n+1}. 🛠 ${fit.nombre}${fit.dureza?' — '+fit.dureza:''}${fit.cant?' — '+fit.cant+' días':''}${fit.costCot?' — $'+Number(fit.costCot).toLocaleString('es-CO'):''}`;
+        const dur  = fit.dureza ? ` (${fit.dureza})` : '';
+        const dias = fit.cant   ? ` — ${fit.cant} días` : '';
+        const cst  = fit.costCot ? ` — $${Number(fit.costCot).toLocaleString('es-CO')}` : '';
+        return `🛠 ${fit.nombre}${dur}${dias}${cst}`;
       }
-    }).join('\n');
+    };
 
-    // 4) Construir cabecera COMPRAS
-    const ahora    = new Date();
-    const idCompra = `CMP-${ahora.getFullYear()}${String(ahora.getMonth()+1).padStart(2,'0')}${String(ahora.getDate()).padStart(2,'0')}${String(ahora.getHours()).padStart(2,'0')}${String(ahora.getMinutes()).padStart(2,'0')}-${idqr}`;
-
-    const compraData = {
-      N_OC:          idCompra,
-      ID_COMPRA:     idCompra,
-      FECHA:         ahora.toISOString().slice(0,10),
-      OP:            op.OP||'', COT: op.COT||'', ITEM: op.ITEM||'',
-      IDQR:          idqr, CLIENTE: op.CLIENTE||'',
-      DESCRIPCION_OC: resumenAuto2 || obs || op.DESCRIPCION||'',
+    const ahora   = new Date();
+    const tsBase  = `${ahora.getFullYear()}${String(ahora.getMonth()+1).padStart(2,'0')}${String(ahora.getDate()).padStart(2,'0')}${String(ahora.getHours()).padStart(2,'0')}${String(ahora.getMinutes()).padStart(2,'0')}`;
+    const baseData = {
+      FECHA:    ahora.toISOString().slice(0,10),
+      OP:       op.OP||'', COT: op.COT||'', ITEM: op.ITEM||'',
+      IDQR:     idqr, CLIENTE: op.CLIENTE||'',
       OBSERVACIONES: obs,
       PLANO_URL: planoUrl, PLANO_NOMBRE: planoNom,
       DWG_URL:   dwgUrl,   DWG_NOMBRE:   dwgNom,
-      ESTADO:        'PENDIENTE',
-      TOTAL_COT_OC:  totalCotOC,
-      TOTAL_OC:      0
+      ESTADO:   'PENDIENTE', TOTAL_OC: 0
     };
 
-    // 5) Guardar cabecera en COMPRAS
-    await POST('createCompra', compraData);
+    // ── CERRAR MODAL INMEDIATAMENTE y continuar en background ──
+    closeModal();
+    window._compraPlano = null; window._compraDWG = null;
 
-    // 6-A) Guardar cada ítem como fila en ELEMENTOS_OC
-    for(let ii=0;ii<itemsFormulario.length;ii++){
-      const fit=itemsFormulario[ii];
-      const isMat=fit.tipo==='mat';
-      await POST('createElemOC',{
-        N_OC:            idCompra,
-        ITEM_NUM:        ii+1,
-        DESCRIPCION:     isMat?(fit.esEspecial?fit.descEsp:fit.nombre):fit.nombre,
-        MATERIAL:        isMat?fit.nombre:'🛠 Servicio externo',
-        GEO:             isMat?(fit.geo||''):'',
-        DIM1:            isMat?(fit.dim1||0):0,
-        LARGO:           isMat?(fit.lar||0):0,
-        ANCHO:           isMat?(fit.anc||0):0,
-        CANT:            fit.cant||0,
-        UNIDAD:          fit.unidad||(isMat?'kg':'días'),
-        PRECIO_COT:      fit.costCot||0,
-        PRECIO_UNIT:     0,
-        TOTAL_COT:       fit.costCot||0,
-        TOTAL:           0,
-        DIFERENCIA_ITEM: 0,
-        NOTAS:           isMat?(fit.notas||''):([fit.dureza,fit.notas].filter(Boolean).join(' · '))
+    const progGuardar = _progress({
+      icon:'🧱', label:'Guardando pedido…',
+      steps: esFusionado
+        ? ['Cabecera','Elemento','Marcando','Listo']
+        : itemsIncluidos.map((_,ii)=>`Ítem ${ii+1}/${itemsIncluidos.length}`).concat(['Marcando','Listo'])
+    });
+    progGuardar.step(0);
+
+    const nocsPedido = [];
+
+    if(esFusionado) {
+      // ── MODO FUSIONADO: 1 fila en COMPRAS con todo ──────────────
+      const noc = `CMP-${tsBase}-${idqr}`;
+      const resumen = itemsIncluidos.map((fit,n)=>`${n+1}. ${_fitDesc(fit)}`).join('\n');
+      const totalCot = itemsIncluidos.reduce((s,fit)=>s+Number(fit.costCot||0),0);
+      await POST_SILENT('createCompra',{
+        ...baseData, N_OC:noc, ID_COMPRA:noc,
+        DESCRIPCION_OC: resumen,
+        TOTAL_COT_OC: totalCot
       });
+      progGuardar.step(1);
+      // Un ELEMENTO_OC por ítem, todos con el mismo N_OC
+      for(let ii=0;ii<itemsIncluidos.length;ii++){
+        const fit=itemsIncluidos[ii]; const isMat=fit.tipo==='mat';
+        await POST_SILENT('createElemOC',{
+          N_OC:noc, ITEM_NUM:ii+1,
+          DESCRIPCION: isMat?(fit.esEspecial?fit.descEsp:fit.nombre):fit.nombre,
+          MATERIAL:    isMat?fit.nombre:'🛠 Servicio externo',
+          GEO: isMat?(fit.geo||''):'', DIM1:isMat?(fit.dim1||0):0,
+          LARGO:isMat?(fit.lar||0):0, ANCHO:isMat?(fit.anc||0):0,
+          CANT:fit.cant||0, UNIDAD:fit.unidad||(isMat?'kg':'días'),
+          PRECIO_COT:fit.costCot||0, PRECIO_UNIT:0,
+          TOTAL_COT:fit.costCot||0, TOTAL:0, DIFERENCIA_ITEM:0,
+          NOTAS:isMat?(fit.notas||''):([fit.dureza,fit.notas].filter(Boolean).join(' · '))
+        });
+      }
+      nocsPedido.push(noc);
+    } else {
+      // ── MODO SEPARADO: 1 fila en COMPRAS por ítem ───────────────
+      for(let ii=0;ii<itemsIncluidos.length;ii++){
+        const fit    = itemsIncluidos[ii];
+        const isMat  = fit.tipo==='mat';
+        const sufijo = String(ii+1).padStart(2,'0');
+        const noc    = `CMP-${tsBase}-${idqr}-${sufijo}`;
+        const desc   = _fitDesc(fit);
+        await POST_SILENT('createCompra',{
+          ...baseData, N_OC:noc, ID_COMPRA:noc,
+          DESCRIPCION_OC: desc,
+          TOTAL_COT_OC: fit.costCot||0
+        });
+        await POST_SILENT('createElemOC',{
+          N_OC:noc, ITEM_NUM:1,
+          DESCRIPCION: isMat?(fit.esEspecial?fit.descEsp:fit.nombre):fit.nombre,
+          MATERIAL:    isMat?fit.nombre:'🛠 Servicio externo',
+          GEO: isMat?(fit.geo||''):'', DIM1:isMat?(fit.dim1||0):0,
+          LARGO:isMat?(fit.lar||0):0, ANCHO:isMat?(fit.anc||0):0,
+          CANT:fit.cant||0, UNIDAD:fit.unidad||(isMat?'kg':'días'),
+          PRECIO_COT:fit.costCot||0, PRECIO_UNIT:0,
+          TOTAL_COT:fit.costCot||0, TOTAL:0, DIFERENCIA_ITEM:0,
+          NOTAS:isMat?(fit.notas||''):([fit.dureza,fit.notas].filter(Boolean).join(' · '))
+        });
+        nocsPedido.push(noc);
+        progGuardar.step(ii+1);
+      }
     }
 
-        // 6) Marcar MP pedido
-    await POST('updateOP',{ IDQR: idqr, 'MP\nINSUMOS': 'TRUE' });
+    // Marcar OP como MP pedido
+    progGuardar.step(esFusionado ? 2 : itemsIncluidos.length);
+    await POST_SILENT('updateOP',{ IDQR: idqr, 'MP\nINSUMOS': 'TRUE' });
     if(op) op['MP\nINSUMOS'] = 'TRUE';
 
-    window._compraPlano=null; window._compraDWG=null;
+    // Sincronizar en background (barra inferior, no bloquea UI)
+    progGuardar.done(`✅ ${nocsPedido.length} pedido${nocsPedido.length>1?'s':''} creado${nocsPedido.length>1?'s':''}`);
+    toast(`✅ ${nocsPedido.length} pedido${nocsPedido.length>1?'s':''} registrado${nocsPedido.length>1?'s':''}`);
 
-    // 7) Sincronizar compras inmediatamente (no esperar background)
-    try {
-      _comprasData = await POST('getCompras',{});
-      cacheSet('compras', _comprasData);
-    } catch(e){}
-
-    toast(`✅ Pedido ${idCompra} registrado`);
-    closeModal();
-    _autoSync(['produccion'], controlDiseno);
-    setTimeout(()=>_cmpPostConfirmarOC(idqr, idCompra), 400);
+    _autoSync(['produccion','compras'], ()=>{
+      try { _comprasData = DB.compras||[]; } catch(e){}
+    });
+    setTimeout(()=>_cmpPostConfirmarOC(idqr, nocsPedido[0]), 400);
 
   } catch(e){
     toast(e.message,'error');
