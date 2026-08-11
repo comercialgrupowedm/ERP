@@ -1204,6 +1204,7 @@ kbd{
     <div class="nav-item" data-m="remisiones"><span class="nav-icon">🚚</span>Remisiones</div>
     <div class="nav-section">Producción</div>
     <div class="nav-item" data-m="compras"><span class="nav-icon">🛒</span>Compras / OC<span class="nav-badge" id="b-comp" style="display:none">0</span></div>
+    <div class="nav-item" data-m="proveedores"><span class="nav-icon">🏭</span>Proveedores</div>
     <div class="nav-item" data-m="diseño"><span class="nav-icon">🎨</span>Control Diseño<span class="nav-badge" id="b-dis" style="display:none">0</span></div>
     <div class="nav-item" data-m="compras"><span class="nav-icon">🛒</span>Compras / OC<span class="nav-badge" id="b-comp" style="display:none">0</span></div>
     <div class="nav-item" data-m="produccion"><span class="nav-icon">🏭</span>Control Producción<span class="nav-badge" id="b-op">0</span></div>
@@ -1365,7 +1366,7 @@ const TITLES = {
   remisiones:'Remisiones', produccion:'Control Producción',
   'diseño':'Control Diseño', items:'Items / Elementos',
   procesos:'Procesos / Máquinas', materiales:'Materiales', servicios:'Servicios Externos',
-  compras:'Compras / OC'
+  compras:'Compras / OC', proveedores:'Proveedores'
 };
 const FAB_ACTIONS = {
   cotizaciones:()=>formCot({}),
@@ -1376,7 +1377,8 @@ const FAB_ACTIONS = {
   procesos:()=>formPrc({}),
   materiales:()=>formMat({}),
   servicios:()=>formSvc({}),
-  compras:()=>_nuevaOCLibre()
+  compras:()=>_nuevaOCLibre(),
+  proveedores:()=>formProveedor({})
 };
 
 // ══ OVERLAY DE ACCIÓN EN CURSO ═══════════════════════════════════
@@ -1395,6 +1397,9 @@ const BUSY_LABELS = {
   createElemOC:'Guardando elemento…', updateElemOC:'Actualizando elemento…',
   deleteElemOC:'Eliminando elemento…', getElemsOC:'Cargando elementos…',
   updateCompra:'Actualizando OC…', getNextNOC:'Generando número de OC…',
+  getProveedores:'Cargando proveedores…', createProveedor:'Guardando proveedor…',
+  updateProveedor:'Actualizando proveedor…', deleteProveedor:'Eliminando proveedor…',
+  generarPDFOrdenCompra:'Generando PDF de OC…',
   createRemision:'Creando remisión…', updateRemision:'Actualizando remisión…', deleteRemision:'Eliminando remisión…',
   createProceso:'Guardando proceso…', updateProceso:'Actualizando proceso…', deleteProceso:'Eliminando proceso…',
   createMaterial:'Guardando material…', updateMaterial:'Actualizando material…', deleteMaterial:'Eliminando material…',
@@ -1614,7 +1619,7 @@ function nav(m){
     }
   }
 
-  const mods={dashboard,cotizaciones,clientes,remisiones,produccion,items,procesos,materiales,servicios,'diseño':controlDiseno,compras};
+  const mods={dashboard,cotizaciones,clientes,remisiones,produccion,items,procesos,materiales,servicios,'diseño':controlDiseno,compras,proveedores};
   if(mods[m]) mods[m]();
 }
 
@@ -1724,6 +1729,8 @@ const QUICK_NAV_MODS = [
   {m:'remisiones',  icon:'🚚', label:'Remisiones'},
   {m:'diseño',      icon:'🎨', label:'Control Diseño'},
   {m:'produccion',  icon:'🏭', label:'Control Producción'},
+  {m:'compras',     icon:'🛒', label:'Compras / OC'},
+  {m:'proveedores', icon:'🏭', label:'Proveedores'},
   {m:'items',       icon:'🔩', label:'Items'},
   {m:'procesos',    icon:'⚙️', label:'Procesos'},
   {m:'materiales',  icon:'🧱', label:'Materiales'},
@@ -1831,6 +1838,7 @@ function closeModal(e){
   if(!e||e.target===document.getElementById('modal-ov')){
     document.getElementById('modal-ov').classList.remove('open');
     if(window._qaModalPasteCleanup){ window._qaModalPasteCleanup(); window._qaModalPasteCleanup = null; }
+    if(window._provModalPasteCleanup){ window._provModalPasteCleanup(); window._provModalPasteCleanup = null; }
   }
 }
 
@@ -2440,6 +2448,10 @@ async function dashboard(){
             <span class="app-badge-dot" id="ab-comp" style="display:none"></span>
           </div>
           <span class="app-icon-label">Compras / OC</span>
+        </div>
+        <div class="app-icon" onclick="navigate('proveedores')">
+          <div class="app-icon-box" style="background:linear-gradient(135deg,#065f46,#34d399)">🏭</div>
+          <span class="app-icon-label">Proveedores</span>
         </div>
         <div class="app-icon" onclick="navigate('items')">
           <div class="app-icon-box" style="background:linear-gradient(135deg,#b45309,#fbbf24)">🔩</div>
@@ -4518,11 +4530,12 @@ async function qaVerComprasOP(opId) {
   const op = qaFindOP(opId);
   if(!op){ toast('OP no encontrada','error'); return; }
   try { _comprasData = await POST('getCompras',{}); } catch(e) { _comprasData = _comprasData||[]; }
-  const pedidos = (_comprasData||[]).filter(c=>
-    String(c.IDQR)===String(op.IDQR) ||
-    String(c.OP)===String(op.OP) ||
-    String(c.N_OC||'').includes(String(op.IDQR))
-  );
+  const pedidos = (_comprasData||[]).filter(c=>{
+    const cIdqr = String(c.IDQR||'').replace(/\.0+$/,'').trim();
+    const cNoc  = String(c.N_OC||'');
+    const myIdqr = String(op.IDQR||'').trim();
+    return cIdqr===myIdqr || cNoc.includes('-'+myIdqr);
+  });
   const EST_COLOR = {'PENDIENTE':'#b45309','APROBADO':'#1d4ed8','OC EMITIDA':'#6d28d9','RECIBIDO PARCIAL':'#0891b2','RECIBIDO TOTAL':'#059669'};
   if(!pedidos.length){
     openModal(`🛒 Compras — OP-${op.OP}`,`
@@ -4573,6 +4586,74 @@ async function qaGuardarBienesServicios(opId){
   qaPedirMaterial(opId);
 }
 
+// ── Genera solo la sección de pedidos de material para un IDQR ────────────
+function _pedidosHtml(idqr, comprasData) {
+  const data = comprasData || _comprasData || [];
+  const op   = (DB.produccion||[]).find(x=>String(x.IDQR)===String(idqr))
+            || (DB.produccion||[]).find(x=>String(x.OP)===String(idqr));
+  const myIdqr = String(idqr).trim();
+
+  const pedidos = data.filter(c=>{
+    const cIdqr = String(c.IDQR||'').replace(/\.0+$/,'').trim();
+    const cNoc  = String(c.N_OC||'');
+    return cIdqr===myIdqr || cNoc.includes('-'+myIdqr);
+  });
+
+  if(!pedidos.length) return `<div id="dp-pedidos-${idqr}"></div>`;
+
+  const EST_COLOR = {'PENDIENTE':'#b45309','APROBADO':'#1d4ed8','OC EMITIDA':'#6d28d9','RECIBIDO PARCIAL':'#0891b2','RECIBIDO TOTAL':'#059669'};
+  const totalPedidos = pedidos.reduce((s,c)=>s+Number(c.TOTAL_OC||0),0);
+
+  const items = pedidos.map(c=>{
+    const col = EST_COLOR[c.ESTADO]||'#6b7280';
+    const matLines = [];
+    for(let i=1;i<=5;i++){
+      const n=c[`MAT_${i}_NOMBRE`]; if(!n) continue;
+      const esEsp=n==='ESPECIAL';
+      const desc=esEsp?(c[`MAT_${i}_DESC_ESP`]||n):n;
+      const geo=c[`MAT_${i}_GEO`]||'';
+      const dim1=c[`MAT_${i}_DIM1`]||0;
+      const lar=c[`MAT_${i}_LARGO`]||0;
+      const dims=geo==='Cilindro'&&dim1?`⌀${dim1}×L${lar}mm`:dim1?`${dim1}×${lar}mm`:'';
+      const cant=c[`MAT_${i}_CANT`]||0;
+      const cost=c[`MAT_${i}_COSTO`]||0;
+      matLines.push(`${desc}${dims?' '+dims:''}${cant?' · '+cant:''}${cost?' · $'+Number(cost).toLocaleString('es-CO'):''}`);
+    }
+    for(let i=1;i<=3;i++){
+      const n=c[`SVC_${i}_NOMBRE`]; if(!n) continue;
+      const dur=c[`SVC_${i}_DUREZA`]||'';
+      const cost=c[`SVC_${i}_COSTO`]||0;
+      matLines.push(`🛠 ${n}${dur?' · '+dur:''}${cost?' · $'+Number(cost).toLocaleString('es-CO'):''}`);
+    }
+    return `<div style="background:var(--card2);border-radius:8px;padding:8px 10px;margin-bottom:6px;
+      border-left:3px solid ${col};cursor:pointer"
+      onclick="nav('compras');setTimeout(()=>_verDetalleOC('${String(c.N_OC).replace(/'/g,"\\'")}'),500)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <span style="font-size:11px;font-weight:700;color:var(--accent)">${c.N_OC}</span>
+        <span style="background:${col}18;color:${col};border:1px solid ${col}40;border-radius:99px;
+          padding:1px 7px;font-size:10px;font-weight:700">${c.ESTADO||'PENDIENTE'}</span>
+      </div>
+      ${matLines.length?`<div style="font-size:10px;color:var(--muted);line-height:1.6">
+        ${matLines.map(l=>`<div>• ${l}</div>`).join('')}</div>`:''}
+      ${c.TOTAL_OC?`<div style="font-size:11px;font-weight:700;color:var(--gold);margin-top:4px;text-align:right">
+        $${Number(c.TOTAL_OC).toLocaleString('es-CO')}</div>`:''}
+    </div>`;
+  }).join('');
+
+  return `<div id="dp-pedidos-${idqr}" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px">🧱 Pedidos de Material</div>
+      <span style="font-size:11px;color:var(--muted)">${pedidos.length} pedido(s)</span>
+    </div>
+    ${items}
+    ${totalPedidos>0?`<div style="background:var(--card2);border-radius:8px;padding:10px;border:1px solid var(--border);
+      display:flex;justify-content:space-between;align-items:center;margin-top:4px">
+      <span style="font-size:12px;font-weight:700">Total acumulado</span>
+      <span style="font-size:14px;font-weight:800;color:var(--gold)">$${totalPedidos.toLocaleString('es-CO')}</span>
+    </div>`:''}
+  </div>`;
+}
+
 // ── dpUploadSection: sección de archivos en el panel de detalle de OP ────
 function dpUploadSection(idqr) {
   const op = (DB.produccion||[]).find(x=>String(x.IDQR)===String(idqr))
@@ -4583,28 +4664,67 @@ function dpUploadSection(idqr) {
   const planoNom  = op.PLANO_NOMBRE||'Plano';
   const imgUrl    = op.IMAGEN_B64||(_imgCache&&_imgCache.has(String(idqr))?_imgCache.get(String(idqr)):'');
 
-  // Pedidos de material vinculados a esta OP/IDQR
-  const pedidos = (_comprasData||[]).filter(c=>
-    String(c.IDQR)===String(idqr) ||
-    String(c.IDQR)===String(op.IDQR) ||
-    String(c.OP)===String(op.OP) ||
-    String(c.N_OC).includes(String(idqr)) ||
-    String(c.N_OC).includes(String(op.IDQR))
-  );
+  // Pedidos vinculados SOLO a este IDQR exacto (no a otros ítems de la misma OP)
+  const pedidos = (_comprasData||[]).filter(c=> {
+    const cIdqr = String(c.IDQR||'').replace(/\.0+$/,'').trim();
+    const cNoc  = String(c.N_OC||'');
+    const myIdqr = String(idqr).trim();
+    return cIdqr === myIdqr || cNoc.includes('-'+myIdqr);
+  });
+
   const EST_COLOR = {'PENDIENTE':'#b45309','APROBADO':'#1d4ed8','OC EMITIDA':'#6d28d9','RECIBIDO PARCIAL':'#0891b2','RECIBIDO TOTAL':'#059669'};
+
+  const totalPedidos = pedidos.reduce((s,c)=>s+Number(c.TOTAL_OC||0),0);
+
   const pedidosHtml = pedidos.length ? `
   <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
-    <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:6px">🧱 Pedidos de Material</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px">🧱 Pedidos de Material</div>
+      <span style="font-size:11px;color:var(--muted)">${pedidos.length} pedido(s)</span>
+    </div>
     ${pedidos.map(c=>{
       const col = EST_COLOR[c.ESTADO]||'#6b7280';
-      return `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:var(--card2);border-radius:8px;margin-bottom:4px;cursor:pointer"
-        onclick="nav('compras');setTimeout(()=>_verDetalleOC('${String(c.N_OC).replace(/'/g,"\\'")}'),400)">
-        <span style="font-size:11px;font-weight:700;color:var(--accent)">${c.N_OC}</span>
-        <span style="background:${col}18;color:${col};border:1px solid ${col}40;border-radius:99px;padding:1px 7px;font-size:10px;font-weight:700">${c.ESTADO||'PENDIENTE'}</span>
-        <span style="font-size:11px;color:var(--muted);margin-left:auto">${c.PROVEEDOR||'Sin proveedor'}</span>
-        <span style="color:var(--muted)">›</span>
+      // Líneas de materiales del pedido
+      const matLines = [];
+      for(let i=1;i<=5;i++){
+        const n=c[`MAT_${i}_NOMBRE`]; if(!n) continue;
+        const esEsp=n==='ESPECIAL';
+        const desc=esEsp?(c[`MAT_${i}_DESC_ESP`]||n):n;
+        const geo=c[`MAT_${i}_GEO`]||'';
+        const dim1=c[`MAT_${i}_DIM1`]||0;
+        const lar=c[`MAT_${i}_LARGO`]||0;
+        const dims=geo==='Cilindro'&&dim1?`⌀${dim1}×L${lar}mm`:dim1?`${dim1}×${lar}mm`:'';
+        const cant=c[`MAT_${i}_CANT`]||0;
+        const cost=c[`MAT_${i}_COSTO`]||0;
+        matLines.push(`${desc}${dims?' '+dims:''}${cant?' · '+cant:''}${cost?' · $'+Number(cost).toLocaleString('es-CO'):''}`);
+      }
+      for(let i=1;i<=3;i++){
+        const n=c[`SVC_${i}_NOMBRE`]; if(!n) continue;
+        const dur=c[`SVC_${i}_DUREZA`]||'';
+        const cost=c[`SVC_${i}_COSTO`]||0;
+        matLines.push(`🛠 ${n}${dur?' · '+dur:''}${cost?' · $'+Number(cost).toLocaleString('es-CO'):''}`);
+      }
+      return `<div style="background:var(--card2);border-radius:8px;padding:8px 10px;margin-bottom:6px;
+        border-left:3px solid ${col};cursor:pointer"
+        onclick="nav('compras');setTimeout(()=>_verDetalleOC('${String(c.N_OC).replace(/'/g,"\\'")}'),500)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <span style="font-size:11px;font-weight:700;color:var(--accent)">${c.N_OC}</span>
+          <span style="background:${col}18;color:${col};border:1px solid ${col}40;border-radius:99px;
+            padding:1px 7px;font-size:10px;font-weight:700">${c.ESTADO||'PENDIENTE'}</span>
+        </div>
+        ${matLines.length?`<div style="font-size:10px;color:var(--muted);line-height:1.6">
+          ${matLines.map(l=>`<div>• ${l}</div>`).join('')}
+        </div>`:''}
+        ${c.TOTAL_OC?`<div style="font-size:11px;font-weight:700;color:var(--gold);margin-top:4px;text-align:right">
+          Total: $${Number(c.TOTAL_OC).toLocaleString('es-CO')}</div>`:''}
       </div>`;
     }).join('')}
+    ${pedidos.length>1||totalPedidos>0?`
+    <div style="background:var(--card2);border-radius:8px;padding:10px;border:1px solid var(--border);
+      display:flex;justify-content:space-between;align-items:center;margin-top:4px">
+      <span style="font-size:12px;font-weight:700">Total acumulado</span>
+      <span style="font-size:14px;font-weight:800;color:var(--gold)">$${totalPedidos.toLocaleString('es-CO')}</span>
+    </div>`:''}
   </div>` : '';
 
   return `
@@ -4619,7 +4739,7 @@ function dpUploadSection(idqr) {
         : `<button class="btn btn-ghost btn-sm" style="font-size:11px" onclick="qaSubirImagen('${safe}')">🖼️ Subir imagen</button>`}
       <button class="btn btn-sm" style="background:#b45309;color:#fff;border:none;font-size:11px" onclick="qaPedirMaterial('${safe}')">🧱 Pedir Material</button>
     </div>
-    ${pedidosHtml}
+    ${_pedidosHtml(idqr, _comprasData)}
   </div>`;
 }
 
@@ -4817,9 +4937,24 @@ async function detailOP(id){
     `<button class="btn btn-ghost btn-sm" onclick="formOP(${JSON.stringify(op).replace(/"/g,'&quot;')})">✏️</button>
      <button class="btn btn-danger btn-sm" onclick="deleteOP('${id}')">🗑</button>`
   );
-  // Añadir sección de archivos al body del panel
+  // Añadir sección de archivos al body del panel (recargar compras frescas)
   const dpBody = document.getElementById('dp-body');
-  if(dpBody) dpBody.insertAdjacentHTML('beforeend', dpUploadSection(id));
+  if(dpBody) {
+    dpBody.insertAdjacentHTML('beforeend', dpUploadSection(id));
+    // Recargar compras en background y actualizar sección
+    POST('getCompras',{}).then(d=>{
+      _comprasData = d;
+      cacheSet('compras', d);
+      const dpBody2 = document.getElementById('dp-body');
+      if(dpBody2) {
+        // Reemplazar solo la sección de pedidos
+        const secId = 'dp-pedidos-'+String(id);
+        const existing = document.getElementById(secId);
+        if(existing) existing.outerHTML = _pedidosHtml(id, d);
+        else dpBody2.insertAdjacentHTML('beforeend', _pedidosHtml(id, d));
+      }
+    }).catch(()=>{});
+  }
 }
 
 function formOP(op={}){
@@ -8484,11 +8619,29 @@ async function _disPedirMP(idqr, opNum) {
         </div>
       </div>
     </div>
-    <!-- OBSERVACIONES -->
+    <!-- DESCRIPCIÓN ENRIQUECIDA -->
     <div>
-      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:6px">📝 Observaciones del pedido</div>
-      <textarea id="cmp-obs" rows="3" placeholder="Especificaciones adicionales, tolerancias, tratamientos, urgencia…"
-        style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:10px;font-size:12px;resize:vertical;box-sizing:border-box"></textarea>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px">📝 Descripción del pedido</div>
+        <button type="button" class="btn btn-ghost btn-sm" style="font-size:10px" onclick="_cmpAutoDesc()">⚡ Auto-llenar</button>
+      </div>
+      <!-- Resumen automático (read-only, generado) -->
+      <div id="cmp-desc-resumen" style="display:none;background:var(--card2);border:1px solid var(--border);
+        border-radius:8px;padding:10px;margin-bottom:8px;font-size:11px;color:var(--text);line-height:1.6"></div>
+      <!-- Campo rich text — acepta pegar imágenes -->
+      <div id="cmp-obs"
+        contenteditable="true"
+        data-placeholder="Especificaciones adicionales, tolerancias, notas de fabricación…
+Puedes pegar imágenes directamente aquí (Ctrl+V)"
+        style="width:100%;min-height:100px;background:var(--surface);border:1px solid var(--border);
+          color:var(--text);border-radius:8px;padding:10px;font-size:12px;
+          box-sizing:border-box;outline:none;line-height:1.6;
+          -webkit-user-select:text;user-select:text"
+        onpaste="_cmpHandlePaste(event)"
+        onfocus="if(!this.textContent.trim())this.textContent=''"
+        onblur="if(!this.textContent.trim())this.innerHTML=''">
+      </div>
+      <div style="font-size:10px;color:var(--muted);margin-top:4px">💡 Puedes pegar imágenes con Ctrl+V o desde la galería</div>
     </div>
   </div>`,
   `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
@@ -8497,7 +8650,14 @@ async function _disPedirMP(idqr, opNum) {
   );
 
   // Renderizar listas dinámicas después de abrir el modal
-  requestAnimationFrame(()=>{ _cmpRenderMats(); _cmpRenderSvcs(); });
+  requestAnimationFrame(()=>{
+    _cmpRenderMats();
+    _cmpRenderSvcs();
+    // Auto-generar descripción si hay materiales precargados
+    setTimeout(()=>{
+      if((window._cmpMats||[]).some(m=>m.nombre||m.id)) _cmpAutoDesc();
+    }, 300);
+  });
 }
 
 
@@ -8797,6 +8957,106 @@ function _cmpLeerFormulario() {
 }
 
 
+// ── Auto-generar descripción fusionada de materiales + servicios ──────────
+function _cmpAutoDesc() {
+  const lineas = [];
+
+  // Materiales
+  const matsLineas = [];
+  (window._cmpMats||[]).forEach((m,i)=>{
+    const sel = document.getElementById(`cmp-ms-${i}`)?.value||'';
+    if(!sel) return;
+    const esEsp = sel==='ESPECIAL';
+    if(esEsp){
+      const desc = document.getElementById(`cmp-md-${i}`)?.value||'';
+      const cant = document.getElementById(`cmp-mc-${i}`)?.value||'';
+      const cost = document.getElementById(`cmp-mk-${i}`)?.value||'';
+      if(desc) matsLineas.push(`• ${desc}${cant?' — Cant: '+cant:''}${cost?' — $'+Number(cost).toLocaleString('es-CO'):''}`);
+    } else {
+      const geo  = document.getElementById(`cmp-mg-${i}`)?.value||'';
+      const dim1 = document.getElementById(`cmp-md1-${i}`)?.value||'';
+      const lar  = document.getElementById(`cmp-mlar-${i}`)?.value||'';
+      const anc  = document.getElementById(`cmp-manc-${i}`)?.value||'';
+      const cant = document.getElementById(`cmp-mq-${i}`)?.value||'';
+      const cost = document.getElementById(`cmp-mk-${i}`)?.value||'';
+      let dims = '';
+      if(geo==='Cilindro' && dim1) dims = `⌀${dim1}×L${lar}mm`;
+      else if(dim1) dims = `${dim1}×${anc}×${lar}mm`;
+      matsLineas.push(`• ${sel}${dims?' '+dims:''}${cant?' — '+cant+' kg':''}${cost?' — $'+Number(cost).toLocaleString('es-CO'):''}`);
+    }
+  });
+  if(matsLineas.length) {
+    lineas.push('🪨 MATERIALES:');
+    lineas.push(...matsLineas);
+  }
+
+  // Servicios
+  const svcsLineas = [];
+  (window._cmpSvcs||[]).forEach((s,i)=>{
+    const sel  = document.getElementById(`cmp-ss-${i}`)?.value||'';
+    if(!sel) return;
+    const dias = document.getElementById(`cmp-sd-${i}`)?.value||'';
+    const cost = document.getElementById(`cmp-sc-${i}`)?.value||'';
+    const dur  = document.getElementById(`cmp-sdur-${i}`)?.value||'';
+    svcsLineas.push(`• ${sel}${dur?' — '+dur:''}${dias?' — '+dias+' días':''}${cost?' — $'+Number(cost).toLocaleString('es-CO'):''}`);
+  });
+  if(svcsLineas.length){
+    if(lineas.length) lineas.push('');
+    lineas.push('🛠 SERVICIOS EXTERNOS:');
+    lineas.push(...svcsLineas);
+  }
+
+  const resumen = lineas.join('\n');
+  const resEl = document.getElementById('cmp-desc-resumen');
+  const obsEl = document.getElementById('cmp-obs');
+
+  if(resEl){
+    resEl.style.display = resumen ? '' : 'none';
+    resEl.innerHTML = resumen.split('\n').map(l=>
+      l.startsWith('🪨')||l.startsWith('🛠')
+        ? `<div style="font-weight:700;color:var(--accent);margin-top:4px">${l}</div>`
+        : l ? `<div style="padding-left:8px">${l}</div>` : '<div style="height:4px"></div>'
+    ).join('');
+  }
+  // También copiar al campo de texto como texto plano
+  if(obsEl && !obsEl.textContent.trim()){
+    obsEl.innerText = resumen;
+  }
+  toast('✅ Descripción generada','success');
+}
+
+// ── Pegar imagen en el campo rich text ───────────────────────────────────
+function _cmpHandlePaste(event){
+  const items = event.clipboardData?.items||[];
+  for(const item of items){
+    if(item.type.startsWith('image/')){
+      event.preventDefault();
+      const file = item.getAsFile();
+      const reader = new FileReader();
+      reader.onload = e => {
+        const img = document.createElement('img');
+        img.src = e.target.result;
+        img.style.cssText = 'max-width:100%;border-radius:6px;margin:4px 0;display:block';
+        img.title = 'Imagen pegada';
+        const sel = window.getSelection();
+        if(sel&&sel.rangeCount){
+          const range = sel.getRangeAt(0);
+          range.deleteContents();
+          range.insertNode(img);
+        } else {
+          document.getElementById('cmp-obs')?.appendChild(img);
+        }
+      };
+      reader.readAsDataURL(file);
+      return;
+    }
+  }
+  // Pegar texto plano sin formato
+  event.preventDefault();
+  const text = event.clipboardData?.getData('text/plain')||'';
+  document.execCommand('insertText', false, text);
+}
+
 // ── Selección de archivo en el modal de compra ────────────────────────────
 function _cmpSelArchivo(input, slot){
   const file = input?.files?.[0];
@@ -8874,7 +9134,11 @@ async function _cmpConfirmar(idqr){
   if(btn){ btn.disabled=true; btn.textContent='⏳ Guardando…'; }
 
   try {
-    const obs = document.getElementById('cmp-obs')?.value||'';
+    const obsEl = document.getElementById('cmp-obs');
+    const obs   = obsEl ? (obsEl.innerText||obsEl.textContent||'').trim() : '';
+    // Resumen automático de materiales y servicios para DESCRIPCION_OC
+    const resEl = document.getElementById('cmp-desc-resumen');
+    const resumenAuto = resEl ? resEl.innerText||'' : '';
     const it  = (DB.items||[]).find(x=>
       String(x.COTIZACION||x.ID_PEDIDO)===String(op.COT) &&
       String(x.ITEM||x.ITEM_NUM)===String(op.ITEM)
@@ -8909,14 +9173,16 @@ async function _cmpConfirmar(idqr){
 
     // 3) Construir registro COMPRAS
     const ahora    = new Date();
-    const idCompra = `CMP-${ahora.getFullYear()}${String(ahora.getMonth()+1).padStart(2,'0')}${String(ahora.getDate()).padStart(2,'0')}-${idqr}`;
+    const idCompra = `CMP-${ahora.getFullYear()}${String(ahora.getMonth()+1).padStart(2,'0')}${String(ahora.getDate()).padStart(2,'0')}${String(ahora.getHours()).padStart(2,'0')}${String(ahora.getMinutes()).padStart(2,'0')}-${idqr}`;
 
     const compraData = {
       N_OC:      idCompra,
       ID_COMPRA: idCompra,
       FECHA:     ahora.toISOString().slice(0,10),
       OP:        op.OP||'', COT: op.COT||'', ITEM: op.ITEM||'',
-      IDQR:      idqr, CLIENTE: op.CLIENTE||'', DESCRIPCION_OC: op.DESCRIPCION||'',
+      IDQR:      idqr, CLIENTE: op.CLIENTE||'',
+      DESCRIPCION_OC: resumenAuto || op.DESCRIPCION||'',
+      OBSERVACIONES: obs,
       TIPO:      op.TIPO||'', DISEÑADOR: op.DISEÑADOR||'',
       PRECIO_COT: it?.['PRECIO X ITEM']||it?.['PRECIO UNITARIO']||0,
       PLANO_URL: planoUrl, PLANO_NOMBRE: planoNom,
@@ -8973,10 +9239,16 @@ async function _cmpConfirmar(idqr){
     if(op) op['MP\nINSUMOS'] = 'TRUE';
 
     window._compraPlano=null; window._compraDWG=null;
+
+    // 7) Sincronizar compras inmediatamente (no esperar background)
+    try {
+      _comprasData = await POST('getCompras',{});
+      cacheSet('compras', _comprasData);
+    } catch(e){}
+
     toast(`✅ Pedido ${idCompra} registrado`);
     closeModal();
     _autoSync(['produccion'], controlDiseno);
-    // Invitar a crear la OC formal
     setTimeout(()=>_cmpPostConfirmarOC(idqr, idCompra), 400);
 
   } catch(e){
@@ -10701,6 +10973,57 @@ async function _verDetalleOC(noc) {
   let elems = [];
   try { elems = await POST('getElemsOC', { N_OC: noc }); } catch(e){}
 
+  // ── Fallback: construir elementos desde columnas MAT_N / SVC_N de COMPRAS ──
+  if(!elems.length) {
+    const GEO_DIM = (geo, dim1, lar, anc) => {
+      if(!dim1 && !lar) return '';
+      if(geo==='Cilindro') return `⌀${dim1} × L${lar} mm`;
+      if(geo==='Platina')  return `${dim1}×${anc}×${lar} mm`;
+      return `${dim1||''}${lar?' × L'+lar:''}`;
+    };
+    let n = 1;
+    for(let i=1;i<=5;i++){
+      const nombre = c[`MAT_${i}_NOMBRE`];
+      if(!nombre) continue;
+      const esEsp = nombre==='ESPECIAL';
+      const desc  = esEsp ? (c[`MAT_${i}_DESC_ESP`]||'Material especial') : nombre;
+      const geo   = c[`MAT_${i}_GEO`]||'';
+      const dim1  = c[`MAT_${i}_DIM1`]||0;
+      const lar   = c[`MAT_${i}_LARGO`]||0;
+      const anc   = c[`MAT_${i}_ANCHO`]||0;
+      const dims  = GEO_DIM(geo, dim1, lar, anc);
+      elems.push({
+        ITEM_NUM:    n++,
+        DESCRIPCION: desc,
+        MATERIAL:    nombre,
+        GEO:         geo,
+        DIM1:        dim1, LARGO:lar, ANCHO:anc,
+        CANT:        c[`MAT_${i}_CANT`]||0,
+        UNIDAD:      'kg',
+        PRECIO_UNIT: 0,
+        TOTAL:       c[`MAT_${i}_COSTO`]||0,
+        NOTAS:       dims
+      });
+    }
+    for(let i=1;i<=3;i++){
+      const nombre = c[`SVC_${i}_NOMBRE`];
+      if(!nombre) continue;
+      const dureza = c[`SVC_${i}_DUREZA`]||'';
+      const notas  = c[`SVC_${i}_NOTAS`]||'';
+      elems.push({
+        ITEM_NUM:    n++,
+        DESCRIPCION: nombre,
+        MATERIAL:    '🛠 Servicio externo',
+        GEO:         '',
+        CANT:        c[`SVC_${i}_DIAS`]||1,
+        UNIDAD:      'días',
+        PRECIO_UNIT: 0,
+        TOTAL:       c[`SVC_${i}_COSTO`]||0,
+        NOTAS:       [dureza, notas].filter(Boolean).join(' · ')
+      });
+    }
+  }
+
   const ESTADOS_OC = ['PENDIENTE','APROBADO','OC EMITIDA','RECIBIDO PARCIAL','RECIBIDO TOTAL'];
   const EST_COLOR  = { 'PENDIENTE':'#b45309','APROBADO':'#1d4ed8','OC EMITIDA':'#6d28d9','RECIBIDO PARCIAL':'#0891b2','RECIBIDO TOTAL':'#059669' };
 
@@ -10710,28 +11033,28 @@ async function _verDetalleOC(noc) {
       <table style="width:100%;border-collapse:collapse;font-size:11px">
         <thead><tr style="background:var(--card2)">
           <th style="padding:5px 8px;text-align:left;border-bottom:1px solid var(--border)">#</th>
-          <th style="padding:5px 8px;text-align:left;border-bottom:1px solid var(--border)">Descripción</th>
+          <th style="padding:5px 8px;text-align:left;border-bottom:1px solid var(--border)">Descripción / Material</th>
           <th style="padding:5px 8px;text-align:center;border-bottom:1px solid var(--border)">Cant</th>
-          <th style="padding:5px 8px;text-align:right;border-bottom:1px solid var(--border)">P.Unit</th>
           <th style="padding:5px 8px;text-align:right;border-bottom:1px solid var(--border)">Total</th>
         </tr></thead>
         <tbody>
           ${elems.map(e=>`<tr style="border-bottom:1px solid var(--border)">
-            <td style="padding:5px 8px;color:var(--muted)">${e.ITEM_NUM}</td>
-            <td style="padding:5px 8px"><div style="font-weight:600">${e.DESCRIPCION||'—'}</div>
-              <div style="color:var(--muted);font-size:10px">${e.MATERIAL?(e.MATERIAL+' '):''}</div>
-              ${e.NOTAS?`<div style="color:var(--muted);font-size:10px">${e.NOTAS}</div>`:''}</td>
-            <td style="padding:5px 8px;text-align:center">${e.CANT||'—'} ${e.UNIDAD||''}</td>
-            <td style="padding:5px 8px;text-align:right">${e.PRECIO_UNIT?'$'+Number(e.PRECIO_UNIT).toLocaleString('es-CO'):'—'}</td>
-            <td style="padding:5px 8px;text-align:right;color:var(--gold);font-weight:600">${e.TOTAL?'$'+Number(e.TOTAL).toLocaleString('es-CO'):'—'}</td>
+            <td style="padding:5px 8px;color:var(--muted);font-weight:700">${e.ITEM_NUM}</td>
+            <td style="padding:5px 8px">
+              <div style="font-weight:700;font-size:12px">${e.DESCRIPCION||'—'}</div>
+              ${e.MATERIAL&&e.MATERIAL!==e.DESCRIPCION?`<div style="color:var(--accent);font-size:10px;margin-top:1px">${e.MATERIAL}</div>`:''}
+              ${e.NOTAS?`<div style="color:var(--muted);font-size:10px;font-family:monospace;margin-top:1px">${e.NOTAS}</div>`:''}
+            </td>
+            <td style="padding:5px 8px;text-align:center;white-space:nowrap">${e.CANT||'—'} ${e.UNIDAD||''}</td>
+            <td style="padding:5px 8px;text-align:right;color:var(--gold);font-weight:700;white-space:nowrap">${e.TOTAL?'$'+Number(e.TOTAL).toLocaleString('es-CO'):'—'}</td>
           </tr>`).join('')}
           <tr style="background:var(--card2);font-weight:700">
-            <td colspan="4" style="padding:6px 8px;text-align:right">TOTAL</td>
-            <td style="padding:6px 8px;text-align:right;color:var(--gold)">$${totalCalc.toLocaleString('es-CO')}</td>
+            <td colspan="3" style="padding:7px 8px;text-align:right;font-size:12px">TOTAL PEDIDO</td>
+            <td style="padding:7px 8px;text-align:right;color:var(--gold);font-size:13px">$${totalCalc.toLocaleString('es-CO')}</td>
           </tr>
         </tbody>
       </table>
-    </div>` : `<div style="font-size:12px;color:var(--muted);padding:8px 0">Sin elementos registrados</div>`;
+    </div>` : `<div style="font-size:12px;color:var(--muted);padding:12px;text-align:center;background:var(--card2);border-radius:8px">Sin elementos — usa ✏️ Editar para agregar materiales y servicios</div>`;
 
   const safeNOC = String(noc).replace(/'/g,"\\'");
   const estadoActual = c.ESTADO||'PENDIENTE';
@@ -10777,6 +11100,8 @@ async function _verDetalleOC(noc) {
     <!-- Acciones -->
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">
       ${btnAvanzar}
+      <button class="btn btn-ghost btn-sm" onclick="_asignarProveedorOC('${safeNOC}')">🏭 ${c.PROVEEDOR?'Cambiar':'Asignar'} Proveedor</button>
+      <button class="btn btn-ghost btn-sm" onclick="_generarOC('${safeNOC}')">${c.OC_PDF_URL?'📄 Ver PDF':'📋 Generar OC'}</button>
       <button class="btn btn-ghost btn-sm" onclick="_editarOC('${safeNOC}')">✏️ Editar</button>
       ${c.TELEFONO?`<button class="btn btn-ghost btn-sm" onclick="_compartirOCWA('${safeNOC}')">📲 WhatsApp</button>`:''}
     </div>
@@ -11098,6 +11423,495 @@ async function _cmpPostConfirmarOC(idqr, noc) {
    <button class="btn btn-primary" onclick="closeModal();setTimeout(()=>_editarOC('${noc}'),200)">
      📋 Generar OC</button>`
   );
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+//  MÓDULO PROVEEDORES
+// ══════════════════════════════════════════════════════════════════════════
+let _proveedoresData = null;
+
+async function proveedores() {
+  setContent(`<div class="empty"><div class="empty-icon">🏭</div><p>Cargando proveedores…</p></div>`);
+  try {
+    if(!_proveedoresData){
+      const cached = cacheGet('proveedores');
+      if(cached) { _proveedoresData = cached; }
+      POST('getProveedores',{}).then(d=>{ _proveedoresData=d; cacheSet('proveedores',d); _renderProveedores(); }).catch(()=>{});
+      if(!_proveedoresData) _proveedoresData = await POST('getProveedores',{});
+    }
+    _renderProveedores();
+  } catch(e){ setContent(`<div class="empty"><div class="empty-icon">⚠️</div><p>${e.message}</p></div>`); }
+}
+
+function _renderProveedores() {
+  const all = _proveedoresData||[];
+  const CATS = [...new Set(all.map(p=>p.CATEGORIA||'General').filter(Boolean))].sort();
+
+  const cards = all.map(p=>{
+    const safe = String(p.ID_PROVEEDOR).replace(/'/g,"\\'");
+    return `<div class="list-card" onclick="formProveedor(${JSON.stringify(p).replace(/"/g,'&quot;')})">
+      <div style="display:flex;gap:12px;align-items:center">
+        ${p.LOGO_URL
+          ? `<img src="${p.LOGO_URL}" style="width:48px;height:48px;object-fit:contain;border-radius:8px;border:1px solid var(--border);flex-shrink:0;background:#fff;padding:4px">`
+          : `<div style="width:48px;height:48px;border-radius:8px;background:var(--card2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">🏭</div>`}
+        <div style="flex:1;min-width:0">
+          <div style="font-size:14px;font-weight:700;margin-bottom:2px">${p.NOMBRE||'—'}</div>
+          <div style="font-size:11px;color:var(--muted)">${p.NIT?'NIT: '+p.NIT+' · ':''}${p.CIUDAD||''}</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">
+            ${p.CATEGORIA?`<span class="badge azul" style="font-size:10px">${p.CATEGORIA}</span>`:''}
+            ${p.TELEFONO?`<span style="font-size:11px;color:var(--muted)">📞 ${p.TELEFONO}</span>`:''}
+          </div>
+        </div>
+        <span style="color:var(--muted);font-size:18px">›</span>
+      </div>
+    </div>`;
+  }).join('') || `<div class="empty"><div class="empty-icon">🏭</div><p>Sin proveedores registrados</p></div>`;
+
+  setContent(
+    moduleBanner('🏭','Proveedores','Gestión de proveedores de materiales y servicios','','linear-gradient(135deg,#065f46,#34d399)') +
+    `<div style="margin-bottom:12px">
+      <button class="btn btn-primary" style="width:100%" onclick="formProveedor({})">➕ Nuevo Proveedor</button>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:8px">${all.length} proveedor(es)</div>` +
+    cards
+  );
+}
+
+function formProveedor(p={}) {
+  const isNew = !p.ID_PROVEEDOR;
+  const safeV = v=>String(v||'').replace(/"/g,'&quot;');
+  const CATS_LIST = ['Materiales','Servicios','Herramientas','Consumibles','Importaciones','Otro'];
+
+  openModal(`${isNew?'➕ Nuevo':'✏️ Editar'} Proveedor`, `
+  <div style="font-size:12px">
+    <!-- Logo -->
+    <div style="text-align:center;margin-bottom:14px">
+      <div id="prov-logo-drop"
+        style="width:80px;height:80px;border-radius:10px;margin:0 auto;cursor:pointer;position:relative;
+          ${p.LOGO_URL?'border:1px solid var(--border);background:#fff;padding:6px':'background:var(--card2);border:2px dashed var(--border);display:flex;align-items:center;justify-content:center;font-size:32px'}"
+        onclick="document.getElementById('prov-logo-file-input').click()"
+        ondragover="event.preventDefault();this.style.borderColor='var(--accent)'"
+        ondragleave="this.style.borderColor=''"
+        ondrop="event.preventDefault();this.style.borderColor='';const f=event.dataTransfer?.files?.[0];if(f)provLogoUploadFile(f)">
+        ${p.LOGO_URL
+          ? `<img id="prov-logo-prev" src="${p.LOGO_URL}" style="width:100%;height:100%;object-fit:contain">`
+          : `<span id="prov-logo-prev-icon">🏭</span>`}
+        <input type="file" id="prov-logo-file-input" accept="image/*"
+          style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%"
+          onchange="const f=this.files?.[0];if(f)provLogoUploadFile(f)">
+      </div>
+      <div id="prov-logo-uploading" style="display:none;font-size:10px;color:var(--accent);margin-top:6px">⏳ Subiendo logo…</div>
+      <div style="margin-top:8px">
+        <input id="prov-logo-url" value="${safeV(p.LOGO_URL)}" placeholder="Pega una URL de imagen (o haz clic arriba para subir)"
+          style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);
+            border-radius:6px;padding:6px 8px;font-size:11px;box-sizing:border-box"
+          oninput="provLogoSetPreview(this.value)">
+        <div style="font-size:10px;color:var(--muted);margin-top:2px">Clic en el ícono para subir un archivo, pega con Ctrl+V, o escribe/pega aquí la URL de cualquier imagen</div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div style="grid-column:1/-1">
+        <label style="font-size:10px;color:var(--muted)">Nombre *</label>
+        <input id="prov-nombre" value="${safeV(p.NOMBRE)}" placeholder="Nombre del proveedor"
+          style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px 8px;font-size:12px;box-sizing:border-box">
+      </div>
+      <div>
+        <label style="font-size:10px;color:var(--muted)">NIT</label>
+        <input id="prov-nit" value="${safeV(p.NIT)}" placeholder="900.XXX.XXX-X"
+          style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px 8px;font-size:12px;box-sizing:border-box">
+      </div>
+      <div>
+        <label style="font-size:10px;color:var(--muted)">Ciudad</label>
+        <input id="prov-ciudad" value="${safeV(p.CIUDAD)}" placeholder="Cali, Bogotá…"
+          style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px 8px;font-size:12px;box-sizing:border-box">
+      </div>
+      <div style="grid-column:1/-1">
+        <label style="font-size:10px;color:var(--muted)">Dirección</label>
+        <input id="prov-dir" value="${safeV(p.DIRECCION)}" placeholder="Dirección completa"
+          style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px 8px;font-size:12px;box-sizing:border-box">
+      </div>
+      <div>
+        <label style="font-size:10px;color:var(--muted)">Teléfono</label>
+        <input id="prov-tel" value="${safeV(p.TELEFONO)}" placeholder="3XX XXX XXXX" type="tel"
+          style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px 8px;font-size:12px;box-sizing:border-box">
+      </div>
+      <div>
+        <label style="font-size:10px;color:var(--muted)">Email</label>
+        <input id="prov-email" value="${safeV(p.EMAIL)}" placeholder="correo@empresa.com" type="email"
+          style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px 8px;font-size:12px;box-sizing:border-box">
+      </div>
+      <div style="grid-column:1/-1">
+        <label style="font-size:10px;color:var(--muted)">Categoría</label>
+        <select id="prov-cat" style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px 8px;font-size:12px">
+          ${CATS_LIST.map(c=>`<option ${(p.CATEGORIA||''===c)?'selected':''}>${c}</option>`).join('')}
+        </select>
+      </div>
+      <div style="grid-column:1/-1">
+        <label style="font-size:10px;color:var(--muted)">Notas</label>
+        <textarea id="prov-notas" rows="2" placeholder="Notas, condiciones de pago, tiempos de entrega…"
+          style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px 8px;font-size:12px;resize:vertical;box-sizing:border-box">${safeV(p.NOTAS)}</textarea>
+      </div>
+    </div>
+  </div>`,
+  `${!isNew?`<button class="btn btn-danger btn-sm" onclick="_deleteProveedor('${String(p.ID_PROVEEDOR).replace(/'/g,"\\'")}')">🗑️</button>`:''}
+   <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+   <button class="btn btn-primary" onclick="_guardarProveedor(${JSON.stringify(p.ID_PROVEEDOR||'').replace(/"/g,'&quot;')})">💾 Guardar</button>`
+  );
+
+  // Ctrl+V para pegar imagen desde portapapeles directo al logo
+  const pasteHandler = async (e) => {
+    const items = (e.clipboardData||e.originalEvent?.clipboardData)?.items;
+    if(!items) return;
+    for(const item of items){
+      if(item.type.startsWith('image/')){
+        e.preventDefault();
+        const file = item.getAsFile();
+        if(file) provLogoUploadFile(file);
+        break;
+      }
+    }
+  };
+  document.addEventListener('paste', pasteHandler);
+  const origClose = window._provModalPasteCleanup;
+  window._provModalPasteCleanup = () => {
+    document.removeEventListener('paste', pasteHandler);
+    if(origClose && origClose!==window._provModalPasteCleanup) origClose();
+  };
+}
+
+// Actualiza la vista previa del logo cuando el usuario escribe/pega una URL
+function provLogoSetPreview(url){
+  const box = document.getElementById('prov-logo-drop');
+  if(!box) return;
+  if(url){
+    box.style.border = '1px solid var(--border)';
+    box.style.background = '#fff';
+    box.style.padding = '6px';
+    box.innerHTML = `<img id="prov-logo-prev" src="${url}" style="width:100%;height:100%;object-fit:contain">` +
+      `<input type="file" id="prov-logo-file-input" accept="image/*" style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%" onchange="const f=this.files?.[0];if(f)provLogoUploadFile(f)">`;
+  } else {
+    box.style.border = '2px dashed var(--border)';
+    box.style.background = 'var(--card2)';
+    box.style.padding = '0';
+    box.innerHTML = `<span id="prov-logo-prev-icon">🏭</span>` +
+      `<input type="file" id="prov-logo-file-input" accept="image/*" style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%" onchange="const f=this.files?.[0];if(f)provLogoUploadFile(f)">`;
+  }
+}
+
+// Sube un archivo de logo (clic, arrastre o Ctrl+V) a imgbb y llena el campo URL
+async function provLogoUploadFile(file){
+  if(!file || !file.type.startsWith('image/')){ toast('Selecciona una imagen válida','warn'); return; }
+  const ind = document.getElementById('prov-logo-uploading');
+  if(ind) ind.style.display = 'block';
+  try {
+    const { url } = await uploadToImgbb(file);
+    const input = document.getElementById('prov-logo-url');
+    if(input) input.value = url;
+    provLogoSetPreview(url);
+    toast('✅ Logo subido');
+  } catch(e){
+    toast('Error subiendo logo: '+e.message,'error');
+  } finally {
+    if(ind) ind.style.display = 'none';
+  }
+}
+
+async function _guardarProveedor(idExistente) {
+  const nombre = document.getElementById('prov-nombre')?.value.trim()||'';
+  if(!nombre){ toast('Ingresa el nombre','warn'); return; }
+  const data = {
+    ID_PROVEEDOR: idExistente||'',
+    NOMBRE:    nombre,
+    NIT:       document.getElementById('prov-nit')?.value||'',
+    CIUDAD:    document.getElementById('prov-ciudad')?.value||'',
+    DIRECCION: document.getElementById('prov-dir')?.value||'',
+    TELEFONO:  document.getElementById('prov-tel')?.value||'',
+    EMAIL:     document.getElementById('prov-email')?.value||'',
+    LOGO_URL:  document.getElementById('prov-logo-url')?.value||'',
+    CATEGORIA: document.getElementById('prov-cat')?.value||'',
+    NOTAS:     document.getElementById('prov-notas')?.value||''
+  };
+  try {
+    if(idExistente){ await POST('updateProveedor',data); toast('✅ Proveedor actualizado'); }
+    else { await POST('createProveedor',data); toast('✅ Proveedor creado'); }
+    _proveedoresData = null;
+    closeModal();
+    proveedores();
+  } catch(e){ toast(e.message,'error'); }
+}
+
+async function _deleteProveedor(id) {
+  if(!confirm('¿Eliminar este proveedor?')) return;
+  try {
+    await POST('deleteProveedor',{ID_PROVEEDOR:id});
+    _proveedoresData=null; closeModal(); proveedores();
+    toast('Proveedor eliminado');
+  } catch(e){ toast(e.message,'error'); }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+//  HOJA DE RUTA DEL PEDIDO — vista detalle OC estilo timeline
+// ══════════════════════════════════════════════════════════════════════════
+async function _asignarProveedorOC(noc) {
+  if(!_proveedoresData){
+    try { _proveedoresData = await POST('getProveedores',{}); } catch(e){ _proveedoresData=[]; }
+  }
+  if(!_proveedoresData.length){
+    toast('No hay proveedores registrados. Crea uno primero.','warn');
+    nav('proveedores');
+    return;
+  }
+  const safeNOC = String(noc).replace(/'/g,"\\'");
+  openModal('🏭 Seleccionar Proveedor',`
+  <div style="font-size:12px">
+    ${_proveedoresData.map(p=>`
+    <div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--card2);
+      border-radius:8px;margin-bottom:6px;cursor:pointer;border:1px solid var(--border)"
+      onclick="_confirmarProveedorOC('${safeNOC}','${String(p.ID_PROVEEDOR).replace(/'/g,"\\'")}')">
+      ${p.LOGO_URL?`<img src="${p.LOGO_URL}" style="width:36px;height:36px;object-fit:contain;border-radius:6px;background:#fff;padding:3px;border:1px solid var(--border)">`:'<div style="font-size:22px">🏭</div>'}
+      <div>
+        <div style="font-weight:700">${p.NOMBRE}</div>
+        <div style="font-size:11px;color:var(--muted)">${p.CATEGORIA||''} ${p.CIUDAD?'· '+p.CIUDAD:''}</div>
+      </div>
+    </div>`).join('')}
+  </div>`,
+  `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>`);
+}
+
+async function _confirmarProveedorOC(noc, provId) {
+  const prov = (_proveedoresData||[]).find(p=>p.ID_PROVEEDOR===provId);
+  if(!prov) return;
+  try {
+    await POST('updateCompra',{
+      N_OC: noc,
+      PROVEEDOR: prov.NOMBRE,
+      PROVEEDOR_ID: prov.ID_PROVEEDOR,
+      PROVEEDOR_NIT: prov.NIT||'',
+      PROVEEDOR_EMAIL: prov.EMAIL||'',
+      PROVEEDOR_LOGO: prov.LOGO_URL||'',
+      CONTACTO: prov.CONTACTO||'',
+      TELEFONO: prov.TELEFONO||''
+    });
+    const c = (_comprasData||[]).find(x=>x.N_OC===noc);
+    if(c){ c.PROVEEDOR=prov.NOMBRE; c.PROVEEDOR_ID=provId; c.PROVEEDOR_LOGO=prov.LOGO_URL||''; }
+    toast('✅ Proveedor asignado');
+    closeModal();
+    _verDetalleOC(noc);
+  } catch(e){ toast(e.message,'error'); }
+}
+
+// ── Registrar costo real al recibir ──────────────────────────────────────
+function _registrarCostoReal(noc, totalCotizado) {
+  const c = (_comprasData||[]).find(x=>x.N_OC===noc);
+  const costoActual = Number(c?.COSTO_REAL||0);
+  const safeNOC = String(noc).replace(/'/g,"\\'");
+  openModal('💰 Costo Real del Pedido',`
+  <div style="font-size:12px">
+    <div style="background:var(--card2);border-radius:8px;padding:12px;margin-bottom:12px;text-align:center">
+      <div style="font-size:11px;color:var(--muted)">Total cotizado</div>
+      <div style="font-size:20px;font-weight:800;color:var(--gold)">$${totalCotizado.toLocaleString('es-CO')}</div>
+    </div>
+    <div>
+      <label style="font-size:11px;color:var(--muted)">Costo real total pagado $</label>
+      <input type="number" id="costo-real-input" value="${costoActual||''}"
+        placeholder="0" style="width:100%;background:var(--surface);border:1px solid var(--border);
+        color:var(--text);border-radius:8px;padding:10px;font-size:16px;font-weight:700;
+        box-sizing:border-box;margin-top:4px">
+    </div>
+    <div id="costo-diff" style="margin-top:8px;text-align:center;font-size:12px;color:var(--muted)"></div>
+  </div>`,
+  `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+   <button class="btn btn-primary" onclick="_guardarCostoReal('${safeNOC}',${totalCotizado})">💾 Guardar</button>`
+  );
+  requestAnimationFrame(()=>{
+    const inp = document.getElementById('costo-real-input');
+    if(inp) inp.addEventListener('input',function(){
+      const real=Number(this.value||0), cot=totalCotizado;
+      const diff=real-cot, el=document.getElementById('costo-diff');
+      if(el&&real&&cot) el.innerHTML=diff>0?
+        `<span style="color:var(--danger)">▲ Sobrecosto: $${Math.abs(diff).toLocaleString('es-CO')}</span>`:
+        `<span style="color:#059669">▼ Ahorro: $${Math.abs(diff).toLocaleString('es-CO')}</span>`;
+    });
+  });
+}
+
+async function _guardarCostoReal(noc, totalCotizado) {
+  const costoReal = Number(document.getElementById('costo-real-input')?.value||0);
+  if(!costoReal){ toast('Ingresa el costo real','warn'); return; }
+  const diferencia = costoReal - totalCotizado;
+  try {
+    await POST('updateCompra',{ N_OC:noc, COSTO_REAL:costoReal, DIFERENCIA:diferencia });
+    const c = (_comprasData||[]).find(x=>x.N_OC===noc);
+    if(c){ c.COSTO_REAL=costoReal; c.DIFERENCIA=diferencia; }
+    toast('✅ Costo real registrado');
+    closeModal();
+    _verDetalleOC(noc);
+  } catch(e){ toast(e.message,'error'); }
+}
+
+// ── Generar OC PDF ────────────────────────────────────────────────────────
+async function _generarOC(noc) {
+  const c = (_comprasData||[]).find(x=>x.N_OC===noc);
+  if(!c){ toast('OC no encontrada','error'); return; }
+
+  // Si ya tiene PDF, abrir
+  if(c.OC_PDF_URL){
+    window.open(c.OC_PDF_URL,'_blank');
+    return;
+  }
+
+  // Asegurarse que tiene proveedor
+  if(!c.PROVEEDOR){ toast('Asigna un proveedor antes de generar la OC','warn'); return; }
+
+  const prov = (_proveedoresData||[]).find(p=>p.ID_PROVEEDOR===c.PROVEEDOR_ID)||{NOMBRE:c.PROVEEDOR,NIT:c.PROVEEDOR_NIT||''};
+
+  let elems = [];
+  try { elems = await POST('getElemsOC',{N_OC:noc}); } catch(e){}
+  if(!elems.length){
+    // Fallback desde columnas
+    let n=1;
+    for(let i=1;i<=5;i++){
+      const nombre=c[`MAT_${i}_NOMBRE`]; if(!nombre) continue;
+      const esEsp=nombre==='ESPECIAL';
+      elems.push({ITEM_NUM:n++,DESCRIPCION:esEsp?(c[`MAT_${i}_DESC_ESP`]||nombre):nombre,
+        CANT:c[`MAT_${i}_CANT`]||0,UNIDAD:'kg',TOTAL:c[`MAT_${i}_COSTO`]||0});
+    }
+    for(let i=1;i<=3;i++){
+      const nombre=c[`SVC_${i}_NOMBRE`]; if(!nombre) continue;
+      elems.push({ITEM_NUM:n++,DESCRIPCION:nombre,
+        CANT:c[`SVC_${i}_DIAS`]||1,UNIDAD:'días',TOTAL:c[`SVC_${i}_COSTO`]||0});
+    }
+  }
+
+  const total = elems.reduce((s,e)=>s+Number(e.TOTAL||0),0);
+  const fecha = new Date().toLocaleDateString('es-CO',{year:'numeric',month:'long',day:'numeric'});
+
+  const htmlOC = `<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;font-family:Arial,sans-serif}
+  body{padding:32px;color:#1e293b;font-size:12px}
+  .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;padding-bottom:16px;border-bottom:3px solid #1e3a8a}
+  .logo-wedm{font-size:24px;font-weight:900;color:#1e3a8a;letter-spacing:-1px}
+  .logo-wedm span{color:#f59e0b}
+  .oc-num{text-align:right}
+  .oc-num h1{font-size:20px;color:#1e3a8a;font-weight:900}
+  .oc-num p{font-size:11px;color:#64748b}
+  .section{margin-bottom:16px}
+  .section-title{font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.7px;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid #e2e8f0}
+  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .field label{font-size:9px;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+  .field p{font-size:12px;font-weight:600;margin-top:1px}
+  table{width:100%;border-collapse:collapse;margin-top:8px}
+  thead tr{background:#1e3a8a;color:#fff}
+  th{padding:8px 10px;text-align:left;font-size:11px;font-weight:700}
+  td{padding:8px 10px;border-bottom:1px solid #e2e8f0;font-size:11px}
+  tr:nth-child(even){background:#f8fafc}
+  .total-row{background:#1e3a8a!important;color:#fff;font-weight:700}
+  .total-row td{border:none;font-size:13px}
+  .footer{margin-top:32px;display:flex;justify-content:space-between;padding-top:16px;border-top:2px solid #e2e8f0}
+  .firma{text-align:center;width:160px}
+  .firma-line{border-top:1px solid #1e293b;margin-top:40px;padding-top:6px;font-size:10px;color:#64748b}
+  .badge{display:inline-block;background:#1e3a8a18;color:#1e3a8a;border:1px solid #1e3a8a40;border-radius:99px;padding:2px 10px;font-size:10px;font-weight:700}
+  .prov-logo{width:60px;height:60px;object-fit:contain;border:1px solid #e2e8f0;border-radius:8px;padding:4px;background:#fff}
+</style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <div class="logo-wedm">GRUPO<span>WED</span>M</div>
+      <div style="font-size:10px;color:#64748b;margin-top:2px">Metalmecánica Avanzada · Cali, Colombia</div>
+    </div>
+    <div class="oc-num">
+      <h1>ORDEN DE COMPRA</h1>
+      <p class="badge">${noc}</p>
+      <p style="margin-top:4px;font-size:11px;color:#64748b">Fecha: ${fecha}</p>
+      ${c.FECHA_ENTREGA_ESP?`<p style="font-size:11px;color:#64748b">Entrega esperada: ${c.FECHA_ENTREGA_ESP}</p>`:''}
+    </div>
+  </div>
+
+  <div class="grid-2" style="margin-bottom:20px">
+    <!-- Proveedor -->
+    <div style="background:#f8fafc;border-radius:8px;padding:12px;border:1px solid #e2e8f0">
+      <div class="section-title">Proveedor</div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        ${prov.LOGO_URL?`<img src="${prov.LOGO_URL}" class="prov-logo">`:''}
+        <div>
+          <div style="font-weight:800;font-size:14px">${prov.NOMBRE||'—'}</div>
+          ${prov.NIT?`<div style="font-size:11px;color:#64748b">NIT: ${prov.NIT}</div>`:''}
+        </div>
+      </div>
+      ${c.TELEFONO?`<div style="font-size:11px">📞 ${c.TELEFONO}</div>`:''}
+      ${prov.EMAIL||c.PROVEEDOR_EMAIL?`<div style="font-size:11px">✉️ ${prov.EMAIL||c.PROVEEDOR_EMAIL}</div>`:''}
+      ${prov.CIUDAD?`<div style="font-size:11px">📍 ${prov.CIUDAD}</div>`:''}
+    </div>
+    <!-- OP Vinculada -->
+    <div style="background:#f8fafc;border-radius:8px;padding:12px;border:1px solid #e2e8f0">
+      <div class="section-title">Referencia</div>
+      ${c.OP?`<div class="field"><label>OP</label><p style="color:#1e3a8a">OP-${c.OP}</p></div>`:''}
+      ${c.COT?`<div class="field"><label>Cotización</label><p>COT-${c.COT}</p></div>`:''}
+      ${c.CLIENTE?`<div class="field"><label>Cliente final</label><p>${c.CLIENTE}</p></div>`:''}
+      ${c.DESCRIPCION_OC?`<div class="field" style="margin-top:6px"><label>Descripción</label><p style="white-space:pre-line;font-size:11px">${c.DESCRIPCION_OC}</p></div>`:''}
+    </div>
+  </div>
+
+  <!-- Tabla de elementos -->
+  <div class="section">
+    <div class="section-title">Elementos a comprar</div>
+    <table>
+      <thead><tr>
+        <th style="width:30px">#</th>
+        <th>Descripción</th>
+        <th style="width:80px;text-align:center">Cantidad</th>
+        <th style="width:120px;text-align:right">Total</th>
+      </tr></thead>
+      <tbody>
+        ${elems.map(e=>`<tr>
+          <td style="color:#64748b;font-weight:700">${e.ITEM_NUM}</td>
+          <td><strong>${e.DESCRIPCION||'—'}</strong>
+            ${e.NOTAS?`<br><span style="color:#64748b;font-size:10px">${e.NOTAS}</span>`:''}
+          </td>
+          <td style="text-align:center">${e.CANT||'—'} ${e.UNIDAD||''}</td>
+          <td style="text-align:right;font-weight:700;color:#1e3a8a">${e.TOTAL?'$'+Number(e.TOTAL).toLocaleString('es-CO'):'—'}</td>
+        </tr>`).join('')}
+        <tr class="total-row">
+          <td colspan="3" style="text-align:right;padding-right:16px">TOTAL ORDEN DE COMPRA</td>
+          <td style="text-align:right">$${total.toLocaleString('es-CO')}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  ${c.OBSERVACIONES?`<div class="section"><div class="section-title">Observaciones</div>
+    <div style="background:#fefce8;border:1px solid #fef08a;border-radius:6px;padding:10px;font-size:11px;white-space:pre-line">${c.OBSERVACIONES}</div>
+  </div>`:''}
+
+  <div class="footer">
+    <div class="firma"><div class="firma-line">Elaborado por<br><strong>${c.DISEÑADOR||'Diseñador'}</strong></div></div>
+    <div class="firma"><div class="firma-line">Aprobado por<br><strong>Gerencia</strong></div></div>
+    <div class="firma"><div class="firma-line">Recibido por<br><strong>Proveedor</strong></div></div>
+  </div>
+  <div style="text-align:center;margin-top:20px;font-size:9px;color:#94a3b8">
+    Grupo WEDM · Metalmecánica Avanzada · Generado el ${fecha}
+  </div>
+</body></html>`;
+
+  const btn = document.querySelector(`[onclick="_generarOC('${noc.replace(/'/g,"\\'")}')"]`);
+  if(btn){ btn.disabled=true; btn.textContent='⏳ Generando PDF…'; }
+
+  try {
+    const result = await POST('generarPDFOrdenCompra',{ N_OC:noc, htmlContent:htmlOC });
+    const c2 = (_comprasData||[]).find(x=>x.N_OC===noc);
+    if(c2){ c2.OC_PDF_URL=result.pdfUrl; c2.ESTADO='OC EMITIDA'; }
+    cacheSet('compras',_comprasData);
+    toast('✅ OC generada y guardada en Drive');
+    window.open(result.pdfUrl,'_blank');
+    _verDetalleOC(noc);
+  } catch(e){
+    toast('Error generando PDF: '+e.message,'error');
+    if(btn){ btn.disabled=false; btn.textContent='📋 Generar OC'; }
+  }
 }
 
 function forceSyncAll() {
