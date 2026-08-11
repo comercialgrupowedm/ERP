@@ -11090,11 +11090,27 @@ async function _reloadCompras() {
 
 // ── Ver detalle de una OC ────────────────────────────────────────────────
 async function _verDetalleOC(noc) {
-  const c = (_comprasData||[]).find(x=>x.N_OC===noc);
+  let c = (_comprasData||[]).find(x=>x.N_OC===noc);
+  // Si no está en caché, refrescar datos antes de fallar
+  if(!c) {
+    try {
+      _comprasData = await POST_SILENT('getCompras',{});
+      cacheSet('compras', _comprasData);
+      c = (_comprasData||[]).find(x=>x.N_OC===noc);
+    } catch(e){}
+  }
   if(!c){ toast('OC no encontrada','error'); return; }
+  const safeNOC = String(noc).replace(/'/g,"\\'");
 
-  let elems = [];
-  try { elems = await POST('getElemsOC', { N_OC: noc }); } catch(e){}
+  // Usar caché local si existe (para re-renders instantáneos post-guardado)
+  let elems = (window._cachedElemsOC && window._cachedElemsOC[noc]) || [];
+  if(!elems.length) {
+    try {
+      elems = await POST_SILENT('getElemsOC', { N_OC: noc });
+      if(!window._cachedElemsOC) window._cachedElemsOC = {};
+      window._cachedElemsOC[noc] = elems;  // guardar en caché local
+    } catch(e){}
+  }
 
   // ── Fallback: construir elementos desde columnas MAT_N / SVC_N de COMPRAS ──
   if(!elems.length) {
@@ -11233,7 +11249,6 @@ async function _verDetalleOC(noc) {
       </table>
     </div>` : `<div style="font-size:12px;color:var(--muted);padding:12px;text-align:center;background:var(--card2);border-radius:8px">Sin elementos — usa ✏️ Editar para agregar materiales y servicios</div>`;
 
-  const safeNOC = String(noc).replace(/'/g,"\\'");
   const estadoActual = c.ESTADO||'PENDIENTE';
   const sigEstado = { 'PENDIENTE':'APROBADO','APROBADO':'OC EMITIDA','OC EMITIDA':'RECIBIDO PARCIAL','RECIBIDO PARCIAL':'RECIBIDO TOTAL' };
   const btnAvanzar = sigEstado[estadoActual]
@@ -11280,7 +11295,10 @@ async function _verDetalleOC(noc) {
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">
       ${btnAvanzar}
       <button class="btn btn-ghost btn-sm" onclick="_asignarProveedorOC('${safeNOC}')">🏭 ${c.PROVEEDOR?'Cambiar':'Asignar'} Proveedor</button>
-      <button class="btn btn-ghost btn-sm" onclick="_generarOC('${safeNOC}')">${c.OC_PDF_URL?'📄 Ver PDF':'📋 Generar OC'}</button>
+      ${c.OC_PDF_URL
+        ? `<a href="${c.OC_PDF_URL}" target="_blank" class="btn btn-ghost btn-sm">📄 Ver PDF</a>
+           <button class="btn btn-ghost btn-sm" onclick="_regenerarOC('${safeNOC}')" title="Regenerar PDF actualizado">🔄 PDF</button>`
+        : `<button class="btn btn-ghost btn-sm" onclick="_generarOC('${safeNOC}')">📋 Generar OC</button>`}
       <button class="btn btn-ghost btn-sm" onclick="_editarOC('${safeNOC}')">✏️ Editar</button>
       <button class="btn btn-ghost btn-sm" style="border-color:#f59e0b;color:#f59e0b"
         onclick="_registrarCostoReal('${safeNOC}',${totalCotCalc})">💰 Costo Real OC</button>
@@ -11336,7 +11354,12 @@ async function _abrirFormOC(c={}) {
   window._ocElems = [];  // elementos en memoria
 
   if(c.N_OC && !isNew) {
-    try { window._ocElems = await POST('getElemsOC',{N_OC:c.N_OC}); } catch(e){}
+    try {
+      window._ocElems = await POST_SILENT('getElemsOC',{N_OC:c.N_OC});
+      // Refrescar caché local de elementos al editar
+      if(!window._cachedElemsOC) window._cachedElemsOC = {};
+      window._cachedElemsOC[c.N_OC] = window._ocElems;
+    } catch(e){}
     // Si el precio unitario vino en 0 (p.ej. generado desde una OP, donde solo
     // se guardó el costo estimado total), lo reconstruimos a partir de Total/Cant
     // para que aparezca precargado y el usuario pueda ajustarlo al precio real de compra.
@@ -11980,14 +12003,23 @@ async function _guardarCostoReal(noc, totalCotizado) {
   const costoReal = Number(document.getElementById('costo-real-input')?.value||0);
   if(!costoReal){ toast('Ingresa el costo real','warn'); return; }
   const diferencia = costoReal - totalCotizado;
-  try {
-    await POST('updateCompra',{ N_OC:noc, COSTO_REAL:costoReal, DIFERENCIA:diferencia });
-    const c = (_comprasData||[]).find(x=>x.N_OC===noc);
-    if(c){ c.COSTO_REAL=costoReal; c.DIFERENCIA=diferencia; }
-    toast('✅ Costo real registrado');
-    closeModal();
-    _verDetalleOC(noc);
-  } catch(e){ toast(e.message,'error'); }
+
+  // 1) Actualizar caché LOCAL inmediatamente → re-render instantáneo
+  const c = (_comprasData||[]).find(x=>x.N_OC===noc);
+  if(c){
+    c.COSTO_REAL  = costoReal;
+    c.DIFERENCIA  = diferencia;
+    c.TOTAL_OC    = c.TOTAL_OC || totalCotizado;
+    c.TOTAL_COT_OC= c.TOTAL_COT_OC || totalCotizado;
+  }
+  closeModal();
+  _verDetalleOC(noc);   // render inmediato con datos locales
+  toast('✅ Costo real registrado');
+
+  // 2) Persistir en background (sin bloquear UI)
+  POST_SILENT('updateCompra',{ N_OC:noc, COSTO_REAL:costoReal, DIFERENCIA:diferencia })
+    .then(()=> POST_SILENT('getCompras',{}).then(d=>{ _comprasData=d; cacheSet('compras',d); }))
+    .catch(e=> toast('Error al guardar: '+e.message,'error'));
 }
 
 // ── Registrar precio real por ítem individual ────────────────────────────
@@ -12062,34 +12094,55 @@ function _modalPrecioRealItem(noc, idElem, itemNum, cant, precioCot, precioRealA
 async function _guardarPrecioRealItem(noc, idElem, cant, precioCot) {
   const precioReal = Number(document.getElementById('preal-unit-input')?.value||0);
   if(!precioReal){ toast('Ingresa el precio real','warn'); return; }
-  try {
-    const result = await POST('updatePrecioRealElem', {
-      ID_ELEM:    idElem,
-      N_OC:       noc,
-      PRECIO_UNIT: precioReal
-    });
-    // Actualizar caché local de compras (recalc totales OC)
-    const comp = (_comprasData||[]).find(x=>x.N_OC===noc);
-    if(comp && result){
-      // recalcTotalesOC ya actualizó el Sheet; solo necesitamos recargar el detalle
+
+  const totalCot  = Math.round(cant * precioCot);
+  const totalReal = Math.round(cant * precioReal);
+  const difItem   = totalReal - totalCot;
+
+  // 1) Actualizar caché local de ELEMENTOS_OC inmediatamente
+  if(window._cachedElemsOC && window._cachedElemsOC[noc]) {
+    const elemLocal = window._cachedElemsOC[noc].find(e=>String(e.ID_ELEM)===String(idElem));
+    if(elemLocal){
+      elemLocal.PRECIO_UNIT     = precioReal;
+      elemLocal.TOTAL           = totalReal;
+      elemLocal.TOTAL_COT       = totalCot;
+      elemLocal.DIFERENCIA_ITEM = difItem;
     }
-    toast(`✅ Precio real ítem guardado`);
-    closeModal();
-    // Refrescar datos y reabrir detalle
-    try {
-      _comprasData = await POST('getCompras',{});
-      cacheSet('compras', _comprasData);
-    } catch(e){}
-    _verDetalleOC(noc);
-  } catch(e){ toast(e.message,'error'); }
+  }
+  // Recalcular totales OC en caché local de COMPRAS
+  const comp = (_comprasData||[]).find(x=>x.N_OC===noc);
+  if(comp && window._cachedElemsOC && window._cachedElemsOC[noc]){
+    const elems = window._cachedElemsOC[noc];
+    comp.TOTAL_OC     = elems.reduce((s,e)=>s+Number(e.TOTAL||0),0);
+    comp.TOTAL_COT_OC = elems.reduce((s,e)=>s+Number(e.TOTAL_COT||e.PRECIO_COT*e.CANT||0),0);
+  }
+
+  closeModal();
+  _verDetalleOC(noc);   // render inmediato con datos locales
+  toast('✅ Precio real registrado');
+
+  // 2) Persistir en background
+  POST_SILENT('updatePrecioRealElem', { ID_ELEM:idElem, N_OC:noc, PRECIO_UNIT:precioReal })
+    .then(()=> POST_SILENT('getCompras',{}).then(d=>{ _comprasData=d; cacheSet('compras',d); }))
+    .catch(e=> toast('Error al guardar: '+e.message,'error'));
 }
 
 // ── Generar OC PDF ────────────────────────────────────────────────────────
+// Alias para regenerar sin redirigir al PDF existente
+async function _regenerarOC(noc) {
+  const c = (_comprasData||[]).find(x=>x.N_OC===noc);
+  if(!c){ toast('OC no encontrada','error'); return; }
+  if(!c.PROVEEDOR){ toast('Asigna un proveedor antes de generar la OC','warn'); return; }
+  // Borrar URL existente para forzar regeneración
+  c.OC_PDF_URL = '';
+  await _generarOC(noc);
+}
+
 async function _generarOC(noc) {
   const c = (_comprasData||[]).find(x=>x.N_OC===noc);
   if(!c){ toast('OC no encontrada','error'); return; }
 
-  // Si ya tiene PDF, abrir
+  // Si ya tiene PDF y no se está regenerando, solo abrir
   if(c.OC_PDF_URL){
     window.open(c.OC_PDF_URL,'_blank');
     return;
@@ -12101,7 +12154,7 @@ async function _generarOC(noc) {
   const prov = (_proveedoresData||[]).find(p=>p.ID_PROVEEDOR===c.PROVEEDOR_ID)||{NOMBRE:c.PROVEEDOR,NIT:c.PROVEEDOR_NIT||''};
 
   let elems = [];
-  try { elems = await POST('getElemsOC',{N_OC:noc}); } catch(e){}
+  try { elems = await POST_SILENT('getElemsOC',{N_OC:noc}); } catch(e){}
   if(!elems.length){
     // Fallback desde columnas
     let n=1;
@@ -12121,117 +12174,173 @@ async function _generarOC(noc) {
   const total = elems.reduce((s,e)=>s+Number(e.TOTAL||0),0);
   const fecha = new Date().toLocaleDateString('es-CO',{year:'numeric',month:'long',day:'numeric'});
 
+  // Calcular totales reales y cotizados por ítem
+  const totalCot  = elems.reduce((s,e)=>s+Number(e.PRECIO_COT||0)*Number(e.CANT||0),0) || Number(c.TOTAL_COT_OC||0);
+  const totalReal = elems.reduce((s,e)=>s+Number(e.TOTAL||0),0)                        || Number(c.TOTAL_OC||0)    || Number(c.COSTO_REAL||0);
+  const hayPrecios = elems.some(e=>Number(e.PRECIO_COT||0)>0 || Number(e.TOTAL||0)>0);
+  const difTotal  = totalReal - totalCot;
+
+  const fmtCOP = v => v ? '$' + Number(v).toLocaleString('es-CO') : '—';
+
   const htmlOC = `<!DOCTYPE html>
 <html lang="es">
 <head><meta charset="UTF-8">
 <style>
   *{box-sizing:border-box;margin:0;padding:0;font-family:Arial,sans-serif}
-  body{padding:32px;color:#1e293b;font-size:12px}
-  .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;padding-bottom:16px;border-bottom:3px solid #1e3a8a}
-  .logo-wedm{font-size:24px;font-weight:900;color:#1e3a8a;letter-spacing:-1px}
-  .logo-wedm span{color:#f59e0b}
-  .oc-num{text-align:right}
-  .oc-num h1{font-size:20px;color:#1e3a8a;font-weight:900}
-  .oc-num p{font-size:11px;color:#64748b}
-  .section{margin-bottom:16px}
-  .section-title{font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.7px;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid #e2e8f0}
-  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-  .field label{font-size:9px;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
-  .field p{font-size:12px;font-weight:600;margin-top:1px}
-  table{width:100%;border-collapse:collapse;margin-top:8px}
-  thead tr{background:#1e3a8a;color:#fff}
-  th{padding:8px 10px;text-align:left;font-size:11px;font-weight:700}
-  td{padding:8px 10px;border-bottom:1px solid #e2e8f0;font-size:11px}
-  tr:nth-child(even){background:#f8fafc}
-  .total-row{background:#1e3a8a!important;color:#fff;font-weight:700}
-  .total-row td{border:none;font-size:13px}
-  .footer{margin-top:32px;display:flex;justify-content:space-between;padding-top:16px;border-top:2px solid #e2e8f0}
-  .firma{text-align:center;width:160px}
-  .firma-line{border-top:1px solid #1e293b;margin-top:40px;padding-top:6px;font-size:10px;color:#64748b}
-  .badge{display:inline-block;background:#1e3a8a18;color:#1e3a8a;border:1px solid #1e3a8a40;border-radius:99px;padding:2px 10px;font-size:10px;font-weight:700}
-  .prov-logo{width:60px;height:60px;object-fit:contain;border:1px solid #e2e8f0;border-radius:8px;padding:4px;background:#fff}
+  body{padding:24px 32px;color:#1e293b;font-size:11px;background:#fff}
+  /* ── HEADER ── */
+  .hdr{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px}
+  .hdr-left img{height:56px;width:auto;margin-bottom:6px}
+  .hdr-left .wedm-logo{font-size:26px;font-weight:900;color:#1e3a8a;letter-spacing:-1px;margin-bottom:4px}
+  .hdr-left .wedm-logo span{color:#f59e0b}
+  .hdr-left .wedm-sub{font-size:9px;color:#64748b;line-height:1.5}
+  .hdr-right{text-align:right}
+  .hdr-right .prov-logo{height:60px;width:auto;object-fit:contain;margin-bottom:6px;display:block;margin-left:auto}
+  .prov-table{font-size:10px;border-collapse:collapse}
+  .prov-table td{padding:1px 4px;vertical-align:top}
+  .prov-table td:first-child{font-weight:700;color:#1e3a8a;text-align:right;white-space:nowrap;padding-right:8px}
+  /* ── OP + OC NUM ── */
+  .op-bar{background:#f0f4ff;border:1px solid #c7d2fe;border-radius:6px;
+    padding:6px 14px;margin-bottom:14px;font-size:11px;font-weight:700;color:#1e3a8a}
+  .oc-num-box{text-align:center;border:2px solid #1e3a8a;border-radius:6px;
+    padding:10px 0;margin-bottom:14px}
+  .oc-num-label{font-size:11px;font-weight:700;color:#fff;background:#1e3a8a;
+    padding:4px 20px;letter-spacing:1px;text-transform:uppercase}
+  .oc-num-val{font-size:28px;font-weight:900;color:#1e3a8a;padding:6px 0;letter-spacing:2px}
+  /* ── TABLA ÍTEMS ── */
+  table{width:100%;border-collapse:collapse;margin-bottom:0}
+  thead tr{background:#1e3a8a}
+  th{padding:8px 10px;text-align:left;font-size:10px;font-weight:700;color:#fff;
+    text-transform:uppercase;letter-spacing:.5px}
+  th.c{text-align:center}
+  th.r{text-align:right}
+  td{padding:8px 10px;border-bottom:1px solid #e2e8f0;font-size:11px;vertical-align:top}
+  td.c{text-align:center}
+  td.r{text-align:right}
+  tbody tr:nth-child(even){background:#f8fafc}
+  /* ── TOTALES ── */
+  .tot-table{width:280px;margin-left:auto;margin-top:0;border-collapse:collapse;border:1px solid #e2e8f0}
+  .tot-table td{padding:6px 12px;font-size:11px;border-bottom:1px solid #e2e8f0}
+  .tot-table td:first-child{color:#64748b}
+  .tot-table td:last-child{text-align:right;font-weight:700}
+  .tot-final td{background:#1e3a8a!important;color:#fff!important;font-size:13px;font-weight:900}
+  /* ── OBS ── */
+  .obs-label{font-size:10px;font-weight:700;color:#1e3a8a;text-transform:uppercase;
+    letter-spacing:.5px;margin:14px 0 4px}
+  .obs-box{border:1px solid #e2e8f0;border-radius:4px;padding:8px 10px;min-height:36px;
+    font-size:11px;color:#475569;white-space:pre-line}
+  /* ── PIE FIRMAS ── */
+  .firmas{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;
+    border:1px solid #1e3a8a;border-radius:6px;overflow:hidden;margin-top:14px}
+  .firma-cell{text-align:center;padding:8px 6px}
+  .firma-cell:not(:last-child){border-right:1px solid #1e3a8a}
+  .firma-header{background:#1e3a8a;color:#fff;font-size:9px;font-weight:700;
+    text-transform:uppercase;letter-spacing:.5px;padding:5px;margin:-8px -6px 8px}
+  .firma-val{font-size:11px;font-weight:600;color:#1e293b;margin-top:8px}
+  .firma-line{border-top:1px solid #94a3b8;margin:16px 10px 4px;padding-top:4px;font-size:10px;color:#64748b}
 </style>
 </head>
 <body>
-  <div class="header">
-    <div>
-      <div class="logo-wedm">GRUPO<span>WED</span>M</div>
-      <div style="font-size:10px;color:#64748b;margin-top:2px">Metalmecánica Avanzada · Cali, Colombia</div>
-    </div>
-    <div class="oc-num">
-      <h1>ORDEN DE COMPRA</h1>
-      <p class="badge">${noc}</p>
-      <p style="margin-top:4px;font-size:11px;color:#64748b">Fecha: ${fecha}</p>
-      ${c.FECHA_ENTREGA_ESP?`<p style="font-size:11px;color:#64748b">Entrega esperada: ${c.FECHA_ENTREGA_ESP}</p>`:''}
-    </div>
-  </div>
 
-  <div class="grid-2" style="margin-bottom:20px">
-    <!-- Proveedor -->
-    <div style="background:#f8fafc;border-radius:8px;padding:12px;border:1px solid #e2e8f0">
-      <div class="section-title">Proveedor</div>
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-        ${prov.LOGO_URL?`<img src="${prov.LOGO_URL}" class="prov-logo">`:''}
-        <div>
-          <div style="font-weight:800;font-size:14px">${prov.NOMBRE||'—'}</div>
-          ${prov.NIT?`<div style="font-size:11px;color:#64748b">NIT: ${prov.NIT}</div>`:''}
-        </div>
+  <!-- ══ HEADER ══ -->
+  <div class="hdr">
+    <div class="hdr-left">
+      <img src="${LOGO_B64_PNG}" alt="GRUPO WEDM">
+      <div class="wedm-sub">
+        CALLE 39 No. 1H-31 BOD-05 · Tel: 3797352 · Cel: 3008860468<br>
+        Email: administracion@grupowedm.com · NIT: 900763241-7<br>
+        CALI - VALLE DEL CAUCA - COLOMBIA
       </div>
-      ${c.TELEFONO?`<div style="font-size:11px">📞 ${c.TELEFONO}</div>`:''}
-      ${prov.EMAIL||c.PROVEEDOR_EMAIL?`<div style="font-size:11px">✉️ ${prov.EMAIL||c.PROVEEDOR_EMAIL}</div>`:''}
-      ${prov.CIUDAD?`<div style="font-size:11px">📍 ${prov.CIUDAD}</div>`:''}
     </div>
-    <!-- OP Vinculada -->
-    <div style="background:#f8fafc;border-radius:8px;padding:12px;border:1px solid #e2e8f0">
-      <div class="section-title">Referencia</div>
-      ${c.OP?`<div class="field"><label>OP</label><p style="color:#1e3a8a">OP-${c.OP}</p></div>`:''}
-      ${c.COT?`<div class="field"><label>Cotización</label><p>COT-${c.COT}</p></div>`:''}
-      ${c.CLIENTE?`<div class="field"><label>Cliente final</label><p>${c.CLIENTE}</p></div>`:''}
-      ${c.DESCRIPCION_OC?`<div class="field" style="margin-top:6px"><label>Descripción</label><p style="white-space:pre-line;font-size:11px">${c.DESCRIPCION_OC}</p></div>`:''}
+    <div class="hdr-right">
+      ${prov.LOGO_URL ? `<img src="${prov.LOGO_URL}" class="prov-logo">` : ''}
+      <table class="prov-table">
+        <tr><td>FECHA:</td><td>${fecha}</td></tr>
+        <tr><td>SEÑORES:</td><td><strong>${prov.NOMBRE||c.PROVEEDOR||'—'}</strong></td></tr>
+        ${c.PROVEEDOR_NIT||prov.NIT ? `<tr><td>NIT:</td><td>${c.PROVEEDOR_NIT||prov.NIT}</td></tr>` : ''}
+        ${prov.DIRECCION||prov.DIRECCIÓN ? `<tr><td>DIRECCIÓN:</td><td>${prov.DIRECCION||prov.DIRECCIÓN}</td></tr>` : ''}
+        ${prov.CIUDAD||prov.CITY ? `<tr><td>CIUDAD:</td><td>${prov.CIUDAD||prov.CITY}</td></tr>` : ''}
+        ${c.CONTACTO ? `<tr><td>ENCARGADO:</td><td>${c.CONTACTO}</td></tr>` : ''}
+        ${c.TELEFONO ? `<tr><td>TELÉFONO:</td><td>${c.TELEFONO}</td></tr>` : ''}
+      </table>
     </div>
   </div>
 
-  <!-- Tabla de elementos -->
-  <div class="section">
-    <div class="section-title">Elementos a comprar</div>
-    <table>
-      <thead><tr>
-        <th style="width:30px">#</th>
-        <th>Descripción</th>
-        <th style="width:80px;text-align:center">Cantidad</th>
-        <th style="width:120px;text-align:right">Total</th>
-      </tr></thead>
-      <tbody>
-        ${elems.map(e=>`<tr>
-          <td style="color:#64748b;font-weight:700">${e.ITEM_NUM}</td>
-          <td><strong>${e.DESCRIPCION||'—'}</strong>
-            ${e.NOTAS?`<br><span style="color:#64748b;font-size:10px">${e.NOTAS}</span>`:''}
-          </td>
-          <td style="text-align:center">${e.CANT||'—'} ${e.UNIDAD||''}</td>
-          <td style="text-align:right;font-weight:700;color:#1e3a8a">${e.TOTAL?'$'+Number(e.TOTAL).toLocaleString('es-CO'):'—'}</td>
-        </tr>`).join('')}
-        <tr class="total-row">
-          <td colspan="3" style="text-align:right;padding-right:16px">TOTAL ORDEN DE COMPRA</td>
-          <td style="text-align:right">$${total.toLocaleString('es-CO')}</td>
-        </tr>
-      </tbody>
-    </table>
+  <!-- ── OP + TIPO ── -->
+  ${c.OP ? `<div class="op-bar">OP: &nbsp; <strong>OP-${c.OP}</strong> &nbsp;&nbsp; COT: <strong>COT-${c.COT||'—'}</strong> &nbsp;&nbsp; CLIENTE: <strong>${c.CLIENTE||'—'}</strong> &nbsp;&nbsp; TIPO: <strong>${c.TIPO||'—'}</strong></div>` : ''}
+
+  <!-- ── NÚMERO OC ── -->
+  <div class="oc-num-box">
+    <div class="oc-num-label">Orden de Compra</div>
+    <div class="oc-num-val">${noc}</div>
   </div>
 
-  ${c.OBSERVACIONES?`<div class="section"><div class="section-title">Observaciones</div>
-    <div style="background:#fefce8;border:1px solid #fef08a;border-radius:6px;padding:10px;font-size:11px;white-space:pre-line">${c.OBSERVACIONES}</div>
-  </div>`:''}
+  <!-- ── TABLA DE ÍTEMS ── -->
+  <table>
+    <thead><tr>
+      <th style="width:36px" class="c">ÍTEM</th>
+      <th style="width:54px" class="c">CANT</th>
+      <th>DESCRIPCIÓN</th>
+      <th style="width:110px" class="r">VALOR UND</th>
+      <th style="width:110px" class="r">VALOR TOTAL</th>
+    </tr></thead>
+    <tbody>
+      ${(()=>{ return elems.map((e, idx)=>{
+        const cant   = Number(e.CANT||0);
+        const pUnit  = Number(e.PRECIO_UNIT||0) || Number(e.PRECIO_COT||0);
+        const total  = Number(e.TOTAL||0) || (pUnit * cant);
+        const unitStr  = pUnit  ? '$' + pUnit.toLocaleString('es-CO')  : '—';
+        const totalStr = total  ? '$' + total.toLocaleString('es-CO')  : '—';
+        const desc   = e.DESCRIPCION || '—';
+        const notas  = e.NOTAS ? '<br><span style="color:#94a3b8;font-size:9px">' + e.NOTAS + '</span>' : '';
+        return '<tr>'
+          + '<td class="c" style="color:#64748b;font-weight:700">' + e.ITEM_NUM + '</td>'
+          + '<td class="c">' + (cant||'—') + ' ' + (e.UNIDAD||'') + '</td>'
+          + '<td><strong>' + desc + '</strong>' + notas + '</td>'
+          + '<td class="r">' + unitStr + '</td>'
+          + '<td class="r" style="color:#1e3a8a;font-weight:700">' + totalStr + '</td>'
+          + '</tr>';
+      }).join(''); })()}
+    </tbody>
+  </table>
 
-  <div class="footer">
-    <div class="firma"><div class="firma-line">Elaborado por<br><strong>${c.DISEÑADOR||'Diseñador'}</strong></div></div>
-    <div class="firma"><div class="firma-line">Aprobado por<br><strong>Gerencia</strong></div></div>
-    <div class="firma"><div class="firma-line">Recibido por<br><strong>Proveedor</strong></div></div>
+  <!-- ── TOTALES ── -->
+  ${(()=>{
+    const subtotal = elems.reduce((s,e)=>{ const t=Number(e.TOTAL||0)||(Number(e.PRECIO_UNIT||e.PRECIO_COT||0)*Number(e.CANT||0)); return s+t; },0);
+    const costoConf= Number(c.COSTO_REAL||0);
+    const totalFinal = costoConf || subtotal;
+    const iva = Math.round(totalFinal * 0.19);
+    return '<table class="tot-table">'
+      + '<tr><td>SUBTOTAL</td><td>$' + subtotal.toLocaleString('es-CO') + '</td></tr>'
+      + '<tr><td>I.V.A (19%)</td><td>$' + iva.toLocaleString('es-CO') + '</td></tr>'
+      + '<tr class="tot-final"><td>TOTAL</td><td>$' + (subtotal+iva).toLocaleString('es-CO') + '</td></tr>'
+      + '</table>';
+  })()}
+
+  <!-- ── OBSERVACIONES ── -->
+  <div class="obs-label">Observaciones:</div>
+  <div class="obs-box">${c.OBSERVACIONES||' '}</div>
+
+  <!-- ── FIRMAS ── -->
+  <div class="firmas">
+    <div class="firma-cell">
+      <div class="firma-header">Forma de Pago</div>
+      <div class="firma-val">${c.FORMA_PAGO||'CONTADO'}</div>
+    </div>
+    <div class="firma-cell">
+      <div class="firma-header">Autorizó</div>
+      <div class="firma-line">Juan Diego García<br><span style="font-size:9px">Gerente WEDM</span></div>
+    </div>
+    <div class="firma-cell">
+      <div class="firma-header">Atentamente</div>
+      <div class="firma-line">${c.DISEÑADOR||'Sebastian Barcias Zamudio'}<br><span style="font-size:9px">Compras WEDM</span></div>
+    </div>
   </div>
-  <div style="text-align:center;margin-top:20px;font-size:9px;color:#94a3b8">
-    Grupo WEDM · Metalmecánica Avanzada · Generado el ${fecha}
+
+  <div style="text-align:center;margin-top:12px;font-size:8px;color:#cbd5e1">
+    Grupo WEDM · NIT 900763241-7 · CALI · administracion@grupowedm.com · Generado el ${fecha}
   </div>
 </body></html>`;
-
   const btn = document.querySelector(`[onclick="_generarOC('${noc.replace(/'/g,"\\'")}')"]`);
   if(btn){ btn.disabled=true; btn.textContent='⏳ Generando PDF…'; }
 
