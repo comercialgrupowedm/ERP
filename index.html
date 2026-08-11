@@ -8521,38 +8521,50 @@ async function _disPedirMP(idqr, opNum) {
   window._compraPlano = null;
   window._compraDWG   = null;
 
-  // Prellenar materiales desde la cotización (solo los que tienen nombre)
-  window._cmpMats = [];
+  // ── Prellenar ítems desde la cotización (nuevo sistema unificado) ──────
+  // Cada ítem es { tipo:'mat'|'svc', nombre, geo, dim1, lar, anc, cant, costCot, unidad, notas }
+  window._cmpItems = [];
+
+  // Materiales del ítem cotizado
   for(let n=1;n<=5;n++){
     const m = it ? _matN(it,n) : null;
-    if(m && (m.nombre||m.id)) window._cmpMats.push({...m, slot: window._cmpMats.length+1});
+    if(m && (m.nombre||m.id)){
+      const esEsp = String(m.nombre||m.id).toUpperCase()==='ESPECIAL';
+      // Costo cotizado: para ESPECIAL puede estar en costEsp, para normal en cost
+      const costCot = esEsp ? (m.costEsp||m.cost||0) : (m.cost||0);
+      // descEsp ya incluye lo que escribió el comercial; agregar cant/medidas como referencia
+      let descEsp = m.descEsp||'';
+      if(esEsp && !descEsp && (m.dim1||m.lar)) {
+        descEsp = m.geo==='Cilindro' ? `⌀${m.dim1}×L${m.lar}mm` : `${m.dim1}×${m.anc}×${m.lar}mm`;
+      }
+      window._cmpItems.push({
+        tipo:'mat', nombre: esEsp?'ESPECIAL':(m.nombre||m.id||''),
+        geo: m.geo||'Cilindro', dim1: m.dim1||0, lar: m.lar||0, anc: m.anc||0,
+        cant: m.cant||0, costCot, unidad:'kg',
+        descEsp, esEspecial: esEsp,
+        notas: '',
+        incluir: true   // por defecto incluido
+      });
+    }
   }
-  if(!window._cmpMats.length) window._cmpMats.push({slot:1,nombre:'',geo:'Cilindro',dim1:0,lar:0,anc:0,cant:0,cost:0,esEspecial:false,descEsp:'',costEsp:0});
-
-  // Prellenar servicios
-  window._cmpSvcs = [];
+  // Servicios del ítem cotizado
   for(let n=1;n<=3;n++){
     const s = it ? _svcN(it,n) : null;
-    if(s && s.nombre) window._cmpSvcs.push({...s, slot: window._cmpSvcs.length+1});
+    if(s && s.nombre){
+      window._cmpItems.push({
+        tipo:'svc', nombre: s.nombre,
+        cant: s.dias||1, costCot: s.costo||0, unidad:'días',
+        dureza: s.dureza||'', notas: s.descOtros||'',
+        incluir: true
+      });
+    }
   }
-  if(!window._cmpSvcs.length) window._cmpSvcs.push({slot:1,nombre:'',dias:0,costo:0,dureza:'',descOtros:''});
+  if(!window._cmpItems.length)
+    window._cmpItems.push({tipo:'mat',nombre:'',geo:'Cilindro',dim1:0,lar:0,anc:0,cant:0,costCot:0,unidad:'kg',descEsp:'',esEspecial:false,notas:'',incluir:true});
 
-  const imgOpUrl  = op.IMAGEN_B64 || (_imgCache.has(String(idqr)) ? _imgCache.get(String(idqr)) : '');
-  const imgOpHtml = imgOpUrl
-    ? `<div style="text-align:center;margin-bottom:10px">
-        <img src="${imgOpUrl}"
-          style="max-width:100%;max-height:160px;border-radius:8px;border:1px solid var(--border);
-                 object-fit:contain;cursor:zoom-in"
-          onclick="(function(el){window.open(el.src,'_blank')})(this)"
-          title="Imagen de la OP — clic para ampliar">
-        <div style="font-size:10px;color:var(--muted);margin-top:4px">${op.IMAGEN_NOMBRE||'Imagen de referencia'}</div>
-      </div>`
-    : `<div style="border:1px dashed var(--border);border-radius:8px;padding:10px;text-align:center;
-        margin-bottom:10px;cursor:pointer;background:var(--card2)"
-        onclick="qaSubirImagen('${idqr}')">
-        <span style="font-size:22px;opacity:.35">🖼️</span>
-        <div style="font-size:10px;color:var(--muted);margin-top:2px">Sin imagen — clic para subir</div>
-      </div>`;
+  // Resetear estado fusión al abrir
+  window._cmpFusionado = false;
+  window._cmpItemsAntesFusion = null;
 
   const planoActualHtml = planoExiste ? `
   <div style="display:flex;align-items:center;gap:8px;background:rgba(37,99,235,.08);
@@ -8562,6 +8574,13 @@ async function _disPedirMP(idqr, opNum) {
     <span style="font-size:10px;color:var(--accent)">Ya subido</span>
     <a href="${planoExiste}" target="_blank" class="btn btn-ghost btn-sm" style="font-size:10px">👁️</a>
   </div>` : '';
+
+  const imgOpHtml = (op.IMAGEN_B64||op.REGISTRO_FOTOGRAFICO)
+    ? `<img src="${op.IMAGEN_B64||op.REGISTRO_FOTOGRAFICO}" style="width:100%;max-height:120px;object-fit:contain;border-radius:8px;margin-bottom:8px;background:var(--card2)">`
+    : `<div style="border:1px dashed var(--border);border-radius:8px;padding:10px;text-align:center;margin-bottom:10px;cursor:pointer;background:var(--card2)" onclick="qaSubirImagen('${idqr}')">
+        <span style="font-size:22px;opacity:.35">🖼️</span>
+        <div style="font-size:10px;color:var(--muted);margin-top:2px">Sin imagen — clic para subir</div>
+      </div>`;
 
   openModal(`🧱 Pedido de Material — OP-${op.OP||idqr}`, `
   <div style="font-size:12px">
@@ -8574,25 +8593,25 @@ async function _disPedirMP(idqr, opNum) {
         <div><span style="color:var(--muted);font-size:10px">Cliente</span><div style="font-weight:600">${op.CLIENTE||'—'}</div></div>
         <div><span style="color:var(--muted);font-size:10px">Tipo</span><div>${op.TIPO?bTipo(op.TIPO):'—'}</div></div>
         <div style="grid-column:1/-1"><span style="color:var(--muted);font-size:10px">Descripción</span><div style="font-weight:600">${op.DESCRIPCION||'—'}</div></div>
-        <div><span style="color:var(--muted);font-size:10px">Diseñador</span><div>${op.DISEÑADOR||'—'}</div></div>
-        <div><span style="color:var(--muted);font-size:10px">Fecha pactada</span><div>${op['FECHA PACTADA']||op['FECHA ENTREGA']||'—'}</div></div>
       </div>
     </div>
-    <!-- MATERIALES -->
+    <!-- ÍTEMS (materiales + servicios unificados) -->
     <div style="margin-bottom:14px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px">🪨 Materiales</div>
-        <button type="button" class="btn btn-ghost btn-sm" style="font-size:11px" onclick="_cmpAddMat()">➕ Añadir</button>
+        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px">📦 Ítems del pedido</div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end">
+          <button type="button" id="cmp-btn-fusionar" class="btn btn-ghost btn-sm" style="font-size:10px" onclick="_cmpFusionar()">🔗 Fusionar</button>
+          <button type="button" class="btn btn-ghost btn-sm" style="font-size:10px" onclick="_cmpAddItem('mat')">🪨 +Mat</button>
+          <button type="button" class="btn btn-ghost btn-sm" style="font-size:10px" onclick="_cmpAddItem('svc')">🛠 +Svc</button>
+        </div>
       </div>
-      <div id="cmp-mats-list"></div>
-    </div>
-    <!-- SERVICIOS -->
-    <div style="margin-bottom:14px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px">🛠 Servicios externos</div>
-        <button type="button" class="btn btn-ghost btn-sm" style="font-size:11px" onclick="_cmpAddSvc()">➕ Añadir</button>
+      <div id="cmp-items-list"></div>
+      <!-- Total cotizado -->
+      <div style="display:flex;justify-content:space-between;align-items:center;
+        background:var(--card2);border-radius:8px;padding:8px 12px;margin-top:6px">
+        <span style="font-size:11px;color:var(--muted)">Total cotizado</span>
+        <span id="cmp-total-cot" style="font-size:14px;font-weight:800;color:#f59e0b">$0</span>
       </div>
-      <div id="cmp-svcs-list"></div>
     </div>
     <!-- ARCHIVOS -->
     <div style="margin-bottom:12px">
@@ -8619,21 +8638,13 @@ async function _disPedirMP(idqr, opNum) {
         </div>
       </div>
     </div>
-    <!-- DESCRIPCIÓN ENRIQUECIDA -->
+    <!-- NOTAS -->
     <div>
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px">📝 Descripción del pedido</div>
-        <button type="button" class="btn btn-ghost btn-sm" style="font-size:10px" onclick="_cmpAutoDesc()">⚡ Auto-llenar</button>
-      </div>
-      <!-- Resumen automático (read-only, generado) -->
-      <div id="cmp-desc-resumen" style="display:none;background:var(--card2);border:1px solid var(--border);
-        border-radius:8px;padding:10px;margin-bottom:8px;font-size:11px;color:var(--text);line-height:1.6"></div>
-      <!-- Campo rich text — acepta pegar imágenes -->
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:6px">📝 Observaciones del pedido</div>
       <div id="cmp-obs"
         contenteditable="true"
-        data-placeholder="Especificaciones adicionales, tolerancias, notas de fabricación…
-Puedes pegar imágenes directamente aquí (Ctrl+V)"
-        style="width:100%;min-height:100px;background:var(--surface);border:1px solid var(--border);
+        data-placeholder="Especificaciones adicionales, tolerancias, notas de fabricación…\nPuedes pegar imágenes directamente aquí (Ctrl+V)"
+        style="width:100%;min-height:80px;background:var(--surface);border:1px solid var(--border);
           color:var(--text);border-radius:8px;padding:10px;font-size:12px;
           box-sizing:border-box;outline:none;line-height:1.6;
           -webkit-user-select:text;user-select:text"
@@ -8641,7 +8652,6 @@ Puedes pegar imágenes directamente aquí (Ctrl+V)"
         onfocus="if(!this.textContent.trim())this.textContent=''"
         onblur="if(!this.textContent.trim())this.innerHTML=''">
       </div>
-      <div style="font-size:10px;color:var(--muted);margin-top:4px">💡 Puedes pegar imágenes con Ctrl+V o desde la galería</div>
     </div>
   </div>`,
   `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
@@ -8649,23 +8659,13 @@ Puedes pegar imágenes directamente aquí (Ctrl+V)"
      onclick="_cmpConfirmar('${idqr}')">🧱 Confirmar Pedido</button>`
   );
 
-  // Renderizar listas dinámicas después de abrir el modal
-  requestAnimationFrame(()=>{
-    _cmpRenderMats();
-    _cmpRenderSvcs();
-    // Auto-generar descripción si hay materiales precargados
-    setTimeout(()=>{
-      if((window._cmpMats||[]).some(m=>m.nombre||m.id)) _cmpAutoDesc();
-    }, 300);
-  });
+  requestAnimationFrame(()=>{ _cmpRenderItems(); _cmpCalcTotalCot(); });
 }
 
-
 // ══════════════════════════════════════════════════════════════
-//  HELPERS DINÁMICOS — Modal Pedido de Material
+//  HELPERS DINÁMICOS — Modal Pedido de Material (v2 unificado)
 // ══════════════════════════════════════════════════════════════
 
-// Opciones HTML para selects (generadas una sola vez por modal)
 function _cmpMatOpts(selVal) {
   const esp = `<option value="ESPECIAL" ${selVal==='ESPECIAL'?'selected':''}>⚡ ESPECIAL</option>`;
   const cat = (DB.materiales||[]).map(m=>{
@@ -8675,7 +8675,7 @@ function _cmpMatOpts(selVal) {
       data-preciokg="${m['PRECIO KG']||0}"
       ${selVal===v?'selected':''}>${v}</option>`;
   }).join('');
-  return `<option value="">— No aplica —</option>${esp}${cat}`;
+  return `<option value="">— Seleccionar —</option>${esp}${cat}`;
 }
 function _cmpSvcOpts(selVal) {
   const cat = (DB.servicios||[]).map(s=>{
@@ -8684,449 +8684,503 @@ function _cmpSvcOpts(selVal) {
       data-costo2="${s['COSTO <= 2 KG']||0}" data-costokg="${s['COSTO KG']||0}"
       ${selVal===n?'selected':''}>${n}</option>`;
   }).join('');
-  return `<option value="">— No aplica —</option>${cat}`;
+  return `<option value="">— Seleccionar —</option>${cat}`;
 }
 
-// ── Render lista materiales ───────────────────────────────────
-function _cmpRenderMats() {
-  const container = document.getElementById('cmp-mats-list');
-  if(!container) return;
-  container.innerHTML = (window._cmpMats||[]).map((m,i)=>_cmpMatRowHtml(m,i)).join('');
-  // Activar listeners y cálculo en filas con material normal
-  (window._cmpMats||[]).forEach((m,i)=>{
-    _cmpBindMatListeners(i);
-    if(m.nombre && !m.esEspecial) _cmpCalcMat(i);
+// ── Render lista unificada ────────────────────────────────────
+function _cmpRenderItems() {
+  const c = document.getElementById('cmp-items-list');
+  if(!c) return;
+  c.innerHTML = (window._cmpItems||[]).map((it,i)=>_cmpItemRowHtml(it,i)).join('');
+  (window._cmpItems||[]).forEach((it,i)=>{
+    if(it.tipo==='mat' && it.nombre && !it.esEspecial) _cmpCalcMat(i);
+    _cmpBindItemListeners(i);
   });
+  _cmpCalcTotalCot();
 }
 
-function _cmpMatRowHtml(m, i) {
-  const esEsp  = m.esEspecial || String(m.nombre).toUpperCase()==='ESPECIAL';
-  const selVal = esEsp ? 'ESPECIAL' : (m.nombre||m.id||'');
-  const tieneNormal = selVal && !esEsp;
-  const esCil  = (m.geo||'Cilindro')==='Cilindro';
-  const inp    = (id,val,ph='0')=>`<input type="number" id="${id}" value="${val||''}" placeholder="${ph}"
+function _cmpItemRowHtml(it, i) {
+  const isMat  = it.tipo==='mat';
+  const esEsp  = isMat && (it.esEspecial || String(it.nombre||'').toUpperCase()==='ESPECIAL');
+  const hasNom = isMat && it.nombre && !esEsp;
+  const esCil  = (it.geo||'Cilindro')==='Cilindro';
+  const incluir = it.incluir !== false;
+
+  // Barra de referencia del comercial (multilínea para fusionados)
+  let refComercial = '';
+  if(esEsp && it.descEsp) {
+    refComercial = it.descEsp;
+    const dims = it.dim1 ? (esCil?`⌀${it.dim1}×L${it.lar}mm`:`${it.dim1}×${it.anc}×${it.lar}mm`) : '';
+    if(dims && !refComercial.includes(dims)) refComercial += ' ' + dims;
+    if(it.cant && !it.notas?.includes('fusionado')) refComercial += ' · Cant: ' + it.cant;
+  } else if(hasNom && (it.dim1||it.cant)) {
+    refComercial = esCil?`⌀${it.dim1||0}×L${it.lar||0}mm`:`${it.dim1||0}×${it.anc||0}×${it.lar||0}mm`;
+    if(it.cant) refComercial += ' · ' + it.cant + ' kg';
+  }
+  // Detectar si la descripción es un listado numerado (fusionado)
+  const esFusion = esEsp && it.notas?.includes('fusionado');
+
+  const inp = (id,v,ph='0',tp='number')=>`<input type="${tp}" id="${id}" value="${String(v||'').replace(/"/g,'&quot;')}" placeholder="${ph}"
     style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);
-      border-radius:6px;padding:6px 8px;font-size:12px;box-sizing:border-box">`;
-  const inpTxt = (id,val,ph)=>`<input id="${id}" value="${(val||'').replace(/"/g,'&quot;')}" placeholder="${ph}"
-    style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);
-      border-radius:6px;padding:6px 8px;font-size:12px;box-sizing:border-box">`;
+      border-radius:6px;padding:5px 7px;font-size:11px;box-sizing:border-box" oninput="_cmpCalcTotalCot()">`;
+
+  const cotInput = (id, val) => `<input type="number" id="${id}" value="${val||''}" placeholder="0"
+    style="width:100%;background:var(--surface);border:1px dashed #f59e0b;color:#f59e0b;
+      border-radius:6px;padding:5px 7px;font-size:11px;font-weight:700;box-sizing:border-box"
+    oninput="_cmpCalcTotalCot()">`;
+
+  // textarea rico con soporte Ctrl+V imágenes — auto-grow
+  const richArea = (id, val, ph, minRows=3) => `<div id="${id}-wrap"
+    style="position:relative;width:100%;min-height:${minRows*22}px;background:var(--surface);
+      border:1px solid var(--border);border-radius:6px;padding:6px 8px;
+      box-sizing:border-box;cursor:text;outline:none;font-size:12px;line-height:1.6;
+      color:var(--text);white-space:pre-wrap;word-break:break-word;-webkit-user-select:text;user-select:text"
+    contenteditable="true"
+    id="${id}"
+    onpaste="_cmpPasteItem(event,${id.split('-').pop()})"
+    onfocus="this.style.borderColor='var(--accent)'"
+    onblur="this.style.borderColor=''"
+    oninput="_cmpCalcTotalCot()"
+    >${String(val||'').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>`;
+
   return `
-  <div style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;background:var(--card2)">
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:${(esEsp||tieneNormal)?'8px':'0'}">
-      <span style="font-size:11px;font-weight:700;color:var(--muted);min-width:16px">${i+1}</span>
-      <select id="cmp-ms-${i}" style="flex:1;background:var(--surface);border:1px solid var(--border);
-        color:var(--text);border-radius:6px;padding:6px 8px;font-size:12px"
-        onchange="_cmpOnMatSel(${i})">${_cmpMatOpts(selVal)}</select>
-      <button type="button" onclick="_cmpRemMat(${i})"
-        style="width:28px;height:28px;border-radius:6px;border:1px solid var(--danger);
-          background:transparent;color:var(--danger);font-size:14px;cursor:pointer;flex-shrink:0">✕</button>
+  <div id="cmp-item-wrap-${i}" style="border:2px solid ${incluir?(isMat?'var(--border)':'#065f4640'):'#ef444440'};
+    border-radius:8px;padding:8px;margin-bottom:6px;
+    background:${incluir?(isMat?'var(--card2)':'rgba(6,95,70,.06)'):'rgba(239,68,68,.04)'};
+    opacity:${incluir?'1':'.55'};transition:all .2s">
+    <!-- Cabecera fila -->
+    <div style="display:flex;align-items:center;gap:5px;margin-bottom:6px">
+      <span style="font-size:10px;font-weight:700;color:var(--muted);min-width:14px">${i+1}</span>
+      <span style="font-size:12px">${isMat?'🪨':'🛠'}</span>
+      ${isMat ? `
+        <select id="cmp-tipo-sel-${i}" style="flex:1;background:var(--surface);border:1px solid var(--border);
+          color:var(--text);border-radius:6px;padding:4px 6px;font-size:11px"
+          onchange="_cmpOnItemSel(${i})">${_cmpMatOpts(esEsp?'ESPECIAL':it.nombre)}</select>`
+      : `
+        <select id="cmp-tipo-sel-${i}" style="flex:1;background:var(--surface);border:1px solid var(--border);
+          color:var(--text);border-radius:6px;padding:4px 6px;font-size:11px"
+          onchange="_cmpOnItemSel(${i})">${_cmpSvcOpts(it.nombre)}</select>`}
+      <button type="button" onclick="_cmpToggleIncluir(${i})"
+        style="height:26px;padding:0 7px;border-radius:5px;font-size:10px;cursor:pointer;white-space:nowrap;
+          border:1px solid ${incluir?'#059669':'#ef4444'};
+          background:${incluir?'#05996918':'#ef444418'};
+          color:${incluir?'#059669':'#ef4444'};flex-shrink:0">
+        ${incluir?'✓ Incluir':'✗ Excluir'}</button>
+      <button type="button" onclick="_cmpRemItem(${i})"
+        style="width:24px;height:26px;border-radius:5px;border:1px solid var(--danger);
+          background:transparent;color:var(--danger);font-size:11px;cursor:pointer;flex-shrink:0">✕</button>
     </div>
-    <!-- ESPECIAL -->
-    <div id="cmp-me-${i}" style="${esEsp?'':'display:none'}">
-      <div style="display:grid;gap:6px">
-        <div><label style="font-size:10px;color:var(--muted)">Descripción del material especial</label>
-          ${inpTxt(`cmp-md-${i}`, m.descEsp, 'Ej: Acero H13 importado, cert. 4140...')}</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
-          <div><label style="font-size:10px;color:var(--muted)">Cantidad</label>${inp(`cmp-mc-${i}`, m.cant)}</div>
-          <div><label style="font-size:10px;color:var(--muted)">Costo total $</label>
-            ${inp(`cmp-mk-${i}`, m.esEspecial?(m.costEsp||m.cost):0)}</div>
+
+    ${refComercial && incluir ? `
+    <div style="font-size:10px;color:var(--accent);background:rgba(37,99,235,.06);border-radius:6px;
+      padding:5px 8px;margin-bottom:6px;white-space:pre-wrap;line-height:1.6">📋 ${refComercial}</div>` : ''}
+
+    ${isMat && esEsp ? `
+    <!-- ESPECIAL / FUSIONADO -->
+    <div style="margin-bottom:5px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
+        <label style="font-size:9px;color:var(--muted)">${esFusion?'Descripción (fusionada — editable)':'Descripción'}</label>
+        <span style="font-size:9px;color:var(--muted)">📎 Ctrl+V = pegar imagen</span>
+      </div>
+      ${richArea(`cmp-mesp-${i}`, it.descEsp, 'Ej:\n1. DURALUMINIO Ø80×230 mm · Cant: 9\n2. 4140 Ø1 1/4"×260 mm · Cant: 9', esFusion?Math.max(3, (it.descEsp||'').split('\n').length+1):3)}
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
+      <div><label style="font-size:9px;color:var(--muted)">Cantidad total</label>${inp(`cmp-cant-${i}`,it.cant)}</div>
+      <div><label style="font-size:9px;color:#f59e0b;font-weight:700">💬 Costo cotiz $</label>
+        ${cotInput(`cmp-cot-${i}`, it.costCot)}</div>
+    </div>` : ''}
+
+    ${isMat && hasNom ? `
+    <!-- MATERIAL NORMAL -->
+    <div style="background:var(--surface);border-radius:6px;padding:5px 8px;font-size:10px;
+      color:var(--muted);margin-bottom:5px;display:flex;gap:8px;flex-wrap:wrap">
+      <span>Dens: <strong id="cmp-dens-${i}">—</strong></span>
+      <span>$/kg: <strong id="cmp-pxkg-${i}">—</strong></span>
+      <span>Peso: <strong id="cmp-peso-${i}">—</strong></span>
+      <span>Est: <strong id="cmp-calc-${i}" style="color:var(--gold)">—</strong></span>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:4px">
+      <div><label style="font-size:9px;color:var(--muted)">Geometría</label>
+        <div style="display:flex;gap:3px">
+          <button type="button" id="cmp-gcil-${i}" onclick="_cmpGeoSel(${i},'Cilindro')"
+            style="flex:1;padding:4px;font-size:10px;border-radius:5px;cursor:pointer;border:1px solid var(--border);
+              background:${esCil?'var(--accent)':'var(--surface)'};color:${esCil?'#fff':'var(--text)'}">⬤ Cil</button>
+          <button type="button" id="cmp-gplt-${i}" onclick="_cmpGeoSel(${i},'Platina')"
+            style="flex:1;padding:4px;font-size:10px;border-radius:5px;cursor:pointer;border:1px solid var(--border);
+              background:${!esCil?'var(--accent)':'var(--surface)'};color:${!esCil?'#fff':'var(--text)'}">▬ Plat</button>
         </div>
+        <input type="hidden" id="cmp-geo-${i}" value="${it.geo||'Cilindro'}">
       </div>
+      <div><label style="font-size:9px;color:var(--muted)" id="cmp-lbl-d1-${i}">${esCil?'Diámetro (mm)':'Espesor (mm)'}</label>
+        ${inp(`cmp-d1-${i}`,it.dim1)}</div>
+      <div><label style="font-size:9px;color:var(--muted)">Largo (mm)</label>${inp(`cmp-lar-${i}`,it.lar)}</div>
+      <div id="cmp-anc-wrap-${i}" style="${esCil?'display:none':''}">
+        <label style="font-size:9px;color:var(--muted)">Ancho (mm)</label>${inp(`cmp-anc-${i}`,it.anc)}</div>
     </div>
-    <!-- NORMAL -->
-    <div id="cmp-mn-${i}" style="${tieneNormal?'':'display:none'}">
-      <div style="background:var(--surface);border-radius:6px;padding:7px 10px;font-size:11px;
-        color:var(--muted);margin-bottom:8px;display:flex;gap:14px;flex-wrap:wrap">
-        <span>Densidad: <strong id="cmp-mdens-${i}">—</strong> g/mm³</span>
-        <span>$/kg: <strong id="cmp-mpkg-${i}">—</strong></span>
-        <span>Peso: <strong id="cmp-mpeso-${i}">—</strong></span>
-        <span>Costo calc: <strong id="cmp-mcalc-${i}" style="color:var(--gold)">—</strong></span>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
-        <div><label style="font-size:10px;color:var(--muted)">Geometría</label>
-          <div style="display:flex;gap:4px">
-            <button type="button" id="cmp-gcil-${i}" onclick="_cmpGeoSel(${i},'Cilindro')"
-              style="flex:1;padding:5px;font-size:11px;border-radius:6px;cursor:pointer;border:1px solid var(--border);
-                background:${esCil?'var(--accent)':'var(--surface)'};color:${esCil?'#fff':'var(--text)'}">Cilindro</button>
-            <button type="button" id="cmp-gplt-${i}" onclick="_cmpGeoSel(${i},'Platina')"
-              style="flex:1;padding:5px;font-size:11px;border-radius:6px;cursor:pointer;border:1px solid var(--border);
-                background:${!esCil?'var(--accent)':'var(--surface)'};color:${!esCil?'#fff':'var(--text)'}">Platina</button>
-          </div>
-          <input type="hidden" id="cmp-mg-${i}" value="${m.geo||'Cilindro'}">
-        </div>
-        <div><label style="font-size:10px;color:var(--muted)" id="cmp-ml1-${i}">${esCil?'Diámetro (mm)':'Espesor/Alto (mm)'}</label>
-          ${inp(`cmp-md1-${i}`, m.dim1)}</div>
-        <div><label style="font-size:10px;color:var(--muted)">Largo (mm)</label>
-          ${inp(`cmp-mlar-${i}`, m.lar)}</div>
-        <div id="cmp-manc-wrap-${i}" style="${!esCil?'':'display:none'}">
-          <label style="font-size:10px;color:var(--muted)">Ancho (mm)</label>
-          ${inp(`cmp-manc-${i}`, m.anc)}</div>
-        <div><label style="font-size:10px;color:var(--muted)">Cant / Peso</label>
-          ${inp(`cmp-mq-${i}`, m.cant)}</div>
-        <div><label style="font-size:10px;color:var(--muted)">Costo total $</label>
-          ${inp(`cmp-mk-${i}`, m.cost)}</div>
-      </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:4px">
+      <div><label style="font-size:9px;color:var(--muted)">Cant / Peso (kg)</label>${inp(`cmp-cant-${i}`,it.cant)}</div>
+      <div><label style="font-size:9px;color:#f59e0b;font-weight:700">💬 Costo cotiz $</label>
+        ${cotInput(`cmp-cot-${i}`, it.costCot)}</div>
     </div>
+    <div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
+        <label style="font-size:9px;color:var(--muted)">Notas / medidas adicionales</label>
+        <span style="font-size:9px;color:var(--muted)">📎 Ctrl+V = imagen</span>
+      </div>
+      ${richArea(`cmp-mesp-${i}`, it.notas, 'Tolerancias, especificaciones, medidas adicionales…', 2)}
+    </div>` : ''}
+
+    ${!isMat ? `
+    <!-- SERVICIO -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:4px">
+      <div><label style="font-size:9px;color:var(--muted)">Días estimados</label>${inp(`cmp-cant-${i}`,it.cant)}</div>
+      <div><label style="font-size:9px;color:var(--muted)">Dureza / Especificación</label>${inp(`cmp-dur-${i}`,it.dureza,'HRC…','text')}</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr;gap:4px;margin-bottom:4px">
+      <div><label style="font-size:9px;color:#f59e0b;font-weight:700">💬 Costo cotiz $</label>
+        ${cotInput(`cmp-cot-${i}`, it.costCot)}</div>
+    </div>
+    <div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
+        <label style="font-size:9px;color:var(--muted)">Notas del servicio</label>
+        <span style="font-size:9px;color:var(--muted)">📎 Ctrl+V = imagen</span>
+      </div>
+      ${richArea(`cmp-mesp-${i}`, it.notas, 'Especificaciones, piezas incluidas…', 2)}
+    </div>` : ''}
   </div>`;
 }
 
-// ── Cálculo automático de costo ───────────────────────────────
+function _cmpCalcTotalCot() {
+  const total = (window._cmpItems||[]).reduce((s,it,i)=>{
+    if(it.incluir === false) return s;  // excluidos no cuentan
+    return s + Number(document.getElementById(`cmp-cot-${i}`)?.value||0);
+  },0);
+  const el = document.getElementById('cmp-total-cot');
+  if(el) el.textContent = '$'+total.toLocaleString('es-CO');
+}
+
+// ── Toggle incluir/excluir ítem del pedido ────────────────────
+function _cmpToggleIncluir(i) {
+  const it = (window._cmpItems||[])[i];
+  if(!it) return;
+  it.incluir = it.incluir === false ? true : false;
+  // Re-render solo esa fila
+  const container = document.getElementById('cmp-items-list');
+  if(container && container.children[i]) {
+    const tmp = document.createElement('div');
+    tmp.innerHTML = _cmpItemRowHtml(it, i);
+    container.replaceChild(tmp.firstElementChild, container.children[i]);
+    _cmpBindItemListeners(i);
+    if(it.tipo==='mat' && it.nombre && !it.esEspecial) _cmpCalcMat(i);
+  }
+  _cmpCalcTotalCot();
+}
+
+// ── Fusionar ítems incluidos en una sola fila de descripción ─────────────
+// Alterna: si ya está fusionado vuelve a la vista individual.
+window._cmpFusionado = false;
+window._cmpItemsAntesFusion = null;
+
+function _cmpFusionar() {
+  if(window._cmpFusionado) {
+    // Deshacer fusión — volver a ítems originales
+    if(window._cmpItemsAntesFusion) {
+      window._cmpItems = window._cmpItemsAntesFusion;
+      window._cmpItemsAntesFusion = null;
+    }
+    window._cmpFusionado = false;
+    _cmpRenderItems();
+    const btn = document.getElementById('cmp-btn-fusionar');
+    if(btn){ btn.textContent='🔗 Fusionar'; btn.style.background=''; btn.style.color=''; }
+    return;
+  }
+
+  const incluidos = (window._cmpItems||[]).filter(it => it.incluir !== false);
+  if(incluidos.length < 2){ toast('Necesitas al menos 2 ítems para fusionar','warn'); return; }
+
+  // Guardar estado original
+  window._cmpItemsAntesFusion = JSON.parse(JSON.stringify(window._cmpItems));
+
+  // Construir descripción fusionada — una línea por ítem, numerada
+  const desc = incluidos.map((it,n)=>{
+    if(it.tipo==='mat'){
+      const esEsp = it.esEspecial;
+      if(esEsp){
+        const dims = it.dim1?(it.geo==='Cilindro'?` ⌀${it.dim1}×L${it.lar}mm`:` ${it.dim1}×${it.anc}×${it.lar}mm`):'';
+        const cantStr = it.cant ? ` · Cant: ${it.cant}` : '';
+        const costStr = it.costCot ? ` · $${Number(it.costCot).toLocaleString('es-CO')}` : '';
+        return `${n+1}. ${it.descEsp||'Material especial'}${dims}${cantStr}${costStr}`;
+      } else {
+        const dims = it.dim1?(it.geo==='Cilindro'?` ⌀${it.dim1}×L${it.lar}mm`:` ${it.dim1}×${it.anc}×${it.lar}mm`):'';
+        const cantStr = it.cant ? ` · ${it.cant} kg` : '';
+        const costStr = it.costCot ? ` · $${Number(it.costCot).toLocaleString('es-CO')}` : '';
+        return `${n+1}. 🪨 ${it.nombre}${dims}${cantStr}${costStr}`;
+      }
+    } else {
+      const dias = it.cant ? ` · ${it.cant} días` : '';
+      const dur  = it.dureza ? ` (${it.dureza})` : '';
+      const costStr = it.costCot ? ` · $${Number(it.costCot).toLocaleString('es-CO')}` : '';
+      return `${n+1}. 🛠 ${it.nombre}${dur}${dias}${costStr}`;
+    }
+  }).join('\n');
+
+  const totalCot = incluidos.reduce((s,it)=>s+(it.costCot||0),0);
+
+  // Reemplazar con un único ítem ESPECIAL fusionado
+  window._cmpItems = [{
+    tipo:'mat', nombre:'ESPECIAL', esEspecial:true,
+    descEsp: desc, cant: incluidos.length, costCot: totalCot,
+    geo:'Cilindro', dim1:0, lar:0, anc:0, unidad:'piezas', notas:'(Pedido fusionado)',
+    incluir: true
+  }];
+
+  // También agregar servicios excluidos de la fusión como ítems separados
+  (window._cmpItemsAntesFusion||[]).filter(it=>it.incluir===false).forEach(it=>{
+    window._cmpItems.push(it);
+  });
+
+  window._cmpFusionado = true;
+  _cmpRenderItems();
+  const btn = document.getElementById('cmp-btn-fusionar');
+  if(btn){ btn.textContent='🔓 Desfusionar'; btn.style.background='#1d4ed8'; btn.style.color='#fff'; }
+  toast('✓ Ítems fusionados en una fila');
+}
+
 function _cmpCalcMat(i) {
-  const sel = document.getElementById(`cmp-ms-${i}`);
+  const sel  = document.getElementById(`cmp-tipo-sel-${i}`);
   if(!sel||!sel.value||sel.value==='ESPECIAL') return;
   const opt  = sel.options[sel.selectedIndex];
   const dens = Number(opt?.dataset?.densidad||0);
   const pkg  = Number(opt?.dataset?.preciokg||0);
-  const geo  = document.getElementById(`cmp-mg-${i}`)?.value||'Cilindro';
-  const dim1 = Number(document.getElementById(`cmp-md1-${i}`)?.value||0);
-  const lar  = Number(document.getElementById(`cmp-mlar-${i}`)?.value||0);
-  const anc  = Number(document.getElementById(`cmp-manc-${i}`)?.value||0);
+  const geo  = document.getElementById(`cmp-geo-${i}`)?.value||'Cilindro';
+  const dim1 = Number(document.getElementById(`cmp-d1-${i}`)?.value||0);
+  const lar  = Number(document.getElementById(`cmp-lar-${i}`)?.value||0);
+  const anc  = Number(document.getElementById(`cmp-anc-${i}`)?.value||0);
   let vol = 0;
   if(geo==='Cilindro'){ const r=dim1/2; vol=Math.PI*r*r*lar; }
   else { vol=dim1*lar*anc; }
-  const pesoKg = dens * vol / 1000;
-  const costo  = Math.round(pesoKg * pkg * 1.3);
+  const pesoKg = dens*vol/1000;
+  const costo  = Math.round(pesoKg*pkg*1.3);
   const s=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
-  s(`cmp-mdens-${i}`, dens?dens.toFixed(5):'—');
-  s(`cmp-mpkg-${i}`,  pkg?'$'+pkg.toLocaleString('es-CO'):'—');
-  s(`cmp-mpeso-${i}`, pesoKg?pesoKg.toFixed(4)+' kg':'—');
-  s(`cmp-mcalc-${i}`, costo?'$'+costo.toLocaleString('es-CO'):'—');
-  // Actualizar campo editable si el usuario no lo ha tocado manualmente
-  const costEl = document.getElementById(`cmp-mk-${i}`);
-  if(costEl && (!Number(costEl.value)||costEl.dataset.auto!=='no')) {
-    costEl.value = costo||'';
-    costEl.dataset.auto = 'yes';
-  }
-  const qEl = document.getElementById(`cmp-mq-${i}`);
-  if(qEl && (!Number(qEl.value)||qEl.dataset.auto!=='no')) {
-    qEl.value = pesoKg?pesoKg.toFixed(4):'';
-    qEl.dataset.auto = 'yes';
-  }
+  s(`cmp-dens-${i}`, dens?dens.toFixed(5):'—');
+  s(`cmp-pxkg-${i}`, pkg?'$'+pkg.toLocaleString('es-CO'):'—');
+  s(`cmp-peso-${i}`, pesoKg?pesoKg.toFixed(4)+' kg':'—');
+  s(`cmp-calc-${i}`, costo?'$'+costo.toLocaleString('es-CO'):'—');
+  const cotEl  = document.getElementById(`cmp-cot-${i}`);
+  if(cotEl && (!Number(cotEl.value)||cotEl.dataset.auto!=='no')){ cotEl.value=costo||''; cotEl.dataset.auto='yes'; }
+  const cantEl = document.getElementById(`cmp-cant-${i}`);
+  if(cantEl && (!Number(cantEl.value)||cantEl.dataset.auto!=='no')){ cantEl.value=pesoKg?pesoKg.toFixed(4):''; cantEl.dataset.auto='yes'; }
+  _cmpCalcTotalCot();
 }
 
-// ── Selector geometría ────────────────────────────────────────
 function _cmpGeoSel(i, geo) {
-  document.getElementById(`cmp-mg-${i}`).value = geo;
-  const esCil = geo==='Cilindro';
-  const btnC = document.getElementById(`cmp-gcil-${i}`);
-  const btnP = document.getElementById(`cmp-gplt-${i}`);
-  const ancW = document.getElementById(`cmp-manc-wrap-${i}`);
-  const lbl  = document.getElementById(`cmp-ml1-${i}`);
-  if(btnC){btnC.style.background=esCil?'var(--accent)':'var(--surface)';btnC.style.color=esCil?'#fff':'var(--text)';}
-  if(btnP){btnP.style.background=!esCil?'var(--accent)':'var(--surface)';btnP.style.color=!esCil?'#fff':'var(--text)';}
-  if(ancW) ancW.style.display=esCil?'none':'';
-  if(lbl)  lbl.textContent=esCil?'Diámetro (mm)':'Espesor/Alto (mm)';
+  if(document.getElementById(`cmp-geo-${i}`)) document.getElementById(`cmp-geo-${i}`).value=geo;
+  const esCil=geo==='Cilindro';
+  const bc=document.getElementById(`cmp-gcil-${i}`), bp=document.getElementById(`cmp-gplt-${i}`);
+  const aw=document.getElementById(`cmp-anc-wrap-${i}`), lb=document.getElementById(`cmp-lbl-d1-${i}`);
+  if(bc){bc.style.background=esCil?'var(--accent)':'var(--surface)';bc.style.color=esCil?'#fff':'var(--text)';}
+  if(bp){bp.style.background=!esCil?'var(--accent)':'var(--surface)';bp.style.color=!esCil?'#fff':'var(--text)';}
+  if(aw) aw.style.display=esCil?'none':'';
+  if(lb) lb.textContent=esCil?'Diámetro (mm)':'Espesor (mm)';
   _cmpCalcMat(i);
 }
 
-// ── Bind listeners de dimensiones → recalc ───────────────────
-function _cmpBindMatListeners(i) {
-  [`cmp-md1-${i}`,`cmp-mlar-${i}`,`cmp-manc-${i}`].forEach(id=>{
-    const el = document.getElementById(id);
-    if(el && !el._cmpBound){ el._cmpBound=true; el.addEventListener('input',()=>_cmpCalcMat(i)); }
+function _cmpBindItemListeners(i) {
+  [`cmp-d1-${i}`,`cmp-lar-${i}`,`cmp-anc-${i}`].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el&&!el._cmpBound){el._cmpBound=true;el.addEventListener('input',()=>_cmpCalcMat(i));}
   });
-  [`cmp-mq-${i}`,`cmp-mk-${i}`].forEach(id=>{
-    const el = document.getElementById(id);
-    if(el && !el._cmpBound){ el._cmpBound=true; el.addEventListener('input',()=>{ el.dataset.auto='no'; }); }
+  [`cmp-cant-${i}`,`cmp-cot-${i}`].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el&&!el._cmpBound){el._cmpBound=true;el.addEventListener('input',()=>{el.dataset.auto='no';_cmpCalcTotalCot();});}
   });
 }
 
-// ── Al cambiar select de material ────────────────────────────
-function _cmpOnMatSel(i) {
-  const val = document.getElementById(`cmp-ms-${i}`)?.value||'';
-  const esEsp = val==='ESPECIAL';
-  document.getElementById(`cmp-me-${i}`).style.display = esEsp?'':'none';
-  document.getElementById(`cmp-mn-${i}`).style.display = (val&&!esEsp)?'':'none';
-  if(val&&!esEsp){
-    const sel = document.getElementById(`cmp-ms-${i}`);
+function _cmpOnItemSel(i) {
+  const it = (window._cmpItems||[])[i];
+  if(!it) return;
+  const val = document.getElementById(`cmp-tipo-sel-${i}`)?.value||'';
+  if(it.tipo==='mat'){
+    const esEsp = val==='ESPECIAL';
+    it.nombre    = val;
+    it.esEspecial= esEsp;
+    // Re-render solo esta fila
+    const container = document.getElementById('cmp-items-list');
+    if(container){
+      const rows = container.children;
+      if(rows[i]){
+        const tmp = document.createElement('div');
+        tmp.innerHTML = _cmpItemRowHtml(it, i);
+        container.replaceChild(tmp.firstElementChild, rows[i]);
+        _cmpBindItemListeners(i);
+        if(val && !esEsp) _cmpCalcMat(i);
+      }
+    }
+  } else {
+    it.nombre = val;
+    const sel = document.getElementById(`cmp-tipo-sel-${i}`);
     const opt = sel?.options[sel.selectedIndex];
-    const s=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
-    s(`cmp-mdens-${i}`, opt?.dataset?.densidad||'—');
-    s(`cmp-mpkg-${i}`,  opt?.dataset?.preciokg?'$'+Number(opt.dataset.preciokg).toLocaleString('es-CO'):'—');
-    _cmpBindMatListeners(i);
-    _cmpCalcMat(i);
-  }
-}
-
-// ── Añadir / quitar material ──────────────────────────────────
-function _cmpAddMat() {
-  if((window._cmpMats||[]).length>=5){toast('Máximo 5 materiales','warn');return;}
-  window._cmpMats.push({slot:window._cmpMats.length+1,nombre:'',geo:'Cilindro',dim1:0,lar:0,anc:0,cant:0,cost:0,esEspecial:false,descEsp:'',costEsp:0});
-  _cmpRenderMats();
-}
-function _cmpRemMat(i) {
-  window._cmpMats.splice(i,1);
-  _cmpRenderMats();
-}
-
-// ── Render lista servicios ────────────────────────────────────
-function _cmpRenderSvcs() {
-  const container = document.getElementById('cmp-svcs-list');
-  if(!container) return;
-  container.innerHTML = (window._cmpSvcs||[]).map((s,i)=>_cmpSvcRowHtml(s,i)).join('');
-}
-
-function _cmpSvcRowHtml(s, i) {
-  const inp = (id,val,ph='0')=>`<input type="number" id="${id}" value="${val||''}" placeholder="${ph}"
-    style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);
-      border-radius:6px;padding:6px 8px;font-size:12px;box-sizing:border-box">`;
-  const inpTxt = (id,val,ph)=>`<input id="${id}" value="${(val||'').replace(/"/g,'&quot;')}" placeholder="${ph}"
-    style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);
-      border-radius:6px;padding:6px 8px;font-size:12px;box-sizing:border-box">`;
-  const tiene = !!s.nombre;
-  return `
-  <div style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;background:var(--card2)">
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:${tiene?'8px':'0'}">
-      <span style="font-size:11px;font-weight:700;color:var(--muted);min-width:16px">${i+1}</span>
-      <select id="cmp-ss-${i}" style="flex:1;background:var(--surface);border:1px solid var(--border);
-        color:var(--text);border-radius:6px;padding:6px 8px;font-size:12px"
-        onchange="_cmpOnSvcSel(${i})">${_cmpSvcOpts(s.nombre)}</select>
-      <button type="button" onclick="_cmpRemSvc(${i})"
-        style="width:28px;height:28px;border-radius:6px;border:1px solid var(--danger);
-          background:transparent;color:var(--danger);font-size:14px;cursor:pointer;flex-shrink:0">✕</button>
-    </div>
-    <div id="cmp-sf-${i}" style="${tiene?'':'display:none'}">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
-        <div><label style="font-size:10px;color:var(--muted)">Días</label>${inp(`cmp-sd-${i}`,s.dias)}</div>
-        <div><label style="font-size:10px;color:var(--muted)">Costo total $</label>${inp(`cmp-sc-${i}`,s.costo)}</div>
-        <div><label style="font-size:10px;color:var(--muted)">Dureza / Especificación</label>
-          ${inpTxt(`cmp-sdur-${i}`,s.dureza,'Ej: 55-58 HRC')}</div>
-        <div><label style="font-size:10px;color:var(--muted)">Notas</label>
-          ${inpTxt(`cmp-snot-${i}`,s.descOtros,'Observaciones')}</div>
-      </div>
-    </div>
-  </div>`;
-}
-
-// ── Al cambiar select de servicio ─────────────────────────────
-function _cmpOnSvcSel(i) {
-  const sel = document.getElementById(`cmp-ss-${i}`);
-  const val = sel?.value||'';
-  document.getElementById(`cmp-sf-${i}`).style.display = val?'':'none';
-  if(val){
-    const opt = sel.options[sel.selectedIndex];
-    const diasEl = document.getElementById(`cmp-sd-${i}`);
-    if(diasEl && !Number(diasEl.value)) diasEl.value = opt?.dataset?.dias||'';
-    const costEl = document.getElementById(`cmp-sc-${i}`);
-    if(costEl && !Number(costEl.value)){
-      const base = Number(opt?.dataset?.costo2||0)||Number(opt?.dataset?.costokg||0);
-      if(base) costEl.value = base;
+    if(opt?.dataset?.dias) {
+      const cantEl = document.getElementById(`cmp-cant-${i}`);
+      if(cantEl && !Number(cantEl.value)) cantEl.value = opt.dataset.dias;
     }
   }
+  _cmpCalcTotalCot();
 }
 
-// ── Añadir / quitar servicio ──────────────────────────────────
-function _cmpAddSvc() {
-  if((window._cmpSvcs||[]).length>=5){toast('Máximo 5 servicios','warn');return;}
-  window._cmpSvcs.push({slot:window._cmpSvcs.length+1,nombre:'',dias:0,costo:0,dureza:'',descOtros:''});
-  _cmpRenderSvcs();
+function _cmpAddItem(tipo) {
+  if(!window._cmpItems) window._cmpItems=[];
+  if(tipo==='mat')
+    window._cmpItems.push({tipo:'mat',nombre:'',geo:'Cilindro',dim1:0,lar:0,anc:0,cant:0,costCot:0,unidad:'kg',descEsp:'',esEspecial:false,notas:''});
+  else
+    window._cmpItems.push({tipo:'svc',nombre:'',cant:1,costCot:0,unidad:'días',dureza:'',notas:''});
+  _cmpRenderItems();
 }
-function _cmpRemSvc(i) {
-  window._cmpSvcs.splice(i,1);
-  _cmpRenderSvcs();
+function _cmpRemItem(i) {
+  (window._cmpItems||[]).splice(i,1);
+  _cmpRenderItems();
 }
 
-// ── Leer formulario editado ───────────────────────────────────
+// Helper: leer texto de un campo contenteditable o input
+function _cmpReadField(id) {
+  const el = document.getElementById(id);
+  if(!el) return '';
+  // contenteditable: extraer texto preservando saltos de línea
+  if(el.isContentEditable || el.contentEditable==='true') {
+    // Convertir BR y DIV a saltos de linea, limpiar HTML
+    const clone = el.cloneNode(true);
+    clone.querySelectorAll('img').forEach(img => {
+      img.replaceWith(`[img:${img.dataset.base64||img.src}]`);
+    });
+    clone.querySelectorAll('br').forEach(br => br.replaceWith('\n'));
+    clone.querySelectorAll('div,p').forEach(d => {
+      if(d.previousSibling) d.insertAdjacentText('beforebegin','\n');
+    });
+    return clone.textContent||'';
+  }
+  return el.value||'';
+}
+
+// Leer formulario → devuelve array de ítems estructurados
 function _cmpLeerFormulario() {
-  const mats={}, svcs={};
-  (window._cmpMats||[]).forEach((m,i)=>{
-    const sel   = document.getElementById(`cmp-ms-${i}`)?.value||'';
-    if(!sel) return;
-    const n     = i+1;
-    const esEsp = sel==='ESPECIAL';
-    mats[`MAT_${n}_NOMBRE`]   = esEsp ? 'ESPECIAL' : sel;
-    mats[`MAT_${n}_GEO`]      = esEsp ? '' : (document.getElementById(`cmp-mg-${i}`)?.value||'');
-    mats[`MAT_${n}_DIM1`]     = esEsp ? 0  : Number(document.getElementById(`cmp-md1-${i}`)?.value||0);
-    mats[`MAT_${n}_LARGO`]    = esEsp ? 0  : Number(document.getElementById(`cmp-mlar-${i}`)?.value||0);
-    mats[`MAT_${n}_ANCHO`]    = esEsp ? 0  : Number(document.getElementById(`cmp-manc-${i}`)?.value||0);
-    mats[`MAT_${n}_CANT`]     = Number(document.getElementById(`cmp-mq-${i}`)?.value||0);
-    mats[`MAT_${n}_COSTO`]    = Number(document.getElementById(`cmp-mk-${i}`)?.value||0);
-    if(esEsp) mats[`MAT_${n}_DESC_ESP`] = document.getElementById(`cmp-md-${i}`)?.value||'';
-  });
-  (window._cmpSvcs||[]).forEach((s,i)=>{
-    const sel = document.getElementById(`cmp-ss-${i}`)?.value||'';
-    if(!sel) return;
-    const n = i+1;
-    svcs[`SVC_${n}_NOMBRE`] = sel;
-    svcs[`SVC_${n}_DIAS`]   = Number(document.getElementById(`cmp-sd-${i}`)?.value||0);
-    svcs[`SVC_${n}_COSTO`]  = Number(document.getElementById(`cmp-sc-${i}`)?.value||0);
-    svcs[`SVC_${n}_DUREZA`] = document.getElementById(`cmp-sdur-${i}`)?.value||'';
-    svcs[`SVC_${n}_NOTAS`]  = document.getElementById(`cmp-snot-${i}`)?.value||'';
-  });
-  return { mats, svcs };
-}
-
-
-// ── Auto-generar descripción fusionada de materiales + servicios ──────────
-function _cmpAutoDesc() {
-  const lineas = [];
-
-  // Materiales
-  const matsLineas = [];
-  (window._cmpMats||[]).forEach((m,i)=>{
-    const sel = document.getElementById(`cmp-ms-${i}`)?.value||'';
-    if(!sel) return;
-    const esEsp = sel==='ESPECIAL';
-    if(esEsp){
-      const desc = document.getElementById(`cmp-md-${i}`)?.value||'';
-      const cant = document.getElementById(`cmp-mc-${i}`)?.value||'';
-      const cost = document.getElementById(`cmp-mk-${i}`)?.value||'';
-      if(desc) matsLineas.push(`• ${desc}${cant?' — Cant: '+cant:''}${cost?' — $'+Number(cost).toLocaleString('es-CO'):''}`);
+  const items = (window._cmpItems||[]).map((it,i)=>{
+    const sel = document.getElementById(`cmp-tipo-sel-${i}`)?.value||'';
+    if(!sel) return null;
+    const cant    = Number(document.getElementById(`cmp-cant-${i}`)?.value||0);
+    const costCot = Number(document.getElementById(`cmp-cot-${i}`)?.value||0);
+    // cmp-mesp-${i} es ahora contenteditable para todos los tipos
+    const descRich = _cmpReadField(`cmp-mesp-${i}`);
+    if(it.tipo==='mat'){
+      const esEsp = sel==='ESPECIAL';
+      return {
+        tipo:'mat', nombre:sel, esEspecial:esEsp,
+        descEsp: esEsp ? descRich : '',
+        geo:    esEsp?'':(document.getElementById(`cmp-geo-${i}`)?.value||'Cilindro'),
+        dim1:   esEsp?0:Number(document.getElementById(`cmp-d1-${i}`)?.value||0),
+        lar:    esEsp?0:Number(document.getElementById(`cmp-lar-${i}`)?.value||0),
+        anc:    esEsp?0:Number(document.getElementById(`cmp-anc-${i}`)?.value||0),
+        cant, costCot, unidad:'kg',
+        notas: esEsp?'':(descRich||'')  // para normal, el richArea es notas/medidas
+      };
     } else {
-      const geo  = document.getElementById(`cmp-mg-${i}`)?.value||'';
-      const dim1 = document.getElementById(`cmp-md1-${i}`)?.value||'';
-      const lar  = document.getElementById(`cmp-mlar-${i}`)?.value||'';
-      const anc  = document.getElementById(`cmp-manc-${i}`)?.value||'';
-      const cant = document.getElementById(`cmp-mq-${i}`)?.value||'';
-      const cost = document.getElementById(`cmp-mk-${i}`)?.value||'';
-      let dims = '';
-      if(geo==='Cilindro' && dim1) dims = `⌀${dim1}×L${lar}mm`;
-      else if(dim1) dims = `${dim1}×${anc}×${lar}mm`;
-      matsLineas.push(`• ${sel}${dims?' '+dims:''}${cant?' — '+cant+' kg':''}${cost?' — $'+Number(cost).toLocaleString('es-CO'):''}`);
+      return {
+        tipo:'svc', nombre:sel,
+        cant, costCot, unidad:'días',
+        dureza: document.getElementById(`cmp-dur-${i}`)?.value||'',
+        notas: descRich
+      };
     }
-  });
-  if(matsLineas.length) {
-    lineas.push('🪨 MATERIALES:');
-    lineas.push(...matsLineas);
-  }
-
-  // Servicios
-  const svcsLineas = [];
-  (window._cmpSvcs||[]).forEach((s,i)=>{
-    const sel  = document.getElementById(`cmp-ss-${i}`)?.value||'';
-    if(!sel) return;
-    const dias = document.getElementById(`cmp-sd-${i}`)?.value||'';
-    const cost = document.getElementById(`cmp-sc-${i}`)?.value||'';
-    const dur  = document.getElementById(`cmp-sdur-${i}`)?.value||'';
-    svcsLineas.push(`• ${sel}${dur?' — '+dur:''}${dias?' — '+dias+' días':''}${cost?' — $'+Number(cost).toLocaleString('es-CO'):''}`);
-  });
-  if(svcsLineas.length){
-    if(lineas.length) lineas.push('');
-    lineas.push('🛠 SERVICIOS EXTERNOS:');
-    lineas.push(...svcsLineas);
-  }
-
-  const resumen = lineas.join('\n');
-  const resEl = document.getElementById('cmp-desc-resumen');
-  const obsEl = document.getElementById('cmp-obs');
-
-  if(resEl){
-    resEl.style.display = resumen ? '' : 'none';
-    resEl.innerHTML = resumen.split('\n').map(l=>
-      l.startsWith('🪨')||l.startsWith('🛠')
-        ? `<div style="font-weight:700;color:var(--accent);margin-top:4px">${l}</div>`
-        : l ? `<div style="padding-left:8px">${l}</div>` : '<div style="height:4px"></div>'
-    ).join('');
-  }
-  // También copiar al campo de texto como texto plano
-  if(obsEl && !obsEl.textContent.trim()){
-    obsEl.innerText = resumen;
-  }
-  toast('✅ Descripción generada','success');
+  }).filter(Boolean);
+  return { items };
 }
 
-// ── Pegar imagen en el campo rich text ───────────────────────────────────
-function _cmpHandlePaste(event){
-  const items = event.clipboardData?.items||[];
+// ── Pegar imagen en campo de descripción de ítem específico ─────────────
+function _cmpPasteItem(event, i) {
+  const items = (event.clipboardData||window.clipboardData)?.items||[];
+  let hasImg = false;
   for(const item of items){
     if(item.type.startsWith('image/')){
-      event.preventDefault();
+      hasImg = true;
       const file = item.getAsFile();
+      if(!file) continue;
       const reader = new FileReader();
       reader.onload = e => {
         const img = document.createElement('img');
         img.src = e.target.result;
         img.style.cssText = 'max-width:100%;border-radius:6px;margin:4px 0;display:block';
-        img.title = 'Imagen pegada';
-        const sel = window.getSelection();
-        if(sel&&sel.rangeCount){
-          const range = sel.getRangeAt(0);
-          range.deleteContents();
-          range.insertNode(img);
-        } else {
-          document.getElementById('cmp-obs')?.appendChild(img);
+        img.dataset.base64 = e.target.result;  // guardar para recuperar al leer
+        const el = event.target;
+        if(el){
+          el.focus();
+          const sel = window.getSelection();
+          if(sel && sel.rangeCount){
+            const range = sel.getRangeAt(0);
+            range.deleteContents();
+            range.insertNode(img);
+            // mover cursor después de la imagen
+            const r2 = document.createRange();
+            r2.setStartAfter(img); r2.collapse(true);
+            sel.removeAllRanges(); sel.addRange(r2);
+          } else { el.appendChild(img); }
         }
       };
       reader.readAsDataURL(file);
-      return;
     }
   }
-  // Pegar texto plano sin formato
-  event.preventDefault();
-  const text = event.clipboardData?.getData('text/plain')||'';
-  document.execCommand('insertText', false, text);
+  if(hasImg) event.preventDefault();
 }
 
-// ── Selección de archivo en el modal de compra ────────────────────────────
+function _cmpHandlePaste(event){
+  const items=(event.clipboardData||window.clipboardData)?.items||[];
+  let hasImg=false;
+  for(const item of items){
+    if(item.type.startsWith('image/')){
+      hasImg=true;
+      const file=item.getAsFile();
+      if(!file) continue;
+      const reader=new FileReader();
+      reader.onload=e=>{
+        const img=document.createElement('img');
+        img.src=e.target.result;
+        img.style.cssText='max-width:100%;border-radius:6px;margin:4px 0;display:block';
+        const obs=document.getElementById('cmp-obs');
+        if(obs){ obs.focus(); const sel=window.getSelection(); if(sel&&sel.rangeCount){ const range=sel.getRangeAt(0); range.deleteContents(); range.insertNode(img); } else obs.appendChild(img); }
+      };
+      reader.readAsDataURL(file);
+    }
+  }
+  if(hasImg) event.preventDefault();
+}
 function _cmpSelArchivo(input, slot){
-  const file = input?.files?.[0];
-  if(file) _cmpSetFile(file, slot);
+  const file=input.files?.[0]; if(!file) return;
+  const obj={file,nombre:file.name,base64:null,url:null};
+  if(slot==='plano') window._compraPlano=obj;
+  else window._compraDWG=obj;
+  const lbl=document.getElementById(`cmp-lbl-${slot}`);
+  if(lbl) lbl.innerHTML=`<strong>${file.name}</strong><br><span style="font-size:10px;color:var(--accent)">✓ Listo</span>`;
+  const zona=document.getElementById(`cmp-zona-${slot}`);
+  if(zona) zona.style.borderColor='var(--accent)';
 }
 function _cmpHandleDrop(event, slot){
-  const file = event.dataTransfer?.files?.[0];
-  if(file) _cmpSetFile(file, slot);
+  const file=event.dataTransfer?.files?.[0]; if(!file) return;
+  const input=document.getElementById(`cmp-inp-${slot}`);
+  const dt=new DataTransfer(); dt.items.add(file);
+  if(input){ input.files=dt.files; _cmpSelArchivo(input,slot); }
 }
-function _cmpSetFile(file, slot){
-  const lbl  = document.getElementById(`cmp-lbl-${slot}`);
-  const zona = document.getElementById(`cmp-zona-${slot}`);
-  if(slot==='plano') window._compraPlano = { file, nombre: file.name };
-  else               window._compraDWG   = { file, nombre: file.name };
-  if(lbl)  lbl.innerHTML = `<span style="color:var(--accent);font-weight:600">${_archIcon(file.name)} ${file.name}</span><br>
-    <span style="font-size:10px;color:var(--muted)">${(file.size/1024).toFixed(1)} KB</span>`;
-  if(zona) zona.style.borderColor = 'var(--accent)';
-}
-
-// ── Subir un archivo a Drive ──────────────────────────────────────────────
 async function _cmpSubirArchivo(fileObj, idqr, suffix){
-  const base64 = await new Promise((res,rej)=>{
-    const r = new FileReader();
-    r.onload  = ()=>res(r.result.split(',')[1]);
-    r.onerror = ()=>rej(new Error('Error leyendo archivo'));
+  const base64=await new Promise((res,rej)=>{
+    const r=new FileReader();
+    r.onload=()=>res(r.result.split(',')[1]);
+    r.onerror=()=>rej(new Error('Error leyendo archivo'));
     r.readAsDataURL(fileObj.file);
   });
-  const result = await POST_ARCH('uploadFile',{
-    base64, mimeType: fileObj.file.type||'application/octet-stream',
-    fileName: fileObj.nombre, idqr: String(idqr)+'_'+suffix
+  const result=await POST_ARCH('uploadFile',{
+    base64, mimeType:fileObj.file.type||'application/octet-stream',
+    fileName:fileObj.nombre, idqr:String(idqr)+'_'+suffix
   });
-  return { url: result.url, nombre: fileObj.nombre };
+  return {url:result.url,nombre:fileObj.nombre};
 }
 
-// ── Leer los campos editados del modal y construir el objeto compra ───────
-function _cmpLeerFormulario(op, it) {
-  const mats = {}, svcs = {};
-
-  for(let n=1;n<=5;n++){
-    const sel  = document.getElementById(`cmp-mat-sel-${n}`)?.value||'';
-    if(!sel) continue;
-    const esEsp = sel==='ESPECIAL';
-    mats[`MAT_${n}_NOMBRE`] = esEsp ? 'ESPECIAL' : sel;
-    mats[`MAT_${n}_GEO`]    = esEsp ? '' : (document.getElementById(`cmp-mat-geo-${n}`)?.value||'');
-    mats[`MAT_${n}_DIM1`]   = esEsp ? 0  : Number(document.getElementById(`cmp-mat-dim1-${n}`)?.value||0);
-    mats[`MAT_${n}_LARGO`]  = esEsp ? 0  : Number(document.getElementById(`cmp-mat-lar-${n}`)?.value||0);
-    mats[`MAT_${n}_ANCHO`]  = esEsp ? 0  : Number(document.getElementById(`cmp-mat-anc-${n}`)?.value||0);
-    mats[`MAT_${n}_CANT`]   = esEsp
-      ? Number(document.getElementById(`cmp-mat-cant-${n}`)?.value||0)
-      : Number(document.getElementById(`cmp-mat-cant-norm-${n}`)?.value||0);
-    mats[`MAT_${n}_COSTO`]  = esEsp
-      ? Number(document.getElementById(`cmp-mat-cost-${n}`)?.value||0)
-      : Number(document.getElementById(`cmp-mat-costn-${n}`)?.value||0);
-    if(esEsp) mats[`MAT_${n}_DESC_ESP`] = document.getElementById(`cmp-mat-desc-${n}`)?.value||'';
-  }
-
-  for(let n=1;n<=3;n++){
-    const sel = document.getElementById(`cmp-svc-sel-${n}`)?.value||'';
-    if(!sel) continue;
-    svcs[`SVC_${n}_NOMBRE`] = sel;
-    svcs[`SVC_${n}_DIAS`]   = Number(document.getElementById(`cmp-svc-dias-${n}`)?.value||0);
-    svcs[`SVC_${n}_COSTO`]  = Number(document.getElementById(`cmp-svc-cost-${n}`)?.value||0);
-    svcs[`SVC_${n}_DUREZA`] = document.getElementById(`cmp-svc-dur-${n}`)?.value||'';
-    svcs[`SVC_${n}_NOTAS`]  = document.getElementById(`cmp-svc-desc-${n}`)?.value||'';
-  }
-
-  return { mats, svcs };
-}
-
-// ── Confirmar y guardar el pedido ─────────────────────────────────────────
 async function _cmpConfirmar(idqr){
   const op = (DB.produccion||[]).find(x=>String(x.IDQR)===String(idqr));
   if(!op){ toast('OP no encontrada','error'); return; }
@@ -9168,73 +9222,70 @@ async function _cmpConfirmar(idqr){
       prog2.done('Archivo subido');
     }
 
-    // 2) Leer formulario editado
-    const { mats, svcs } = _cmpLeerFormulario();
+    // 2) Leer formulario — nuevo sistema unificado de ítems
+    const { items: itemsFormulario } = _cmpLeerFormulario();
+    if(!itemsFormulario.length){ toast('Agrega al menos un ítem al pedido','warn'); if(btn){btn.disabled=false;btn.textContent='🧱 Confirmar Pedido';} return; }
 
-    // 3) Construir registro COMPRAS
+    const totalCotOC = itemsFormulario.reduce((s,fit)=>s+Number(fit.costCot||0),0);
+
+    // 3) Resumen automático desde los ítems
+    const resumenAuto2 = itemsFormulario.map((fit,n)=>{
+      if(fit.tipo==='mat'){
+        const desc = fit.esEspecial?fit.descEsp:fit.nombre;
+        const dims = !fit.esEspecial&&fit.geo==='Cilindro'&&fit.dim1?`⌀${fit.dim1}×L${fit.lar}mm`:(!fit.esEspecial&&fit.dim1?`${fit.dim1}×${fit.anc}×${fit.lar}mm`:'');
+        return `${n+1}. 🪨 ${desc}${dims?' '+dims:''}${fit.cant?' — '+fit.cant+' kg':''}${fit.costCot?' — $'+Number(fit.costCot).toLocaleString('es-CO'):''}`;
+      } else {
+        return `${n+1}. 🛠 ${fit.nombre}${fit.dureza?' — '+fit.dureza:''}${fit.cant?' — '+fit.cant+' días':''}${fit.costCot?' — $'+Number(fit.costCot).toLocaleString('es-CO'):''}`;
+      }
+    }).join('\n');
+
+    // 4) Construir cabecera COMPRAS
     const ahora    = new Date();
     const idCompra = `CMP-${ahora.getFullYear()}${String(ahora.getMonth()+1).padStart(2,'0')}${String(ahora.getDate()).padStart(2,'0')}${String(ahora.getHours()).padStart(2,'0')}${String(ahora.getMinutes()).padStart(2,'0')}-${idqr}`;
 
     const compraData = {
-      N_OC:      idCompra,
-      ID_COMPRA: idCompra,
-      FECHA:     ahora.toISOString().slice(0,10),
-      OP:        op.OP||'', COT: op.COT||'', ITEM: op.ITEM||'',
-      IDQR:      idqr, CLIENTE: op.CLIENTE||'',
-      DESCRIPCION_OC: resumenAuto || op.DESCRIPCION||'',
+      N_OC:          idCompra,
+      ID_COMPRA:     idCompra,
+      FECHA:         ahora.toISOString().slice(0,10),
+      OP:            op.OP||'', COT: op.COT||'', ITEM: op.ITEM||'',
+      IDQR:          idqr, CLIENTE: op.CLIENTE||'',
+      DESCRIPCION_OC: resumenAuto2 || obs || op.DESCRIPCION||'',
       OBSERVACIONES: obs,
-      TIPO:      op.TIPO||'', DISEÑADOR: op.DISEÑADOR||'',
-      PRECIO_COT: it?.['PRECIO X ITEM']||it?.['PRECIO UNITARIO']||0,
       PLANO_URL: planoUrl, PLANO_NOMBRE: planoNom,
       DWG_URL:   dwgUrl,   DWG_NOMBRE:   dwgNom,
-      OBSERVACIONES: obs, ESTADO: 'PENDIENTE',
-      ...mats, ...svcs
+      ESTADO:        'PENDIENTE',
+      TOTAL_COT_OC:  totalCotOC,
+      TOTAL_OC:      0
     };
 
-    // 4) Guardar en COMPRAS
+    // 5) Guardar cabecera en COMPRAS
     await POST('createCompra', compraData);
 
-    // 5) Guardar elementos en ELEMENTOS_OC (materiales + servicios como filas)
-    let itemNum = 1;
-    for(let n=1;n<=5;n++){
-      const nombre = mats[`MAT_${n}_NOMBRE`];
-      if(!nombre) continue;
-      const esEsp = nombre==='ESPECIAL';
+    // 6-A) Guardar cada ítem como fila en ELEMENTOS_OC
+    for(let ii=0;ii<itemsFormulario.length;ii++){
+      const fit=itemsFormulario[ii];
+      const isMat=fit.tipo==='mat';
       await POST('createElemOC',{
-        N_OC:        idCompra,
-        ITEM_NUM:    itemNum++,
-        DESCRIPCION: esEsp ? (mats[`MAT_${n}_DESC_ESP`]||'Material especial') : nombre,
-        MATERIAL:    nombre,
-        GEO:         mats[`MAT_${n}_GEO`]||'',
-        DIM1:        mats[`MAT_${n}_DIM1`]||0,
-        LARGO:       mats[`MAT_${n}_LARGO`]||0,
-        ANCHO:       mats[`MAT_${n}_ANCHO`]||0,
-        CANT:        mats[`MAT_${n}_CANT`]||0,
-        UNIDAD:      'kg',
-        PRECIO_UNIT: 0,
-        TOTAL:       mats[`MAT_${n}_COSTO`]||0,
-        NOTAS:       ''
-      });
-    }
-    for(let n=1;n<=3;n++){
-      const nombre = svcs[`SVC_${n}_NOMBRE`];
-      if(!nombre) continue;
-      await POST('createElemOC',{
-        N_OC:        idCompra,
-        ITEM_NUM:    itemNum++,
-        DESCRIPCION: nombre,
-        MATERIAL:    '',
-        GEO:         '',
-        DIM1:        0, LARGO:0, ANCHO:0,
-        CANT:        svcs[`SVC_${n}_DIAS`]||1,
-        UNIDAD:      'días',
-        PRECIO_UNIT: 0,
-        TOTAL:       svcs[`SVC_${n}_COSTO`]||0,
-        NOTAS:       `${svcs[`SVC_${n}_DUREZA`]||''} ${svcs[`SVC_${n}_NOTAS`]||''}`.trim()
+        N_OC:            idCompra,
+        ITEM_NUM:        ii+1,
+        DESCRIPCION:     isMat?(fit.esEspecial?fit.descEsp:fit.nombre):fit.nombre,
+        MATERIAL:        isMat?fit.nombre:'🛠 Servicio externo',
+        GEO:             isMat?(fit.geo||''):'',
+        DIM1:            isMat?(fit.dim1||0):0,
+        LARGO:           isMat?(fit.lar||0):0,
+        ANCHO:           isMat?(fit.anc||0):0,
+        CANT:            fit.cant||0,
+        UNIDAD:          fit.unidad||(isMat?'kg':'días'),
+        PRECIO_COT:      fit.costCot||0,
+        PRECIO_UNIT:     0,
+        TOTAL_COT:       fit.costCot||0,
+        TOTAL:           0,
+        DIFERENCIA_ITEM: 0,
+        NOTAS:           isMat?(fit.notas||''):([fit.dureza,fit.notas].filter(Boolean).join(' · '))
       });
     }
 
-    // 6) Marcar MP pedido
+        // 6) Marcar MP pedido
     await POST('updateOP',{ IDQR: idqr, 'MP\nINSUMOS': 'TRUE' });
     if(op) op['MP\nINSUMOS'] = 'TRUE';
 
@@ -11027,30 +11078,84 @@ async function _verDetalleOC(noc) {
   const ESTADOS_OC = ['PENDIENTE','APROBADO','OC EMITIDA','RECIBIDO PARCIAL','RECIBIDO TOTAL'];
   const EST_COLOR  = { 'PENDIENTE':'#b45309','APROBADO':'#1d4ed8','OC EMITIDA':'#6d28d9','RECIBIDO PARCIAL':'#0891b2','RECIBIDO TOTAL':'#059669' };
 
-  const totalCalc = elems.reduce((s,e)=>s+Number(e.TOTAL||0),0);
+  const totalCalc    = elems.reduce((s,e)=>s+Number(e.TOTAL||0),0);
+  const totalCotCalc = elems.reduce((s,e)=>s+Number(e.TOTAL_COT||e.TOTAL||0),0);
+  // Totales a nivel de OC (desde cabecera si existen, de lo contrario de ítems)
+  const totalCotOC   = Number(c.TOTAL_COT_OC||0) || totalCotCalc;
+  const totalRealOC  = Number(c.TOTAL_OC||0)     || totalCalc;
+  const difOC        = totalRealOC - totalCotOC;
+
+  // Resumen de comparación cotizado vs real a nivel OC
+  const resumePreciosHtml = `
+    <div style="background:var(--card2);border-radius:10px;padding:12px;margin-bottom:12px">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:8px">
+        💰 Resumen de Precios</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;text-align:center">
+        <div style="background:var(--surface);border-radius:8px;padding:8px;border:1px dashed #f59e0b">
+          <div style="font-size:9px;color:#f59e0b;font-weight:700;margin-bottom:3px">💬 COTIZADO</div>
+          <div style="font-size:14px;font-weight:800;color:#f59e0b">$${totalCotOC.toLocaleString('es-CO')}</div>
+        </div>
+        <div style="background:var(--surface);border-radius:8px;padding:8px;border:1px solid #059669">
+          <div style="font-size:9px;color:#059669;font-weight:700;margin-bottom:3px">✅ REAL</div>
+          <div style="font-size:14px;font-weight:800;color:var(--gold)">$${totalRealOC.toLocaleString('es-CO')}</div>
+        </div>
+        <div style="background:var(--surface);border-radius:8px;padding:8px;border:1px solid ${difOC>0?'#ef4444':difOC<0?'#059669':'var(--border)'}">
+          <div style="font-size:9px;font-weight:700;margin-bottom:3px;color:${difOC>0?'#ef4444':difOC<0?'#059669':'var(--muted)'}">
+            ${difOC>0?'▲ SOBRECOSTO':difOC<0?'▼ AHORRO':'= EXACTO'}</div>
+          <div style="font-size:13px;font-weight:800;color:${difOC>0?'#ef4444':difOC<0?'#059669':'var(--muted)'}">
+            ${difOC!==0?(difOC>0?'+':'')+(difOC).toLocaleString('es-CO'):'$0'}</div>
+        </div>
+      </div>
+      ${c.COSTO_REAL?`<div style="margin-top:8px;font-size:11px;color:var(--muted);text-align:center">
+        Costo real confirmado: <strong style="color:var(--gold)">$${Number(c.COSTO_REAL).toLocaleString('es-CO')}</strong></div>`:''}
+    </div>`;
+
   const elemsHtml = elems.length ? `
     <div style="overflow-x:auto;margin-top:8px">
       <table style="width:100%;border-collapse:collapse;font-size:11px">
         <thead><tr style="background:var(--card2)">
           <th style="padding:5px 8px;text-align:left;border-bottom:1px solid var(--border)">#</th>
-          <th style="padding:5px 8px;text-align:left;border-bottom:1px solid var(--border)">Descripción / Material</th>
-          <th style="padding:5px 8px;text-align:center;border-bottom:1px solid var(--border)">Cant</th>
-          <th style="padding:5px 8px;text-align:right;border-bottom:1px solid var(--border)">Total</th>
+          <th style="padding:5px 8px;text-align:left;border-bottom:1px solid var(--border)">Material / Descripción</th>
+          <th style="padding:5px 8px;text-align:right;border-bottom:1px solid var(--border);color:#f59e0b">💬 Cotiz.</th>
+          <th style="padding:5px 8px;text-align:right;border-bottom:1px solid var(--border);color:#059669">✅ Real</th>
+          <th style="padding:5px 8px;text-align:right;border-bottom:1px solid var(--border)">Δ</th>
+          <th style="padding:5px 8px;text-align:center;border-bottom:1px solid var(--border)"></th>
         </tr></thead>
         <tbody>
-          ${elems.map(e=>`<tr style="border-bottom:1px solid var(--border)">
-            <td style="padding:5px 8px;color:var(--muted);font-weight:700">${e.ITEM_NUM}</td>
-            <td style="padding:5px 8px">
-              <div style="font-weight:700;font-size:12px">${e.DESCRIPCION||'—'}</div>
-              ${e.MATERIAL&&e.MATERIAL!==e.DESCRIPCION?`<div style="color:var(--accent);font-size:10px;margin-top:1px">${e.MATERIAL}</div>`:''}
-              ${e.NOTAS?`<div style="color:var(--muted);font-size:10px;font-family:monospace;margin-top:1px">${e.NOTAS}</div>`:''}
-            </td>
-            <td style="padding:5px 8px;text-align:center;white-space:nowrap">${e.CANT||'—'} ${e.UNIDAD||''}</td>
-            <td style="padding:5px 8px;text-align:right;color:var(--gold);font-weight:700;white-space:nowrap">${e.TOTAL?'$'+Number(e.TOTAL).toLocaleString('es-CO'):'—'}</td>
-          </tr>`).join('')}
+          ${elems.map(e=>{
+            const totCot  = Number(e.TOTAL_COT||0);
+            const totReal = Number(e.TOTAL||0);
+            const dif     = totReal - totCot;
+            const hasPrecioReal = e.PRECIO_UNIT && Number(e.PRECIO_UNIT)>0;
+            const difColor= dif>0?'#ef4444':dif<0?'#059669':'var(--muted)';
+            const safeId  = String(e.ID_ELEM||''). replace(/'/g,"\\'");
+            return `<tr style="border-bottom:1px solid var(--border)">
+              <td style="padding:5px 8px;color:var(--muted);font-weight:700">${e.ITEM_NUM}</td>
+              <td style="padding:5px 8px">
+                <div style="font-weight:700;font-size:12px">${e.DESCRIPCION||'—'}</div>
+                ${e.MATERIAL&&e.MATERIAL!==e.DESCRIPCION?`<div style="color:var(--accent);font-size:10px;margin-top:1px">${e.MATERIAL}</div>`:''}
+                <div style="color:var(--muted);font-size:10px;margin-top:1px">${e.CANT||''} ${e.UNIDAD||''} ${e.NOTAS?'· '+e.NOTAS:''}  </div>
+              </td>
+              <td style="padding:5px 8px;text-align:right;color:#f59e0b;white-space:nowrap;font-size:11px">
+                ${totCot?'$'+totCot.toLocaleString('es-CO'):'—'}</td>
+              <td style="padding:5px 8px;text-align:right;white-space:nowrap;font-size:11px;font-weight:${hasPrecioReal?'700':'400'};color:${hasPrecioReal?'var(--gold)':'var(--muted)'}">
+                ${hasPrecioReal?'$'+totReal.toLocaleString('es-CO'):'Pendiente'}</td>
+              <td style="padding:5px 8px;text-align:right;white-space:nowrap;font-size:10px;color:${difColor}">
+                ${(totCot&&hasPrecioReal)?(dif>0?'+':'')+(dif).toLocaleString('es-CO'):'—'}</td>
+              <td style="padding:4px 6px;text-align:center">
+                <button class="btn btn-ghost btn-sm" style="font-size:10px;padding:3px 7px;white-space:nowrap"
+                  onclick="_modalPrecioRealItem('${safeNOC}','${safeId}',${e.ITEM_NUM},${Number(e.CANT||0)},${Number(e.PRECIO_COT||0)},${Number(e.PRECIO_UNIT||0)})">
+                  💰 Real</button>
+              </td>
+            </tr>`;
+          }).join('')}
           <tr style="background:var(--card2);font-weight:700">
-            <td colspan="3" style="padding:7px 8px;text-align:right;font-size:12px">TOTAL PEDIDO</td>
+            <td colspan="2" style="padding:7px 8px;text-align:right;font-size:12px">TOTALES</td>
+            <td style="padding:7px 8px;text-align:right;color:#f59e0b;font-size:12px">$${totalCotCalc.toLocaleString('es-CO')}</td>
             <td style="padding:7px 8px;text-align:right;color:var(--gold);font-size:13px">$${totalCalc.toLocaleString('es-CO')}</td>
+            <td style="padding:7px 8px;text-align:right;font-size:12px;color:${difOC>0?'#ef4444':difOC<0?'#059669':'var(--muted)'}">
+              ${difOC!==0?(difOC>0?'+':'')+(difOC).toLocaleString('es-CO'):'$0'}</td>
+            <td></td>
           </tr>
         </tbody>
       </table>
@@ -11093,6 +11198,8 @@ async function _verDetalleOC(noc) {
       ${c.PLANO_URL?`<a href="${c.PLANO_URL}" target="_blank" class="btn btn-ghost btn-sm">📄 ${c.PLANO_NOMBRE||'Plano'}</a>`:''}
       ${c.DWG_URL?`<a href="${c.DWG_URL}" target="_blank" class="btn btn-ghost btn-sm">📐 ${c.DWG_NOMBRE||'DWG'}</a>`:''}
     </div>`:''}
+    <!-- Resumen cotizado vs real -->
+    ${resumePreciosHtml}
     <!-- Elementos -->
     <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:4px">
       🧾 Elementos de la OC</div>
@@ -11103,6 +11210,8 @@ async function _verDetalleOC(noc) {
       <button class="btn btn-ghost btn-sm" onclick="_asignarProveedorOC('${safeNOC}')">🏭 ${c.PROVEEDOR?'Cambiar':'Asignar'} Proveedor</button>
       <button class="btn btn-ghost btn-sm" onclick="_generarOC('${safeNOC}')">${c.OC_PDF_URL?'📄 Ver PDF':'📋 Generar OC'}</button>
       <button class="btn btn-ghost btn-sm" onclick="_editarOC('${safeNOC}')">✏️ Editar</button>
+      <button class="btn btn-ghost btn-sm" style="border-color:#f59e0b;color:#f59e0b"
+        onclick="_registrarCostoReal('${safeNOC}',${totalCotCalc})">💰 Costo Real OC</button>
       ${c.TELEFONO?`<button class="btn btn-ghost btn-sm" onclick="_compartirOCWA('${safeNOC}')">📲 WhatsApp</button>`:''}
     </div>
     ${c.FECHA_RECIBIDO?`<div style="margin-top:8px;font-size:11px;color:var(--muted)">Recibido: ${c.FECHA_RECIBIDO} · ${c.NOTAS_RECEPCION||''}</div>`:''}
@@ -11156,6 +11265,15 @@ async function _abrirFormOC(c={}) {
 
   if(c.N_OC && !isNew) {
     try { window._ocElems = await POST('getElemsOC',{N_OC:c.N_OC}); } catch(e){}
+    // Si el precio unitario vino en 0 (p.ej. generado desde una OP, donde solo
+    // se guardó el costo estimado total), lo reconstruimos a partir de Total/Cant
+    // para que aparezca precargado y el usuario pueda ajustarlo al precio real de compra.
+    (window._ocElems||[]).forEach(el=>{
+      const cant = Number(el.CANT||0);
+      const pu   = Number(el.PRECIO_UNIT||0);
+      const tot  = Number(el.TOTAL||0);
+      if(!pu && cant>0 && tot>0){ el.PRECIO_UNIT = Math.round(tot/cant); }
+    });
   }
 
   const safeV = v => String(v||'').replace(/"/g,'&quot;');
@@ -11216,11 +11334,16 @@ async function _abrirFormOC(c={}) {
       <div id="oc-elems-list"></div>
     </div>
 
-    <!-- Total -->
-    <div style="display:flex;justify-content:space-between;align-items:center;
-      background:var(--card2);border-radius:8px;padding:10px 12px;margin-bottom:10px">
-      <span style="font-size:12px;font-weight:700">TOTAL OC</span>
-      <span id="oc-total" style="font-size:16px;font-weight:800;color:var(--gold)">$0</span>
+    <!-- Totales cotizado vs real -->
+    <div style="background:var(--card2);border-radius:8px;padding:10px 12px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span style="font-size:11px;color:#f59e0b;font-weight:700">💬 TOTAL COTIZADO</span>
+        <span id="oc-total-cot" style="font-size:14px;font-weight:700;color:#f59e0b">$0</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:11px;color:#059669;font-weight:700">✅ TOTAL REAL</span>
+        <span id="oc-total" style="font-size:16px;font-weight:800;color:var(--gold)">$0</span>
+      </div>
     </div>
 
     <!-- Observaciones -->
@@ -11233,11 +11356,11 @@ async function _abrirFormOC(c={}) {
     </div>
   </div>`,
   `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
-   <button class="btn btn-primary" id="oc-btn-save" onclick="_guardarOC(${JSON.stringify(c.OP||'')},${JSON.stringify(c.N_OC||'')})">
+   <button class="btn btn-primary" id="oc-btn-save" onclick="_guardarOC(${JSON.stringify(c.OP||'').replace(/"/g,'&quot;')},${JSON.stringify(c.N_OC||'').replace(/"/g,'&quot;')})">
      💾 Guardar OC</button>`
   );
 
-  requestAnimationFrame(()=>{ _ocRenderElems(); _ocCalcTotal(); });
+  requestAnimationFrame(()=>{ _ocRenderElems(); _ocSumTotal(); });
 }
 
 // ── Elementos de la OC (lista dinámica) ─────────────────────────────────
@@ -11257,7 +11380,7 @@ function _ocElemRowHtml(el, i) {
         style="width:26px;height:26px;border-radius:5px;border:1px solid var(--danger);
           background:transparent;color:var(--danger);font-size:12px;cursor:pointer;flex-shrink:0">✕</button>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px">
       <div><label style="font-size:9px;color:var(--muted)">Material</label>
         ${inp(`oc-el-mat-${i}`,el.MATERIAL,'SAE 4140…')}</div>
       <div><label style="font-size:9px;color:var(--muted)">Geometría</label>
@@ -11278,9 +11401,18 @@ function _ocElemRowHtml(el, i) {
           color:var(--text);border-radius:6px;padding:5px 4px;font-size:10px">
           ${['kg','unid','m','m²','lt','m³'].map(u=>`<option ${el.UNIDAD===u?'selected':''}>${u}</option>`).join('')}
         </select></div>
-      <div><label style="font-size:9px;color:var(--muted)">Precio unit $</label>
-        ${inp(`oc-el-pu-${i}`,el.PRECIO_UNIT,'0','number')}</div>
-      <div><label style="font-size:9px;color:var(--muted)">Total $</label>
+      <div><label style="font-size:9px;color:#f59e0b;font-weight:700">💬 Cotizado $</label>
+        ${inp(`oc-el-cot-${i}`,el.PRECIO_COT||el.PRECIO_UNIT||'','0','number')}</div>
+      <div><label style="font-size:9px;color:#059669;font-weight:700">✅ Real $</label>
+        <input type="number" id="oc-el-pu-${i}" value="${el.PRECIO_UNIT||''}" placeholder="0"
+          oninput="_ocCalcFila(${i})"
+          style="width:100%;background:var(--surface);border:2px solid #059669;color:#059669;
+            border-radius:6px;padding:5px 7px;font-size:11px;font-weight:700;box-sizing:border-box"></div>
+      <div><label style="font-size:9px;color:var(--muted)">Total cotizado $</label>
+        <input type="number" id="oc-el-totcot-${i}" value="${el.TOTAL_COT||''}" placeholder="—" readonly
+          style="width:100%;background:var(--card2);border:1px dashed #f59e0b;color:#f59e0b;
+            border-radius:6px;padding:5px 7px;font-size:11px;box-sizing:border-box"></div>
+      <div><label style="font-size:9px;color:var(--muted)">Total real $</label>
         <input type="number" id="oc-el-tot-${i}" value="${el.TOTAL||''}" placeholder="0" readonly
           style="width:100%;background:var(--card2);border:1px solid var(--border);color:var(--gold);
             border-radius:6px;padding:5px 7px;font-size:11px;font-weight:700;box-sizing:border-box"></div>
@@ -11299,9 +11431,9 @@ function _ocRenderElems() {
   const c = document.getElementById('oc-elems-list');
   if(!c) return;
   c.innerHTML = (window._ocElems||[]).map((el,i)=>_ocElemRowHtml(el,i)).join('');
-  // bind listeners precio unit → recalcular total fila
+  // bind listeners: cant / precio cotizado / precio real → recalcular totales fila
   (window._ocElems||[]).forEach((_,i)=>{
-    [`oc-el-cant-${i}`,`oc-el-pu-${i}`].forEach(id=>{
+    [`oc-el-cant-${i}`,`oc-el-cot-${i}`,`oc-el-pu-${i}`].forEach(id=>{
       const el=document.getElementById(id);
       if(el&&!el._ocBound){ el._ocBound=true; el.addEventListener('input',()=>_ocCalcFila(i)); }
     });
@@ -11309,26 +11441,51 @@ function _ocRenderElems() {
 }
 
 function _ocCalcFila(i) {
-  const cant = Number(document.getElementById(`oc-el-cant-${i}`)?.value||0);
-  const pu   = Number(document.getElementById(`oc-el-pu-${i}`)?.value||0);
-  const tot  = Math.round(cant*pu);
-  const totEl = document.getElementById(`oc-el-tot-${i}`);
-  if(totEl) totEl.value = tot||'';
+  const cant   = Number(document.getElementById(`oc-el-cant-${i}`)?.value||0);
+  const pcot   = Number(document.getElementById(`oc-el-cot-${i}`)?.value||0);
+  const preal  = Number(document.getElementById(`oc-el-pu-${i}`)?.value||0);
+  const totCot = Math.round(cant * pcot);
+  const totReal= Math.round(cant * preal);
+  const totCotEl = document.getElementById(`oc-el-totcot-${i}`);
+  const totEl    = document.getElementById(`oc-el-tot-${i}`);
+  if(totCotEl) totCotEl.value = totCot||'';
+  if(totEl)    totEl.value    = totReal||'';
   _ocCalcTotal();
 }
 
 function _ocCalcTotal() {
-  let sum = 0;
+  let sumReal = 0, sumCot = 0;
   (window._ocElems||[]).forEach((_,i)=>{
-    const cant = Number(document.getElementById(`oc-el-cant-${i}`)?.value||0);
-    const pu   = Number(document.getElementById(`oc-el-pu-${i}`)?.value||0);
-    const tot  = document.getElementById(`oc-el-tot-${i}`);
-    const v    = Math.round(cant*pu);
-    if(tot) tot.value = v||'';
-    sum += v;
+    const cant   = Number(document.getElementById(`oc-el-cant-${i}`)?.value||0);
+    const pcot   = Number(document.getElementById(`oc-el-cot-${i}`)?.value||0);
+    const preal  = Number(document.getElementById(`oc-el-pu-${i}`)?.value||0);
+    const vCot   = Math.round(cant*pcot);
+    const vReal  = Math.round(cant*preal);
+    const totCotEl = document.getElementById(`oc-el-totcot-${i}`);
+    const totEl    = document.getElementById(`oc-el-tot-${i}`);
+    if(totCotEl) totCotEl.value = vCot||'';
+    if(totEl)    totEl.value    = vReal||'';
+    sumCot  += vCot;
+    sumReal += vReal;
   });
-  const el = document.getElementById('oc-total');
-  if(el) el.textContent = '$'+sum.toLocaleString('es-CO');
+  const elTotal = document.getElementById('oc-total');
+  const elCot   = document.getElementById('oc-total-cot');
+  if(elTotal) elTotal.textContent = '$'+sumReal.toLocaleString('es-CO');
+  if(elCot)   elCot.textContent   = '$'+sumCot.toLocaleString('es-CO');
+}
+
+// Suma los totales YA guardados sin recalcularlos (para el render inicial,
+// evita pisar con $0 los costos estimados que aún no tienen precio unitario).
+function _ocSumTotal() {
+  let sumReal = 0, sumCot = 0;
+  (window._ocElems||[]).forEach((_,i)=>{
+    sumReal += Number(document.getElementById(`oc-el-tot-${i}`)?.value||0);
+    sumCot  += Number(document.getElementById(`oc-el-totcot-${i}`)?.value||0);
+  });
+  const elTotal = document.getElementById('oc-total');
+  const elCot   = document.getElementById('oc-total-cot');
+  if(elTotal) elTotal.textContent = '$'+sumReal.toLocaleString('es-CO');
+  if(elCot)   elCot.textContent   = '$'+sumCot.toLocaleString('es-CO');
 }
 
 function _ocAddElem() {
@@ -11343,19 +11500,29 @@ function _ocRemElem(i) {
 
 // ── Leer formulario y guardar ────────────────────────────────────────────
 function _ocLeerElems() {
-  return (window._ocElems||[]).map((el,i)=>({
-    DESCRIPCION:  document.getElementById(`oc-el-desc-${i}`)?.value||'',
-    MATERIAL:     document.getElementById(`oc-el-mat-${i}`)?.value||'',
-    GEO:          document.getElementById(`oc-el-geo-${i}`)?.value||'—',
-    DIM1:         Number(document.getElementById(`oc-el-dim-${i}`)?.value||0),
-    LARGO:        Number(document.getElementById(`oc-el-lar-${i}`)?.value||0),
-    ANCHO:        0,
-    CANT:         Number(document.getElementById(`oc-el-cant-${i}`)?.value||0),
-    UNIDAD:       document.getElementById(`oc-el-uni-${i}`)?.value||'kg',
-    PRECIO_UNIT:  Number(document.getElementById(`oc-el-pu-${i}`)?.value||0),
-    TOTAL:        Number(document.getElementById(`oc-el-tot-${i}`)?.value||0),
-    NOTAS:        document.getElementById(`oc-el-not-${i}`)?.value||''
-  })).filter(e=>e.DESCRIPCION.trim());
+  return (window._ocElems||[]).map((el,i)=>{
+    const cant     = Number(document.getElementById(`oc-el-cant-${i}`)?.value||0);
+    const precioCot= Number(document.getElementById(`oc-el-cot-${i}`)?.value||0);
+    const precioReal= Number(document.getElementById(`oc-el-pu-${i}`)?.value||0);
+    const totalCot = Math.round(cant * precioCot);
+    const totalReal= Math.round(cant * precioReal);
+    return {
+      DESCRIPCION:    document.getElementById(`oc-el-desc-${i}`)?.value||'',
+      MATERIAL:       document.getElementById(`oc-el-mat-${i}`)?.value||'',
+      GEO:            document.getElementById(`oc-el-geo-${i}`)?.value||'—',
+      DIM1:           Number(document.getElementById(`oc-el-dim-${i}`)?.value||0),
+      LARGO:          Number(document.getElementById(`oc-el-lar-${i}`)?.value||0),
+      ANCHO:          0,
+      CANT:           cant,
+      UNIDAD:         document.getElementById(`oc-el-uni-${i}`)?.value||'kg',
+      PRECIO_COT:     precioCot,
+      PRECIO_UNIT:    precioReal,
+      TOTAL_COT:      totalCot,
+      TOTAL:          totalReal,
+      DIFERENCIA_ITEM: totalReal - totalCot,
+      NOTAS:          document.getElementById(`oc-el-not-${i}`)?.value||''
+    };
+  }).filter(e=>e.DESCRIPCION.trim());
 }
 
 async function _guardarOC(opVinculada, nocExistente) {
@@ -11368,10 +11535,11 @@ async function _guardarOC(opVinculada, nocExistente) {
   if(btn){ btn.disabled=true; btn.textContent='⏳ Guardando…'; }
 
   try {
-    const elemsData = _ocLeerElems();
-    const total     = elemsData.reduce((s,e)=>s+Number(e.TOTAL||0),0);
-    const noc       = document.getElementById('oc-noc')?.value||nocExistente;
-    const fecha     = new Date().toISOString().slice(0,10);
+    const elemsData  = _ocLeerElems();
+    const totalReal  = elemsData.reduce((s,e)=>s+Number(e.TOTAL||0),0);
+    const totalCotOC = elemsData.reduce((s,e)=>s+Number(e.TOTAL_COT||0),0);
+    const noc        = document.getElementById('oc-noc')?.value||nocExistente;
+    const fecha      = new Date().toISOString().slice(0,10);
 
     const compraData = {
       N_OC:             noc,
@@ -11384,7 +11552,8 @@ async function _guardarOC(opVinculada, nocExistente) {
       DESCRIPCION_OC:   desc,
       OBSERVACIONES:    document.getElementById('oc-obs')?.value||'',
       ESTADO:           'PENDIENTE',
-      TOTAL_OC:         total
+      TOTAL_COT_OC:     totalCotOC,
+      TOTAL_OC:         totalReal
     };
 
     // 1) Guardar cabecera
@@ -11745,6 +11914,100 @@ async function _guardarCostoReal(noc, totalCotizado) {
     if(c){ c.COSTO_REAL=costoReal; c.DIFERENCIA=diferencia; }
     toast('✅ Costo real registrado');
     closeModal();
+    _verDetalleOC(noc);
+  } catch(e){ toast(e.message,'error'); }
+}
+
+// ── Registrar precio real por ítem individual ────────────────────────────
+function _modalPrecioRealItem(noc, idElem, itemNum, cant, precioCot, precioRealActual) {
+  const totCot  = Math.round(cant * precioCot);
+  const safeNOC = String(noc).replace(/'/g,"\\'");
+  const safeId  = String(idElem).replace(/'/g,"\\'");
+
+  openModal(`💰 Precio Real — Ítem ${itemNum}`, `
+  <div style="font-size:12px">
+    <!-- Comparativa -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+      <div style="background:var(--card2);border-radius:8px;padding:10px;text-align:center;border:1px dashed #f59e0b">
+        <div style="font-size:10px;color:#f59e0b;font-weight:700;margin-bottom:3px">💬 PRECIO COTIZADO</div>
+        <div style="font-size:13px;font-weight:800;color:#f59e0b">$${precioCot.toLocaleString('es-CO')}<span style="font-size:10px;color:var(--muted)">/u</span></div>
+        <div style="font-size:10px;color:var(--muted);margin-top:2px">Total: $${totCot.toLocaleString('es-CO')}</div>
+      </div>
+      <div style="background:var(--card2);border-radius:8px;padding:10px;text-align:center;border:1px solid #059669">
+        <div style="font-size:10px;color:#059669;font-weight:700;margin-bottom:3px">✅ PRECIO REAL</div>
+        <div style="font-size:13px;font-weight:800;color:var(--gold)" id="preal-preview-unit">
+          ${precioRealActual?'$'+precioRealActual.toLocaleString('es-CO')+'/u':'—'}</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:2px" id="preal-preview-total">
+          ${precioRealActual?'Total: $'+Math.round(cant*precioRealActual).toLocaleString('es-CO'):'Ingresa el precio'}</div>
+      </div>
+    </div>
+    <!-- Diferencia dinámica -->
+    <div id="preal-dif-bar" style="margin-bottom:12px;text-align:center;min-height:22px;font-size:12px;font-weight:700"></div>
+    <!-- Input precio real -->
+    <div>
+      <label style="font-size:11px;color:var(--muted)">Precio unitario real (lo que pagaron por unidad) $</label>
+      <input type="number" id="preal-unit-input" value="${precioRealActual||''}"
+        placeholder="0" min="0"
+        style="width:100%;background:var(--surface);border:2px solid #059669;
+          color:var(--text);border-radius:8px;padding:10px;font-size:18px;font-weight:700;
+          box-sizing:border-box;margin-top:4px;text-align:right">
+      <div style="font-size:10px;color:var(--muted);margin-top:4px;text-align:right">
+        × ${cant} ${cant===1?'unid':'unidades'} = <span id="preal-total-preview" style="color:var(--gold);font-weight:700">$0</span>
+      </div>
+    </div>
+  </div>`,
+  `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+   <button class="btn btn-primary" onclick="_guardarPrecioRealItem('${safeNOC}','${safeId}',${cant},${precioCot})">💾 Guardar</button>`
+  );
+
+  // Listener dinámico para preview
+  requestAnimationFrame(()=>{
+    const inp = document.getElementById('preal-unit-input');
+    if(!inp) return;
+    const update = () => {
+      const real = Number(inp.value||0);
+      const totReal = Math.round(cant * real);
+      const totCotV = Math.round(cant * precioCot);
+      const dif = totReal - totCotV;
+      document.getElementById('preal-preview-unit').textContent  = real?'$'+real.toLocaleString('es-CO')+'/u':'—';
+      document.getElementById('preal-preview-total').textContent = real?'Total: $'+totReal.toLocaleString('es-CO'):'Ingresa el precio';
+      document.getElementById('preal-total-preview').textContent = '$'+totReal.toLocaleString('es-CO');
+      const bar = document.getElementById('preal-dif-bar');
+      if(bar && real && precioCot) {
+        bar.innerHTML = dif > 0
+          ? `<span style="color:#ef4444">▲ Sobrecosto por ítem: +$${Math.abs(dif).toLocaleString('es-CO')}</span>`
+          : dif < 0
+          ? `<span style="color:#059669">▼ Ahorro por ítem: $${Math.abs(dif).toLocaleString('es-CO')}</span>`
+          : `<span style="color:var(--muted)">= Precio exacto al cotizado</span>`;
+      } else if(bar) bar.innerHTML = '';
+    };
+    inp.addEventListener('input', update);
+    update();
+    inp.focus(); inp.select();
+  });
+}
+
+async function _guardarPrecioRealItem(noc, idElem, cant, precioCot) {
+  const precioReal = Number(document.getElementById('preal-unit-input')?.value||0);
+  if(!precioReal){ toast('Ingresa el precio real','warn'); return; }
+  try {
+    const result = await POST('updatePrecioRealElem', {
+      ID_ELEM:    idElem,
+      N_OC:       noc,
+      PRECIO_UNIT: precioReal
+    });
+    // Actualizar caché local de compras (recalc totales OC)
+    const comp = (_comprasData||[]).find(x=>x.N_OC===noc);
+    if(comp && result){
+      // recalcTotalesOC ya actualizó el Sheet; solo necesitamos recargar el detalle
+    }
+    toast(`✅ Precio real ítem guardado`);
+    closeModal();
+    // Refrescar datos y reabrir detalle
+    try {
+      _comprasData = await POST('getCompras',{});
+      cacheSet('compras', _comprasData);
+    } catch(e){}
     _verDetalleOC(noc);
   } catch(e){ toast(e.message,'error'); }
 }
