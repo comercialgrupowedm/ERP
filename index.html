@@ -2008,7 +2008,7 @@ async function _doEstadoCot(cotId, nuevoEstado){
     await POST('updateCotizacion', {...c, ESTADO: nuevoEstado});
     c.ESTADO = nuevoEstado; // actualizar caché local
     toast(`✓ Estado → ${nuevoEstado}`);
-    cotizaciones(); // refrescar vista
+    _autoSync(['cotizaciones'], cotizaciones);
   }catch(e){
     toast('Error: '+e.message,'err');
   }
@@ -2192,7 +2192,7 @@ async function dashboard(){
     const urgencias     = cots.filter(c=>String(c.TIPO||'').includes('UR'));
     const cotsEspera    = cots.filter(c=>c.ESTADO==='EN ESPERA');
     const cotsAprobadas = cots.filter(c=>String(c.ESTADO||'').toUpperCase().includes('APROBAD'));
-    const avgAvance     = ops.length ? Math.round(ops.reduce((s,o)=>s+Number(o['%AVANCE']||0),0)/ops.length) : 0;
+    const avgAvance     = ops.length ? Math.round(ops.reduce((s,o)=>s+qaPct(o['%AVANCE']),0)/ops.length) : 0;
 
     // Distribución por diseñador (top 5)
     const disDist = {};
@@ -2565,7 +2565,7 @@ async function cotizaciones(){
               const opVinc = (DB.produccion||[]).filter(x=>String(x.COT)===String(c.COTIZACION));
               const opNum = opVinc.length ? opVinc.map(o=>'OP-'+o.OP).join(', ') : '—';
               const procActualCot = opVinc.length ? calcProcActual(opVinc[0]) : '—';
-              const avgAvance = opVinc.length ? Math.round(opVinc.reduce((s,o)=>s+Number(o['%AVANCE']||0),0)/opVinc.length) : null;
+              const avgAvance = opVinc.length ? Math.round(opVinc.reduce((s,o)=>s+qaPct(o['%AVANCE']),0)/opVinc.length) : null;
               return `<tr onclick="detailCot('${c.COTIZACION}')">
                 <td>
                   ${avgAvance!==null?`<div style="display:flex;gap:2px;margin-bottom:2px">
@@ -2685,7 +2685,7 @@ async function detailCot(id){
       <tbody>
         ${its.map(it=>{
           const opIt = (DB.produccion||[]).find(x=>String(x.COT)===String(id) && String(x.ITEM)===String(it.ITEM||it.ITEM_NUM));
-          const pctIt = opIt ? Number(opIt['%AVANCE']||0) : null;
+          const pctIt = opIt ? qaPct(opIt['%AVANCE']) : null;
           const procIt = opIt ? calcProcActual(opIt) : '—';
           return `<tr onclick="detailItem('${it.ID_ITEM}')" style="cursor:pointer">
             <td class="td-center" style="font-weight:700;color:var(--accent)">${it.ITEM||it['COT-ITEM']||'—'}</td>
@@ -2728,7 +2728,7 @@ async function detailCot(id){
       </tr></thead>
       <tbody>
         ${ops.map(op=>{
-          const pct = Number(op['%AVANCE'])||0;
+          const pct = qaPct(op['%AVANCE']);
           const procActual = calcProcActual(op);
           const semColor = pct>=80?'var(--accent)':pct>=40?'var(--gold)':'var(--danger)';
           const OP_EST = ['PENDIENTE MP','EN PROCESO','PAUSADO','TERMINADO','ENTREGADO'];
@@ -3321,9 +3321,25 @@ async function ejecutarCrearOP(cotId){
         'RUTA MQ5':  it['RUTA MQ5']||'', 'RUTA MQ6': it['RUTA MQ6']||'',
         'RUTA MQ7':  it['RUTA MQ7']||'', 'RUTA MQ8': it['RUTA MQ8']||'',
         'RUTA MQ9':  it['RUTA MQ9']||'', 'RUTA MQ10':it['RUTA MQ10']||'',
+        // ── Horas presupuestadas por proceso individual (para ponderar el
+        // avance cuando una misma máquina se repite en la ruta) ──────────
+        'RUTA MQ1 HRS': Number(it['TIEMPO PRO 1 (horas)']||0),
+        'RUTA MQ2 HRS': Number(it['TIEMPO PRO 2 (horas)']||0),
+        'RUTA MQ3 HRS': Number(it['TIEMPO PRO 3 (horas)']||0),
+        'RUTA MQ4 HRS': Number(it['TIEMPO PRO 4 (horas)']||0),
+        'RUTA MQ5 HRS': Number(it['TIEMPO PRO 5 (horas)']||0),
+        'RUTA MQ6 HRS': Number(it['TIEMPO PRO 6 (horas)']||0),
+        'RUTA MQ7 HRS': Number(it['TIEMPO PRO 7 (horas)']||0),
+        'RUTA MQ8 HRS': Number(it['TIEMPO PRO 8 (horas)']||0),
+        'RUTA MQ9 HRS': Number(it['TIEMPO PRO 9 (horas)']||0),
+        'RUTA MQ10 HRS':Number(it['TIEMPO PRO 10 (horas)']||0),
+        // % de avance por proceso individual (inician en 0)
+        'RUTA MQ1 %':0,'RUTA MQ2 %':0,'RUTA MQ3 %':0,'RUTA MQ4 %':0,'RUTA MQ5 %':0,
+        'RUTA MQ6 %':0,'RUTA MQ7 %':0,'RUTA MQ8 %':0,'RUTA MQ9 %':0,'RUTA MQ10 %':0,
         // ── Estado ─────────────────────────────────────────
         PRIORIDAD:           prioridad,
         ESTADO:              'PENDIENTE MP',
+        'SEMAFORO AVANCE':   'EN PROCESO',
         'DÍAS ENTREGA':      diasEntrega,
         '%AVANCE':           0,
         'HORAS RESTANTES':   0,
@@ -3833,7 +3849,7 @@ async function produccion(){
           </tr></thead>
           <tbody>
             ${sorted.length ? sorted.map(op=>{
-              const pct=Number(op['%AVANCE'])||0;
+              const pct=qaPct(op['%AVANCE']);
               const procActual = calcProcActual(op);
               // Miniatura: src directo si hay imagen, placeholder lazy si no
               const _thumbStyle = "width:36px;height:36px;object-fit:cover;border-radius:5px;border:1px solid var(--border);display:block;cursor:pointer";
@@ -3880,7 +3896,7 @@ async function produccion(){
     } else {
       setContent(moduleBanner('🏭','Control Producción','Seguimiento de órdenes de producción',rangoSelector('produccion'),'linear-gradient(135deg,#7c3aed,#a78bfa)')+fb + viewToggleBtns('produccion') + `<div class="card-list">
         ${sorted.length ? sorted.map(op=>{
-          const pct=Number(op['%AVANCE'])||0;
+          const pct=qaPct(op['%AVANCE']);
           const OP_ESTADOS=['PENDIENTE MP','EN PROCESO','PAUSADO','TERMINADO','ENTREGADO'];
           const iE=OP_ESTADOS.indexOf(op.ESTADO);
           const miniTL=OP_ESTADOS.map((e,i)=>{
@@ -3943,6 +3959,13 @@ async function uploadToImgbb(file){
   return { url: json.data.url, thumbUrl: json.data.thumb?.url || json.data.url, deleteUrl: json.data.delete_url };
 }
 
+// Normaliza %AVANCE venga como fracción (0.9, formato % en el Sheet) o como
+// número plano (90, formato Número). Siempre devuelve escala 0-100 para la UI.
+function qaPct(v){
+  const n = Number(v)||0;
+  return n>0 && n<=1 ? Math.round(n*100) : Math.round(n);
+}
+
 function qaFindOP(idqr){
   // IDQR es la llave única por fila/ítem en CONTROL PRODUCCIÓN.
   // Fallback a OP/ID_OP solo por compatibilidad con llamadas viejas.
@@ -3950,14 +3973,112 @@ function qaFindOP(idqr){
       || (DB.produccion||[]).find(x=>String(x.OP)===String(idqr)||String(x.ID_OP)===String(idqr));
 }
 
+// ── Etapas del proceso — botón dinámico ────────────────────────
+// Cada etapa: doneKeys (variantes de columna checklist), dateKeys (variantes
+// de columna fecha), label/icon cuando está PENDIENTE, doneLabel/doneIcon
+// cuando ya está marcada. cascade: al marcar esta etapa, marca también la
+// siguiente automáticamente (con su fecha) — igual que Diseño → MP Insumos.
+const QA_ETAPAS = [
+  { id:'diseno',    doneKeys:['INGENIERIA Y PLANEACIÓN','ING_PLANEACION'],
+    dateKeys:['FECHA ENTREGA\nPLANEACIÓN\nDD/MM/AA'],
+    label:'Diseño OK', icon:'📐', doneLabel:'Diseño ✓', doneIcon:'✅',
+    nombreLargo:'Diseño / Ingeniería y Planeación', cascade:true },
+  { id:'mp',        doneKeys:['MP\nINSUMOS','MP INSUMOS'],
+    dateKeys:['FECHA ENTREGA\nDD/MM/AA','FECHA ENTREGA MP'],
+    label:'MP Insumos', icon:'🧱', doneLabel:'MP Insumos ✓', doneIcon:'✅',
+    nombreLargo:'MP / Insumos' },
+  { id:'servicio',  doneKeys:['SERVICIO EXTERNO'],
+    dateKeys:['FECHA ENTREGA\nDD/MM/AA2','FECHA ENTREGA SVC'],
+    label:'Servicio Externo', icon:'🚚', doneLabel:'Servicio Ext. ✓', doneIcon:'✅',
+    nombreLargo:'Servicio Externo' },
+  { id:'entrega',   doneKeys:['ENTREGA DE PRODUCCIÓN','ENTREGA DE PRODUCCION'],
+    dateKeys:['FECHA ENTREGA\nDD/MM/AA3','FECHA ENTREGA PROD2'],
+    label:'Entrega Prod.', icon:'📦', doneLabel:'Entrega ✓', doneIcon:'✅',
+    nombreLargo:'Entrega de Producción' },
+  { id:'calidad',   doneKeys:['CALIDAD'],
+    dateKeys:['FECHA \nCALIDAD\nDD/MM/AA','FECHA CALIDAD'],
+    label:'Calidad', icon:'🔍', doneLabel:'Calidad ✓', doneIcon:'✅',
+    nombreLargo:'Calidad' },
+  { id:'liberacion',doneKeys:['LIBERACION'],
+    dateKeys:['FECHA DE DESPACHO'],
+    label:'Liberación', icon:'🚀', doneLabel:'Liberado ✓', doneIcon:'✅',
+    nombreLargo:'Liberación / Despacho' },
+];
+
+function _qaEtapaDone(op, etapa){
+  return etapa.doneKeys.some(k => op[k]==='TRUE' || op[k]==='Y');
+}
+
+// Devuelve la etapa actual pendiente (la siguiente a completar), o null si
+// ya se completaron todas.
+function qaEtapaActual(op){
+  for(const et of QA_ETAPAS){ if(!_qaEtapaDone(op, et)) return et; }
+  return null;
+}
+
+// Config del botón dinámico para qaBar — el label/ícono cambian solos según
+// en qué etapa esté la OP (Diseño OK → MP Insumos → Servicio Externo → ...).
+function qaEtapaBtn(op){
+  const et = op ? qaEtapaActual(op) : null;
+  if(!et) return { icon:'🏁', label:'Completado', fn:'qaAvanzarEtapa' };
+  return { icon: et.icon, label: et.label, fn:'qaAvanzarEtapa' };
+}
+
+// Marca como TRUE (con fecha de hoy) la etapa pendiente actual. Si se vuelve
+// a pulsar sobre una OP que ya tiene esa etapa marcada, permite desmarcarla
+// (retroceder un paso) previa confirmación.
+async function qaAvanzarEtapa(opId){
+  const op = qaFindOP(opId);
+  if(!op){ toast('OP no encontrada: '+opId,'error'); return; }
+
+  const et = qaEtapaActual(op);
+  if(!et){ toast('✅ Esta OP ya completó todas las etapas','info'); return; }
+
+  const msg = `¿Marcar "${et.nombreLargo}" como completado en OP-${op.OP||opId}?`;
+  if(!confirm(msg)) return;
+
+  const hoy = new Date().toISOString().slice(0,10);
+  const payload = { IDQR: op.IDQR };
+  et.doneKeys.forEach(k => payload[k] = 'TRUE');
+  et.dateKeys.forEach(k => payload[k] = hoy);
+
+  // Cascada: si esta etapa lo indica (ej. Diseño), marca también la
+  // siguiente automáticamente con su fecha.
+  let etCascada = null;
+  if(et.cascade){
+    const idx = QA_ETAPAS.indexOf(et);
+    etCascada = QA_ETAPAS[idx+1] || null;
+    if(etCascada){
+      etCascada.doneKeys.forEach(k => payload[k] = 'TRUE');
+      etCascada.dateKeys.forEach(k => payload[k] = hoy);
+    }
+  }
+
+  try{
+    await POST('updateOP', payload);
+    // Actualizar caché local
+    Object.keys(payload).forEach(k => { if(k!=='IDQR') op[k] = payload[k]; });
+    toast(etCascada
+      ? `✅ ${et.nombreLargo} marcado — ${etCascada.nombreLargo} avanzado`
+      : `✅ ${et.nombreLargo} marcado`);
+    _autoSync(['produccion'], ()=>{ if(typeof renderProduccion==='function') renderProduccion(); });
+  }catch(e){ toast(e.message,'error'); }
+}
+
+// Se conserva por compatibilidad con onclick antiguos ya renderizados en
+// caché del navegador — redirige a la nueva lógica de etapas.
+async function qaDisenioOK(opId){ return qaAvanzarEtapa(opId); }
+
 // Renderiza la barra. mode: 'full' (panel de detalle) | 'sm' (fila de tabla/tarjeta)
 function qaBar(opId, mode){
+  const op = qaFindOP(opId);
   const btns = [
     { icon:'✏️', label:'Editar',              fn:'qaEditar' },
     { icon:'📊', label:'Avance',              fn:'qaAvanceProcesos' },
-    { icon:'✅', label:'Finalización',         fn:'qaFinalizacion' },
+    qaEtapaBtn(op),
     { icon:'📄', label:'Subir Plano',          fn:'qaSubirPlano' },
     { icon:'🗂️', label:'Kanban',               fn:'qaKanban' },
+    { icon:'🚦', label:'Semáforo',             fn:'qaSemaforo' },
     { icon:'🖼️', label:'Subir Imagen',         fn:'qaSubirImagen' },
     { icon:'🧱', label:'Pedir Material',       fn:'qaPedirMaterial' },
     { icon:'🛒', label:'Ver Compras',          fn:'qaVerComprasOP' },
@@ -4059,53 +4180,63 @@ const RUTA_LABEL = {
   'INGENIERÍA Y PLANEACIÓN':'INGENIERIA %','INGENIERIA Y PLANEACION':'INGENIERIA %',
 };
 
+// Promedio ponderado por horas de un array de {val,hrs} (0-100 en val).
+// Fallback a promedio simple si ninguno tiene horas presupuestadas.
+// Misma lógica exacta que la fórmula del Sheet en %AVANCE, para que
+// preview (modal) y valor real guardado nunca diverjan.
+function _promedioPonderado(items){
+  let sumaPond=0, sumaHrs=0;
+  items.forEach(p=>{ if(p.hrs>0){ sumaPond+=p.val*p.hrs; sumaHrs+=p.hrs; } });
+  if(sumaHrs>0) return sumaPond/sumaHrs;
+  return items.length ? items.reduce((s,p)=>s+p.val,0)/items.length : 0;
+}
+
 function qaAvanceProcesos(opId){
   const op = qaFindOP(opId);
   if(!op){ toast('OP no encontrada: '+opId,'error'); return; }
 
-  // Obtener rutas únicas asignadas a esta OP
-  const rutasRaw = [
-    op['RUTA MQ1']||'', op['RUTA MQ2']||'', op['RUTA MQ3']||'',
-    op['RUTA MQ4']||'', op['RUTA MQ5']||'', op['RUTA MQ6']||'',
-    op['RUTA MQ7']||'', op['RUTA MQ8']||'', op['RUTA MQ9']||'', op['RUTA MQ10']||''
-  ].filter(Boolean);
-
-  // Deduplicar por clave de porcentaje (ej. TORNO CNC y TORNO CONVENCIONAL → mismo %)
-  const seen = new Set();
+  // Cada slot de ruta (1-10) es un proceso independiente — NO se deduplica
+  // por máquina, porque una misma máquina puede repetirse en la ruta con
+  // pasadas distintas (ej. 2 pasadas de torno). Cada una lleva su propio %
+  // y su propio peso en horas presupuestadas.
   const procesos = [];
-  rutasRaw.forEach((ruta, idx) => {
+  for(let n=1;n<=10;n++){
+    const ruta = op['RUTA MQ'+n]||'';
+    if(!ruta) continue;
     const pctKey = RUTA_A_PCT[ruta];
-    if(!pctKey || seen.has(pctKey)) return;
-    seen.add(pctKey);
-    procesos.push({ ruta, pctKey, idx: procesos.length + 1 });
-  });
+    if(!pctKey) continue;
+    const hrs = Number(op['RUTA MQ'+n+' HRS']||0);
+    const val = Math.round(Number(op['PROCESO '+n+' R']||0)*100);
+    procesos.push({ n, ruta, pctKey, hrs, val });
+  }
 
   if(!procesos.length){
     toast('Esta OP no tiene rutas de maquinado definidas','error'); return;
   }
 
-  // Calcular avance global actual
-  const pctActual = Number(op['%AVANCE']||0);
+  // Calcular avance global actual EN VIVO desde los procesos (misma fórmula
+  // que el Sheet) — no desde el %AVANCE viejo guardado, que puede estar
+  // desactualizado si alguien editó PROCESO n R directo en la hoja.
+  const pctActual = Math.round(_promedioPonderado(procesos));
 
-  // Construir sliders
+  // Construir sliders — uno por CADA proceso individual de la ruta
   const slidersHtml = procesos.map(p => {
-    const val = Math.round(Number(op[p.pctKey]||0) * 100);
-    const id  = 'avp-' + p.pctKey.replace(/[^a-zA-Z0-9]/g,'_');
+    const id  = 'avpmq' + p.n;
     const displayId = id + '_disp';
-    const color = val >= 100 ? '#2e7d32' : val >= 50 ? '#1565c0' : '#c62828';
+    const color = p.val >= 100 ? '#2e7d32' : p.val >= 50 ? '#1565c0' : '#c62828';
     return `
-    <div style="background:var(--card2);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:10px">
+    <div class="qa-avp-slider" data-hrs="${p.hrs}" style="background:var(--card2);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:10px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
         <div>
-          <div style="font-size:13px;font-weight:700">Proceso ${p.idx} — ${p.ruta}</div>
+          <div style="font-size:13px;font-weight:700">RUTA MQ${p.n} [${p.ruta}] - HORAS PROCESO [${p.hrs}]</div>
           <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">${p.pctKey}</div>
         </div>
-        <span id="${displayId}" style="font-size:18px;font-weight:800;color:${color}">${val}%</span>
+        <span id="${displayId}" style="font-size:18px;font-weight:800;color:${color}">${p.val}%</span>
       </div>
       <div style="height:6px;background:var(--border);border-radius:3px;margin:6px 0 10px;overflow:hidden">
-        <div id="${id}_bar" style="height:100%;width:${val}%;background:${color};border-radius:3px;transition:width .2s"></div>
+        <div id="${id}_bar" style="height:100%;width:${p.val}%;background:${color};border-radius:3px;transition:width .2s"></div>
       </div>
-      <input type="range" id="${id}" min="0" max="100" step="5" value="${val}"
+      <input type="range" id="${id}" min="0" max="100" step="5" value="${p.val}"
         style="width:100%;accent-color:#1565c0;cursor:pointer"
         oninput="(function(){
           const v=Number(this.value);
@@ -4119,8 +4250,8 @@ function qaAvanceProcesos(opId){
       <div style="display:flex;justify-content:space-between;margin-top:6px;gap:4px">
         ${[0,25,50,75,100].map(v=>`<button type="button"
           style="flex:1;padding:5px 0;border-radius:7px;border:1px solid var(--border);
-            background:${val===v?'var(--accent2)':'var(--surface)'};
-            color:${val===v?'#fff':'var(--muted)'};font-size:11px;font-weight:600;cursor:pointer"
+            background:${p.val===v?'var(--accent2)':'var(--surface)'};
+            color:${p.val===v?'#fff':'var(--muted)'};font-size:11px;font-weight:600;cursor:pointer"
           onclick="(function(){
             const sl=document.getElementById('${id}');
             if(sl){sl.value=${v};sl.dispatchEvent(new Event('input'));}
@@ -4145,21 +4276,27 @@ function qaAvanceProcesos(opId){
       </div>
       <div style="font-size:11px;opacity:.75;margin-top:4px">· ${op.DESCRIPCION||''}</div>
     </div>
-    <div style="font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:10px">AJUSTA EL % COMPLETADO POR PROCESO:</div>
+    <div style="font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:10px">AJUSTA EL % COMPLETADO POR PROCESO (cada pasada de máquina es independiente):</div>
     ${slidersHtml}
     <p style="font-size:11px;color:var(--muted);margin-top:4px">
-      💡 El avance global se recalculará automáticamente al guardar (promedio de los procesos).
+      💡 El avance global y el % real por máquina se recalculan al guardar, ponderados por las horas presupuestadas de cada proceso.
     </p>`,
     `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
      <button class="btn btn-primary" onclick="qaGuardarAvance('${String(opId).replace(/'/g,"\'")}')">✓ Guardar Avance</button>`
   );
 }
 
+// Recalcula el % global como promedio PONDERADO por horas presupuestadas de
+// cada slider visible en el modal — misma lógica que _promedioPonderado (y
+// que la fórmula del Sheet), para que el preview nunca diverja del real.
 function _recalcAvanceGlobal(){
-  // Recalcula el % global como promedio de los sliders visibles
-  const sliders = document.querySelectorAll('#modal-body input[type=range]');
-  if(!sliders.length) return;
-  const avg = Math.round([...sliders].reduce((s,el)=>s+Number(el.value),0)/sliders.length);
+  const cont = document.querySelectorAll('#modal-body .qa-avp-slider');
+  if(!cont.length) return;
+  const items = [...cont].map(div => ({
+    hrs: Number(div.dataset.hrs || 0),
+    val: Number(div.querySelector('input[type=range]')?.value || 0)
+  }));
+  const avg = Math.round(_promedioPonderado(items));
   const el = document.getElementById('avp-global-pct');
   const bar = document.getElementById('avp-global-bar');
   if(el) el.textContent = avg+'%';
@@ -4170,35 +4307,37 @@ async function qaGuardarAvance(opId){
   const op = qaFindOP(opId);
   if(!op){ toast('OP no encontrada','error'); return; }
 
-  const rutasRaw = [
-    op['RUTA MQ1']||'', op['RUTA MQ2']||'', op['RUTA MQ3']||'',
-    op['RUTA MQ4']||'', op['RUTA MQ5']||'', op['RUTA MQ6']||'',
-    op['RUTA MQ7']||'', op['RUTA MQ8']||'', op['RUTA MQ9']||'', op['RUTA MQ10']||''
-  ].filter(Boolean);
-
-  const seen = new Set();
+  // Reconstruir la lista de procesos individuales (mismo criterio que al
+  // abrir el modal: sin deduplicar por máquina).
   const procesos = [];
-  rutasRaw.forEach(ruta => {
+  for(let n=1;n<=10;n++){
+    const ruta = op['RUTA MQ'+n]||'';
+    if(!ruta) continue;
     const pctKey = RUTA_A_PCT[ruta];
-    if(!pctKey || seen.has(pctKey)) return;
-    seen.add(pctKey);
-    procesos.push({ pctKey });
-  });
+    if(!pctKey) continue;
+    const hrs = Number(op['RUTA MQ'+n+' HRS']||0);
+    procesos.push({ n, ruta, pctKey, hrs });
+  }
 
-  // Leer valores de los sliders del modal
+  // Leer valores de los sliders del modal (uno por proceso individual)
   const payload = { IDQR: op.IDQR };
-  let suma = 0;
   procesos.forEach(p => {
-    const id = 'avp-' + p.pctKey.replace(/[^a-zA-Z0-9]/g,'_');
-    const el = document.getElementById(id);
-    const val = el ? Number(el.value) / 100 : Number(op[p.pctKey]||0);
-    payload[p.pctKey] = val;
-    suma += val;
+    const el = document.getElementById('avpmq'+p.n);
+    const val = el ? Number(el.value)/100 : Number(op['PROCESO '+p.n+' R']||0);
+    payload['PROCESO '+p.n+' R'] = val; // % del proceso individual (fracción 0-1) → columna PROCESO n R de Control Producción
   });
 
-  // Avance global = promedio de todos los procesos de la ruta
-  const globalPct = procesos.length ? Math.round((suma / procesos.length) * 100) : 0;
-  payload['%AVANCE'] = globalPct;
+  // NOTA: ya NO se calcula/envía BANCO %, TORNO %, etc. aquí — esas celdas
+  // tienen su propia fórmula SUMPRODUCT en el Sheet que lee de PROCESO n R.
+  // Enviarlas desde el frontend pisaba (borraba) esa fórmula con un valor fijo.
+
+  // ── Avance global = promedio ponderado por horas de TODOS los procesos
+  // individuales (misma función que usa el modal, y misma lógica que la
+  // fórmula del Sheet). ─────────────────────────────────────────────────
+  const globalPct = Math.round(_promedioPonderado(
+    procesos.map(p => ({ val: payload['PROCESO '+p.n+' R']*100, hrs: p.hrs }))
+  )); // 0-100, solo para lógica local de auto-estado/toast
+  // '%AVANCE' ya NO se envía — es fórmula automática en el Sheet (evita pisarla)
 
   // Auto-estado según avance
   if(globalPct >= 100 && op.ESTADO === 'EN PROCESO'){
@@ -4209,12 +4348,14 @@ async function qaGuardarAvance(opId){
 
   try{
     await POST('updateOP', payload);
-    toast(`✅ Avance guardado — ${globalPct}% global`);
+    toast(`✅ Avance guardado — ${globalPct}% global (ponderado por horas)`);
     closeModal();
     // Actualizar en caché local sin re-fetch completo
     Object.assign(op, payload);
-    if(MOD==='produccion') produccion();
-    else if(MOD==='diseño') controlDiseno();
+    _autoSync(['produccion'], () => {
+      if(MOD==='produccion') produccion();
+      else if(MOD==='diseño') controlDiseno();
+    });
   }catch(e){ toast(e.message,'error'); }
 }
 
@@ -4433,20 +4574,14 @@ async function qaGuardarArchivo(opId, kind){
       prog.step(1);
       await POST('updateOP', { IDQR: op.IDQR, IMAGEN_B64: url, IMAGEN_NOMBRE: file.name });
       prog.step(2);
-      // Actualizar caché local → miniatura aparece de inmediato
-      const cached = (DB.produccion||[]).find(x => String(x.IDQR) === String(op.IDQR));
-      if(cached){ cached.IMAGEN_B64 = url; cached.IMAGEN_NOMBRE = file.name; }
-      // Actualizar miniaturas en la tabla inmediatamente (sin recargar la lista)
-      if(typeof _imgCache !== 'undefined') _imgCache.set(String(op.IDQR), url);
-      document.querySelectorAll(`img[data-src="${op.IDQR}"]`).forEach(img => {
-        img.src = url; img.style.opacity = '1'; img.classList.add('loaded');
-      });
       prog.done('Imagen guardada');
       window._qaPendingFile = null;
       if(window._qaModalPasteCleanup){ window._qaModalPasteCleanup(); window._qaModalPasteCleanup = null; }
       closeModal();
-      if(typeof detailOP === 'function') detailOP(op.IDQR);
-      else { DB.produccion=null; if(typeof renderProduccion==='function') renderProduccion(); }
+      _autoSync(['produccion'], () => {
+        if(typeof detailOP === 'function') detailOP(op.IDQR);
+        else if(typeof renderProduccion==='function') renderProduccion();
+      });
     }catch(e){
       toast(e.message,'error');
       if(btnG){ btnG.disabled=false; btnG.textContent='✓ Guardar'; }
@@ -4480,14 +4615,13 @@ async function qaGuardarArchivo(opId, kind){
     const idqrLimpio = String(op.IDQR).replace(/\.0+$/, '').trim();
     await POST('updateOP', { IDQR: idqrLimpio, PLANO_URL: result.url, PLANO_NOMBRE: file.name });
 
-    const cached = (DB.produccion||[]).find(x => String(x.IDQR) === String(op.IDQR));
-    if(cached){ cached.PLANO_URL = result.url; cached.PLANO_NOMBRE = file.name; }
-
     prog.done('Archivo guardado en Drive');
     window._qaPendingFile = null;
     closeModal();
-    if(typeof detailOP === 'function') detailOP(op.IDQR);
-    else { DB.produccion=null; if(typeof renderProduccion==='function') renderProduccion(); }
+    _autoSync(['produccion'], () => {
+      if(typeof detailOP === 'function') detailOP(op.IDQR);
+      else if(typeof renderProduccion==='function') renderProduccion();
+    });
 
   } catch(e) {
     // Si el error viene después de subir a Drive (falla el updateOP),
@@ -4527,6 +4661,46 @@ async function qaMoverKanban(opId, estado){
   try{
     await POST('updateOP', { IDQR: op.IDQR, ESTADO: estado });
     toast(`✅ Movido a "${estado}"`);
+    closeModal();
+    _autoSync(['produccion'], () => { if(typeof renderProduccion==='function') renderProduccion(); });
+  }catch(e){ toast(e.message,'error'); }
+}
+
+// ── Semáforo de Avance (enum) ──────────────────────────────────
+const QA_SEMAFORO_OPTS = ['CANCELADO','EN PROCESO','PAUSADO','TRABAJO EXTERNO'];
+const QA_SEMAFORO_COLOR = {
+  'CANCELADO':'var(--danger)', 'EN PROCESO':'var(--accent)',
+  'PAUSADO':'var(--warn)', 'TRABAJO EXTERNO':'var(--info)'
+};
+
+function qaSemaforo(opId){
+  const op = qaFindOP(opId);
+  if(!op){ toast('OP no encontrada: '+opId,'error'); return; }
+  const actual = op['SEMAFORO AVANCE'] || 'EN PROCESO';
+  openModal(`🚦 Semáforo de Avance — OP-${op.OP||opId}`,`
+    <div style="display:flex;flex-direction:column;gap:8px">
+      ${QA_SEMAFORO_OPTS.map(e=>{
+        const sel = e===actual;
+        return `<button type="button" onclick="qaCambiarSemaforo('${String(opId).replace(/'/g,"\\'")}','${e}')"
+          style="text-align:left;padding:10px 12px;border-radius:8px;cursor:pointer;
+          border:1px solid ${sel?QA_SEMAFORO_COLOR[e]:'var(--border)'};
+          background:${sel?QA_SEMAFORO_COLOR[e]:'var(--card2)'};
+          color:${sel?'#fff':'var(--text)'};font-size:12px;font-weight:700">
+          ${sel?'● ':'○ '}${e}
+        </button>`;
+      }).join('')}
+    </div>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cerrar</button>`
+  );
+}
+
+async function qaCambiarSemaforo(opId, valor){
+  const op = qaFindOP(opId);
+  if(!op){ toast('OP no encontrada','error'); return; }
+  try{
+    await POST('updateOP', { IDQR: op.IDQR, 'SEMAFORO AVANCE': valor });
+    op['SEMAFORO AVANCE'] = valor;
+    toast(`✅ Semáforo cambiado a "${valor}"`);
     closeModal();
     _autoSync(['produccion'], () => { if(typeof renderProduccion==='function') renderProduccion(); });
   }catch(e){ toast(e.message,'error'); }
@@ -4760,7 +4934,7 @@ async function detailOP(id){
   const cot=cotInfo(op.COT);
   // Items vinculados: por COT + ITEM number (sin esperar si ya están en cache)
   const its = (DB.items||[]).filter(x=>String(x.COTIZACION)===String(op.COT)&&String(x.ITEM)===String(op.ITEM));
-  const pct=Number(op['%AVANCE'])||0;
+  const pct=qaPct(op['%AVANCE']);
   const procActual = calcProcActual(op);
   openDetail(`OP-${op.OP||id}`,`
     ${qaBar(op.IDQR||id,'full')}
@@ -5017,8 +5191,8 @@ function formOP(op={}){
           <input type="number" id="pprecio" value="${op['PRECIO SIN IVA']||0}"></div>
         <div class="field"><label>Horas Total</label>
           <input id="phrs" value="${op['HORAS TOTAL']||''}"></div>
-        <div class="field"><label>% Avance</label>
-          <input type="number" id="p7" value="${op['%AVANCE']||0}" min="0" max="100"></div>
+        <div class="field"><label>% Avance (automático — calculado en el Sheet)</label>
+          <input type="number" value="${qaPct(op['%AVANCE'])}" min="0" max="100" disabled></div>
         <div class="field"><label>Días Entrega</label>
           <input type="number" id="p8" value="${op['DÍAS ENTREGA']||0}"></div>
         <div class="field"><label>Fecha Inicio</label>
@@ -5045,13 +5219,15 @@ function formOP(op={}){
             <input type="number" id="pmq${i}" value="${op[k]||0}" step="0.25"></div>`).join('')}
       </div>
       <div class="divider"></div>
-      <p style="font-size:11px;color:var(--muted);margin-bottom:8px">Rutas de Maquinado (hasta 10)</p>
+      <p style="font-size:11px;color:var(--muted);margin-bottom:8px">Rutas de Maquinado (hasta 10) — con horas presupuestadas por proceso, usadas para ponderar el % de avance</p>
       <div class="form-grid">
         ${[1,2,3,4,5,6,7,8,9,10].map(n=>`
           <div class="field"><label>Ruta MQ${n}</label>
             <select id="pruta${n}">
               <option value=""></option>${rutas}
-            </select></div>`).join('')}
+            </select></div>
+          <div class="field"><label>Horas Proceso ${n}</label>
+            <input type="number" id="prutahrs${n}" value="${op['RUTA MQ'+n+' HRS']||0}" step="0.25" min="0"></div>`).join('')}
       </div>
     </div>
 
@@ -5168,6 +5344,7 @@ async function saveOP(exist){
   const cks={};  CK_KEYS.forEach((k,i)=>cks[k]=document.getElementById('ck'+i+'val')?.value||'FALSE');
   const fds={};  FD_KEYS.forEach((k,i)=>fds[k]=document.getElementById('fd'+i)?.value||'');
   const rutas={};[1,2,3,4,5,6,7,8,9,10].forEach(n=>rutas['RUTA_MQ'+n]=document.getElementById('pruta'+n)?.value||'');
+  const rutaHrs={};[1,2,3,4,5,6,7,8,9,10].forEach(n=>rutaHrs['RUTA MQ'+n+' HRS']=Number(document.getElementById('prutahrs'+n)?.value||0));
 
   const totalHrsR = HRS_KEYS.slice(0,9).reduce((s,k)=>s+Number(hrs[k]||0),0);
 
@@ -5185,7 +5362,7 @@ async function saveOP(exist){
     CANT:               gn('pa'),
     'PRECIO SIN IVA':   gn('pprecio'),
     'HORAS TOTAL':      gv('phrs'),
-    '%AVANCE':          gn('p7'),
+    // '%AVANCE' ya NO se envía — es fórmula automática en el Sheet (evita pisarla)
     'DÍAS ENTREGA':     gn('p8'),
     'FECHA INICIO':     gv('pb'),
     'FECHA PACTADA':    gv('pc'),
@@ -5203,7 +5380,7 @@ async function saveOP(exist){
     DESPACHO:           document.getElementById('pdesp')?.value||'FALSE',
     FECHA_DESPACHO:     gv('pfdsp'),
     TOTAL_HRS_R:        totalHrsR,
-    ...mqs,...hrs,...cks,...fds,...rutas
+    ...mqs,...hrs,...cks,...fds,...rutas,...rutaHrs
   };
 
   if(!data.ID_OP){ toast('Nº OP requerido','error'); return; }
@@ -6741,9 +6918,7 @@ async function guardarDiseñadorTodos(cotId) {
     }
     toast('\u2705 Diseñador "'+dis+'" asignado a '+its.length+' ítem(s)');
     closeModal();
-    DB.items = null;
-    await GET('getItems').then(d=>DB.items=d);
-    detailCot(cotId);
+    _autoSync(opIds.length ? ['items','produccion'] : ['items'], () => detailCot(cotId));
   } catch(e){ toast(e.message,'error'); }
 }
 
