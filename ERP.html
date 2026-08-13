@@ -4249,7 +4249,7 @@ async function produccion(){
           </tr></thead>
           <tbody>
             ${sorted.length ? sorted.map(op=>{
-              const pct=Number(op['%AVANCE'])||0;
+              const pct=qaPct(op['%AVANCE']);
               const procActual = calcProcActual(op);
               // Miniatura: src directo si hay imagen, placeholder lazy si no
               const _thumbStyle = "width:36px;height:36px;object-fit:cover;border-radius:5px;border:1px solid var(--border);display:block;cursor:pointer";
@@ -4296,7 +4296,7 @@ async function produccion(){
     } else {
       setContent(moduleBanner('🏭','Control Producción','Seguimiento de órdenes de producción',rangoSelector('produccion'),'linear-gradient(135deg,#7c3aed,#a78bfa)')+fb + viewToggleBtns('produccion') + `<div class="card-list">
         ${sorted.length ? sorted.map(op=>{
-          const pct=Number(op['%AVANCE'])||0;
+          const pct=qaPct(op['%AVANCE']);
           const OP_ESTADOS=['PENDIENTE MP','EN PROCESO','PAUSADO','TERMINADO','ENTREGADO'];
           const iE=OP_ESTADOS.indexOf(op.ESTADO);
           const miniTL=OP_ESTADOS.map((e,i)=>{
@@ -4342,6 +4342,130 @@ async function produccion(){
 // ══════════════════════════════════════════════════════════════
 const QA_MAX_CHARS = 250000; // ~180KB en base64, límite razonable para GAS/Sheets (solo aplica a PLANOS)
 const QA_ESTADOS = ['PENDIENTE MP','EN PROCESO','PAUSADO','TERMINADO','ENTREGADO'];
+
+// Normaliza %AVANCE venga como fracción (0.9, formato % en el Sheet) o como
+// número plano (90, formato Número). Siempre devuelve escala 0-100 para la UI.
+function qaPct(v){
+  const n = Number(v)||0;
+  return n>0 && n<=1 ? Math.round(n*100) : Math.round(n);
+}
+
+// ── Etapas del proceso — botón dinámico ────────────────────────
+// Cada etapa: doneKeys (variantes de columna checklist), dateKeys (variantes
+// de columna fecha), label/icon cuando está PENDIENTE, doneLabel/doneIcon
+// cuando ya está marcada. cascade: al marcar esta etapa, marca también la
+// siguiente automáticamente (con su fecha) — igual que Diseño → MP Insumos.
+const QA_ETAPAS = [
+  { id:'diseno',    doneKeys:['INGENIERIA Y PLANEACIÓN','ING_PLANEACION'],
+    dateKeys:['FECHA ENTREGA\nPLANEACIÓN\nDD/MM/AA'],
+    label:'Diseño OK', icon:'📐', doneLabel:'Diseño ✓', doneIcon:'✅',
+    nombreLargo:'Diseño / Ingeniería y Planeación', cascade:true },
+  { id:'mp',        doneKeys:['MP\nINSUMOS','MP INSUMOS'],
+    dateKeys:['FECHA ENTREGA\nDD/MM/AA','FECHA ENTREGA MP'],
+    label:'MP Insumos', icon:'🧱', doneLabel:'MP Insumos ✓', doneIcon:'✅',
+    nombreLargo:'MP / Insumos' },
+  { id:'servicio',  doneKeys:['SERVICIO EXTERNO'],
+    dateKeys:['FECHA ENTREGA\nDD/MM/AA2','FECHA ENTREGA SVC'],
+    label:'Servicio Externo', icon:'🚚', doneLabel:'Servicio Ext. ✓', doneIcon:'✅',
+    nombreLargo:'Servicio Externo' },
+  { id:'entrega',   doneKeys:['ENTREGA DE PRODUCCIÓN','ENTREGA DE PRODUCCION'],
+    dateKeys:['FECHA ENTREGA\nDD/MM/AA3','FECHA ENTREGA PROD2'],
+    label:'Entrega Prod.', icon:'📦', doneLabel:'Entrega ✓', doneIcon:'✅',
+    nombreLargo:'Entrega de Producción' },
+  { id:'calidad',   doneKeys:['CALIDAD'],
+    dateKeys:['FECHA \nCALIDAD\nDD/MM/AA','FECHA CALIDAD'],
+    label:'Calidad', icon:'🔍', doneLabel:'Calidad ✓', doneIcon:'✅',
+    nombreLargo:'Calidad' },
+  { id:'liberacion',doneKeys:['LIBERACION'],
+    dateKeys:['FECHA DE DESPACHO'],
+    label:'Liberación', icon:'🚀', doneLabel:'Liberado ✓', doneIcon:'✅',
+    nombreLargo:'Liberación / Despacho' },
+];
+
+function _qaEtapaDone(op, etapa){
+  return etapa.doneKeys.some(k => op[k]==='TRUE' || op[k]==='Y');
+}
+// Devuelve la etapa actual pendiente (la siguiente a completar), o null si ya se completaron todas.
+function qaEtapaActual(op){
+  for(const et of QA_ETAPAS){ if(!_qaEtapaDone(op, et)) return et; }
+  return null;
+}
+// Config del botón dinámico — label/ícono cambian solos según en qué etapa esté la OP.
+function qaEtapaBtn(op){
+  const et = op ? qaEtapaActual(op) : null;
+  if(!et) return { icon:'🏁', label:'Completado', fn:'qaAvanzarEtapa' };
+  return { icon: et.icon, label: et.label, fn:'qaAvanzarEtapa' };
+}
+// Marca como TRUE (con fecha de hoy) la etapa pendiente actual.
+async function qaAvanzarEtapa(opId){
+  const op = qaFindOP(opId);
+  if(!op){ toast('OP no encontrada: '+opId,'error'); return; }
+  const et = qaEtapaActual(op);
+  if(!et){ toast('✅ Esta OP ya completó todas las etapas','info'); return; }
+  const msg = `¿Marcar "${et.nombreLargo}" como completado en OP-${op.OP||opId}?`;
+  if(!confirm(msg)) return;
+  const hoy = new Date().toISOString().slice(0,10);
+  const payload = { IDQR: op.IDQR };
+  et.doneKeys.forEach(k => payload[k] = 'TRUE');
+  et.dateKeys.forEach(k => payload[k] = hoy);
+  let etCascada = null;
+  if(et.cascade){
+    const idx = QA_ETAPAS.indexOf(et);
+    etCascada = QA_ETAPAS[idx+1] || null;
+    if(etCascada){
+      etCascada.doneKeys.forEach(k => payload[k] = 'TRUE');
+      etCascada.dateKeys.forEach(k => payload[k] = hoy);
+    }
+  }
+  try{
+    await POST('updateOP', payload);
+    Object.keys(payload).forEach(k => { if(k!=='IDQR') op[k] = payload[k]; });
+    toast(etCascada
+      ? `✅ ${et.nombreLargo} marcado — ${etCascada.nombreLargo} avanzado`
+      : `✅ ${et.nombreLargo} marcado`);
+    _autoSync(['produccion'], ()=>{ if(MOD==='produccion') produccion(); else if(MOD==='diseño') controlDiseno(); });
+  }catch(e){ toast(e.message,'error'); }
+}
+async function qaDisenioOK(opId){ return qaAvanzarEtapa(opId); }
+
+// ── Semáforo de avance ─────────────────────────────────────────
+const QA_SEMAFORO_OPTS = ['CANCELADO','EN PROCESO','PAUSADO','TRABAJO EXTERNO'];
+const QA_SEMAFORO_COLOR = {
+  'CANCELADO':'var(--danger)', 'EN PROCESO':'var(--accent)',
+  'PAUSADO':'var(--warn)', 'TRABAJO EXTERNO':'var(--info)'
+};
+function qaSemaforo(opId){
+  const op = qaFindOP(opId);
+  if(!op){ toast('OP no encontrada: '+opId,'error'); return; }
+  const actual = op['SEMAFORO AVANCE'] || 'EN PROCESO';
+  openModal(`🚦 Semáforo de Avance — OP-${op.OP||opId}`,`
+    <div style="display:flex;flex-direction:column;gap:8px">
+      ${QA_SEMAFORO_OPTS.map(e=>{
+        const sel = e===actual;
+        return `<button type="button" onclick="qaCambiarSemaforo('${String(opId).replace(/'/g,"\\'")}','${e}')"
+          style="text-align:left;padding:10px 12px;border-radius:8px;cursor:pointer;
+          border:1px solid ${sel?QA_SEMAFORO_COLOR[e]:'var(--border)'};
+          background:${sel?QA_SEMAFORO_COLOR[e]:'var(--card2)'};
+          color:${sel?'#fff':'var(--text)'};font-size:12px;font-weight:700">
+          ${sel?'● ':'○ '}${e}
+        </button>`;
+      }).join('')}
+    </div>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cerrar</button>`
+  );
+}
+async function qaCambiarSemaforo(opId, valor){
+  const op = qaFindOP(opId);
+  if(!op){ toast('OP no encontrada','error'); return; }
+  try{
+    await POST('updateOP', { IDQR: op.IDQR, 'SEMAFORO AVANCE': valor });
+    op['SEMAFORO AVANCE'] = valor;
+    toast(`✅ Semáforo cambiado a "${valor}"`);
+    closeModal();
+    _autoSync(['produccion'], () => { if(MOD==='produccion') produccion(); else if(MOD==='diseño') controlDiseno(); });
+  }catch(e){ toast(e.message,'error'); }
+}
+
 // ── imgbb: hosting externo de imágenes (sin límite de 180KB) ──
 const IMGBB_API_KEY = '708036495454b0ac80dbf7eb28a24c7c';
 async function uploadToImgbb(file){
@@ -4367,13 +4491,16 @@ function qaFindOP(idqr){
 }
 
 // Renderiza la barra. mode: 'full' (panel de detalle) | 'sm' (fila de tabla/tarjeta)
+// Renderiza la barra. mode: 'full' (panel de detalle) | 'sm' (fila de tabla/tarjeta)
 function qaBar(opId, mode){
+  const op = qaFindOP(opId);
   const btns = [
     { icon:'✏️', label:'Editar',              fn:'qaEditar' },
     { icon:'📊', label:'Avance',              fn:'qaAvanceProcesos' },
-    { icon:'✅', label:'Finalización',         fn:'qaFinalizacion' },
+    qaEtapaBtn(op),
     { icon:'📄', label:'Subir Plano',          fn:'qaSubirPlano' },
     { icon:'🗂️', label:'Kanban',               fn:'qaKanban' },
+    { icon:'🚦', label:'Semáforo',             fn:'qaSemaforo' },
     { icon:'🖼️', label:'Subir Imagen',         fn:'qaSubirImagen' },
     { icon:'🧱', label:'Pedir Material',       fn:'qaPedirMaterial' },
     { icon:'🛒', label:'Ver Compras',          fn:'qaVerComprasOP' },
@@ -4464,6 +4591,21 @@ const RUTA_A_PCT = {
   'INGENIERÍA Y PLANEACIÓN':          'INGENIERIA %',
   'INGENIERIA Y PLANEACION':          'INGENIERIA %',
 };
+// Lookup tolerante: busca primero exacto, luego UPPER, luego parcial
+function _rutaToPctKey(ruta){
+  if(!ruta) return null;
+  const r = ruta.trim();
+  if(RUTA_A_PCT[r]) return RUTA_A_PCT[r];
+  const rU = r.toUpperCase();
+  for(const [k,v] of Object.entries(RUTA_A_PCT)){
+    if(k.toUpperCase()===rU) return v;
+  }
+  // Búsqueda parcial — si contiene la palabra clave
+  for(const [k,v] of Object.entries(RUTA_A_PCT)){
+    if(rU.includes(k.toUpperCase().split(' ')[0])) return v;
+  }
+  return null;
+}
 // Etiqueta corta para mostrar
 const RUTA_LABEL = {
   'TRABAJO DE BANCO Y SIERRAS':'BANCO %','TORNO CNC':'TORNO %',
@@ -4475,53 +4617,123 @@ const RUTA_LABEL = {
   'INGENIERÍA Y PLANEACIÓN':'INGENIERIA %','INGENIERIA Y PLANEACION':'INGENIERIA %',
 };
 
+// Promedio ponderado por horas presupuestadas de cada proceso
+function _promedioPonderado(items){
+  let sumaPond=0, sumaHrs=0;
+  items.forEach(p=>{ if(p.hrs>0){ sumaPond+=p.val*p.hrs; sumaHrs+=p.hrs; } });
+  if(sumaHrs>0) return sumaPond/sumaHrs;
+  return items.length ? items.reduce((s,p)=>s+p.val,0)/items.length : 0;
+}
+
 function qaAvanceProcesos(opId){
+  try{
   const op = qaFindOP(opId);
   if(!op){ toast('OP no encontrada: '+opId,'error'); return; }
 
-  // Obtener rutas únicas asignadas a esta OP
-  const rutasRaw = [
-    op['RUTA MQ1']||'', op['RUTA MQ2']||'', op['RUTA MQ3']||'',
-    op['RUTA MQ4']||'', op['RUTA MQ5']||'', op['RUTA MQ6']||'',
-    op['RUTA MQ7']||'', op['RUTA MQ8']||'', op['RUTA MQ9']||'', op['RUTA MQ10']||''
-  ].filter(Boolean);
+  // DEBUG: mostrar qué claves tiene la OP para diagnóstico
+  const rutaKeys = Object.keys(op).filter(k=>/RUTA/i.test(k)||/MQ/i.test(k)||/PROCESO/i.test(k));
+  console.log('[qaAvanceProcesos] OP encontrada:', op.OP||op.IDQR, '| Claves ruta:', rutaKeys, '| Valores:', rutaKeys.map(k=>k+':'+op[k]));
 
-  // Deduplicar por clave de porcentaje (ej. TORNO CNC y TORNO CONVENCIONAL → mismo %)
-  const seen = new Set();
+  // Cada slot de ruta (1-10) es un proceso independiente.
+  // Busca las claves con distintos formatos posibles del Sheet.
   const procesos = [];
-  rutasRaw.forEach((ruta, idx) => {
-    const pctKey = RUTA_A_PCT[ruta];
-    if(!pctKey || seen.has(pctKey)) return;
-    seen.add(pctKey);
-    procesos.push({ ruta, pctKey, idx: procesos.length + 1 });
-  });
-
-  if(!procesos.length){
-    toast('Esta OP no tiene rutas de maquinado definidas','error'); return;
+  for(let n=1;n<=10;n++){
+    // Intentar varios formatos de nombre de columna
+    const ruta = op['RUTA MQ'+n] || op['RUTA_MQ'+n] || op['RUTA MQ0'+n] || '';
+    if(!ruta) continue;
+    const pctKey = _rutaToPctKey(ruta);
+    const hrs = Number(
+      op['RUTA MQ'+n+' HRS'] || op['RUTA_MQ'+n+'_HRS'] ||
+      op['HRS MQ'+n] || op['HORAS MQ'+n] || 0
+    );
+    // Intentar varios formatos de la columna de % de proceso
+    const rawPct =
+      op['PROCESO '+n+' R'] || op['PROCESO_'+n+'_R'] ||
+      op['PROCESO '+n+'R'] || op['PCT MQ'+n] || 0;
+    const val = Math.round(Number(rawPct||0)*100);
+    // Si pctKey es null, usar el nombre de ruta como etiqueta
+    procesos.push({ n, ruta: ruta.trim(), pctKey: pctKey||ruta.trim(), hrs, val });
   }
 
-  // Calcular avance global actual
-  const pctActual = Number(op['%AVANCE']||0);
+  console.log('[qaAvanceProcesos] Procesos detectados:', procesos);
 
-  // Construir sliders
+  // Si no hay ninguna ruta, abrir modal con avance manual directo
+  if(!procesos.length){
+    const pctActual = qaPct(op['%AVANCE']||0);
+    openModal(
+      '📊 Avance — OP-'+(op.OP||opId),
+      `<div style="background:linear-gradient(135deg,#1a237e,#1565c0);border-radius:12px;padding:14px 16px;margin-bottom:14px;color:#fff">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;opacity:.8;margin-bottom:4px">AVANCE GLOBAL ACTUAL</div>
+        <div style="display:flex;align-items:center;gap:12px">
+          <span id="avp-global-pct" style="font-size:32px;font-weight:800;color:#fbbf24">${pctActual}%</span>
+          <div style="flex:1;height:8px;background:rgba(255,255,255,.2);border-radius:4px;overflow:hidden">
+            <div id="avp-global-bar" style="height:100%;width:${pctActual}%;background:#fbbf24;border-radius:4px;transition:width .3s"></div>
+          </div>
+        </div>
+        <div style="font-size:11px;opacity:.75;margin-top:4px">· ${op.DESCRIPCION||''}</div>
+      </div>
+      <div style="background:var(--card2);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:10px">
+        <div style="font-size:12px;font-weight:700;margin-bottom:10px">⚠️ Esta OP no tiene rutas de maquinado definidas.<br>Puedes ajustar el % global directamente:</div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+          <span style="font-size:13px;font-weight:600">% Avance Global</span>
+          <span id="avp-manual-disp" style="font-size:18px;font-weight:800;color:#1565c0">${pctActual}%</span>
+        </div>
+        <div style="height:6px;background:var(--border);border-radius:3px;margin-bottom:10px;overflow:hidden">
+          <div id="avp-manual-bar" style="height:100%;width:${pctActual}%;background:#1565c0;border-radius:3px;transition:width .2s"></div>
+        </div>
+        <input type="range" id="avp-manual" min="0" max="100" step="5" value="${pctActual}"
+          style="width:100%;accent-color:#1565c0;cursor:pointer"
+          oninput="(function(){
+            const v=Number(this.value);
+            const d=document.getElementById('avp-manual-disp');
+            const bar=document.getElementById('avp-manual-bar');
+            const gp=document.getElementById('avp-global-pct');
+            const gb=document.getElementById('avp-global-bar');
+            if(d) d.textContent=v+'%';
+            if(bar) bar.style.width=v+'%';
+            if(gp) gp.textContent=v+'%';
+            if(gb) gb.style.width=v+'%';
+          }).call(this)">
+        <div style="display:flex;justify-content:space-between;margin-top:6px;gap:4px">
+          ${[0,25,50,75,100].map(v=>`<button type="button"
+            style="flex:1;padding:5px 0;border-radius:7px;border:1px solid var(--border);
+              background:${pctActual===v?'var(--accent2)':'var(--surface)'};
+              color:${pctActual===v?'#fff':'var(--muted)'};font-size:11px;font-weight:600;cursor:pointer"
+            onclick="(function(){
+              const sl=document.getElementById('avp-manual');
+              if(sl){sl.value=${v};sl.dispatchEvent(new Event('input'));}
+              this.parentElement.querySelectorAll('button').forEach(b=>{b.style.background='var(--surface)';b.style.color='var(--muted)';});
+              this.style.background='var(--accent2)';this.style.color='#fff';
+            }).call(this)">${v}%</button>`).join('')}
+        </div>
+      </div>`,
+      `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+       <button class="btn btn-primary" onclick="qaGuardarAvanceManual('${String(opId).replace(/'/g,"\'")}')">✓ Guardar Avance</button>`
+    );
+    return;
+  }  // fin if(!procesos.length)
+
+  // Calcular avance global EN VIVO desde los procesos (misma fórmula que el Sheet)
+  const pctActual = Math.round(_promedioPonderado(procesos));
+
+  // Construir sliders — uno por CADA proceso individual de la ruta
   const slidersHtml = procesos.map(p => {
-    const val = Math.round(Number(op[p.pctKey]||0) * 100);
-    const id  = 'avp-' + p.pctKey.replace(/[^a-zA-Z0-9]/g,'_');
+    const id  = 'avpmq' + p.n;
     const displayId = id + '_disp';
-    const color = val >= 100 ? '#2e7d32' : val >= 50 ? '#1565c0' : '#c62828';
+    const color = p.val >= 100 ? '#2e7d32' : p.val >= 50 ? '#1565c0' : '#c62828';
     return `
-    <div style="background:var(--card2);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:10px">
+    <div class="qa-avp-slider" data-hrs="${p.hrs}" style="background:var(--card2);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:10px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
         <div>
-          <div style="font-size:13px;font-weight:700">Proceso ${p.idx} — ${p.ruta}</div>
+          <div style="font-size:13px;font-weight:700">RUTA MQ${p.n} [${p.ruta}] - HORAS [${p.hrs}]</div>
           <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">${p.pctKey}</div>
         </div>
-        <span id="${displayId}" style="font-size:18px;font-weight:800;color:${color}">${val}%</span>
+        <span id="${displayId}" style="font-size:18px;font-weight:800;color:${color}">${p.val}%</span>
       </div>
       <div style="height:6px;background:var(--border);border-radius:3px;margin:6px 0 10px;overflow:hidden">
-        <div id="${id}_bar" style="height:100%;width:${val}%;background:${color};border-radius:3px;transition:width .2s"></div>
+        <div id="${id}_bar" style="height:100%;width:${p.val}%;background:${color};border-radius:3px;transition:width .2s"></div>
       </div>
-      <input type="range" id="${id}" min="0" max="100" step="5" value="${val}"
+      <input type="range" id="${id}" min="0" max="100" step="5" value="${p.val}"
         style="width:100%;accent-color:#1565c0;cursor:pointer"
         oninput="(function(){
           const v=Number(this.value);
@@ -4535,8 +4747,8 @@ function qaAvanceProcesos(opId){
       <div style="display:flex;justify-content:space-between;margin-top:6px;gap:4px">
         ${[0,25,50,75,100].map(v=>`<button type="button"
           style="flex:1;padding:5px 0;border-radius:7px;border:1px solid var(--border);
-            background:${val===v?'var(--accent2)':'var(--surface)'};
-            color:${val===v?'#fff':'var(--muted)'};font-size:11px;font-weight:600;cursor:pointer"
+            background:${p.val===v?'var(--accent2)':'var(--surface)'};
+            color:${p.val===v?'#fff':'var(--muted)'};font-size:11px;font-weight:600;cursor:pointer"
           onclick="(function(){
             const sl=document.getElementById('${id}');
             if(sl){sl.value=${v};sl.dispatchEvent(new Event('input'));}
@@ -4561,60 +4773,86 @@ function qaAvanceProcesos(opId){
       </div>
       <div style="font-size:11px;opacity:.75;margin-top:4px">· ${op.DESCRIPCION||''}</div>
     </div>
-    <div style="font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:10px">AJUSTA EL % COMPLETADO POR PROCESO:</div>
+    <div style="font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:10px">AJUSTA EL % COMPLETADO POR PROCESO (cada pasada de máquina es independiente):</div>
     ${slidersHtml}
     <p style="font-size:11px;color:var(--muted);margin-top:4px">
-      💡 El avance global se recalculará automáticamente al guardar (promedio de los procesos).
+      💡 El avance global y el % real por máquina se recalculan al guardar, ponderados por las horas presupuestadas de cada proceso.
     </p>`,
     `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
      <button class="btn btn-primary" onclick="qaGuardarAvance('${String(opId).replace(/'/g,"\'")}')">✓ Guardar Avance</button>`
   );
+  } catch(err){ console.error('[qaAvanceProcesos] ERROR:', err); toast('Error al abrir avance: '+err.message,'error'); }
 }
 
+// Recalcula el % global como promedio PONDERADO por horas presupuestadas de cada slider visible
 function _recalcAvanceGlobal(){
-  // Recalcula el % global como promedio de los sliders visibles
-  const sliders = document.querySelectorAll('#modal-body input[type=range]');
-  if(!sliders.length) return;
-  const avg = Math.round([...sliders].reduce((s,el)=>s+Number(el.value),0)/sliders.length);
+  const cont = document.querySelectorAll('#modal-body .qa-avp-slider');
+  if(!cont.length) return;
+  const items = [...cont].map(div => ({
+    hrs: Number(div.dataset.hrs || 0),
+    val: Number(div.querySelector('input[type=range]')?.value || 0)
+  }));
+  const avg = Math.round(_promedioPonderado(items));
   const el = document.getElementById('avp-global-pct');
   const bar = document.getElementById('avp-global-bar');
   if(el) el.textContent = avg+'%';
   if(bar) bar.style.width = avg+'%';
 }
 
+// Guardar avance manual (cuando la OP no tiene rutas definidas)
+async function qaGuardarAvanceManual(opId){
+  const op = qaFindOP(opId);
+  if(!op){ toast('OP no encontrada','error'); return; }
+  const el = document.getElementById('avp-manual');
+  if(!el){ toast('No se encontró el slider','error'); return; }
+  const globalPct = Number(el.value);
+  // '%AVANCE' NO se envía — es fórmula automática en el Sheet
+  const payload = { IDQR: op.IDQR };
+  if(globalPct >= 100 && op.ESTADO === 'EN PROCESO') payload.ESTADO = 'TERMINADO';
+  else if(globalPct > 0 && op.ESTADO === 'PENDIENTE MP') payload.ESTADO = 'EN PROCESO';
+  try{
+    await POST('updateOP', payload);
+    toast(`✅ Estado actualizado — ${globalPct}% (avance calculado por fórmula en Sheet)`);
+    closeModal();
+    Object.assign(op, payload);
+    _autoSync(['produccion'], () => {
+      if(MOD==='produccion') produccion();
+      else if(MOD==='diseño') controlDiseno();
+    });
+  }catch(e){ toast(e.message,'error'); }
+}
+
 async function qaGuardarAvance(opId){
   const op = qaFindOP(opId);
   if(!op){ toast('OP no encontrada','error'); return; }
 
-  const rutasRaw = [
-    op['RUTA MQ1']||'', op['RUTA MQ2']||'', op['RUTA MQ3']||'',
-    op['RUTA MQ4']||'', op['RUTA MQ5']||'', op['RUTA MQ6']||'',
-    op['RUTA MQ7']||'', op['RUTA MQ8']||'', op['RUTA MQ9']||'', op['RUTA MQ10']||''
-  ].filter(Boolean);
-
-  const seen = new Set();
+  // Reconstruir la lista de procesos individuales (sin deduplicar por máquina)
   const procesos = [];
-  rutasRaw.forEach(ruta => {
-    const pctKey = RUTA_A_PCT[ruta];
-    if(!pctKey || seen.has(pctKey)) return;
-    seen.add(pctKey);
-    procesos.push({ pctKey });
-  });
+  for(let n=1;n<=10;n++){
+    const ruta = op['RUTA MQ'+n]||'';
+    if(!ruta) continue;
+    const pctKey = _rutaToPctKey(ruta);
+    if(!pctKey) continue;
+    const hrs = Number(op['RUTA MQ'+n+' HRS']||0);
+    procesos.push({ n, ruta, pctKey, hrs });
+  }
 
-  // Leer valores de los sliders del modal
+  // Leer valores de los sliders del modal (uno por proceso individual)
   const payload = { IDQR: op.IDQR };
-  let suma = 0;
   procesos.forEach(p => {
-    const id = 'avp-' + p.pctKey.replace(/[^a-zA-Z0-9]/g,'_');
-    const el = document.getElementById(id);
-    const val = el ? Number(el.value) / 100 : Number(op[p.pctKey]||0);
-    payload[p.pctKey] = val;
-    suma += val;
+    const el = document.getElementById('avpmq'+p.n);
+    const val = el ? Number(el.value)/100 : Number(op['PROCESO '+p.n+' R']||0);
+    payload['PROCESO '+p.n+' R'] = val; // fracción 0-1 → columna PROCESO n R de Control Producción
   });
 
-  // Avance global = promedio de todos los procesos de la ruta
-  const globalPct = procesos.length ? Math.round((suma / procesos.length) * 100) : 0;
-  payload['%AVANCE'] = globalPct;
+  // NOTA: NO se envían BANCO %, TORNO %, etc. — esas celdas tienen su propia
+  // fórmula SUMPRODUCT en el Sheet que lee de PROCESO n R.
+
+  // Avance global = promedio ponderado por horas
+  const globalPct = Math.round(_promedioPonderado(
+    procesos.map(p => ({ val: payload['PROCESO '+p.n+' R']*100, hrs: p.hrs }))
+  ));
+  // '%AVANCE' NO se envía — es fórmula automática en el Sheet
 
   // Auto-estado según avance
   if(globalPct >= 100 && op.ESTADO === 'EN PROCESO'){
@@ -4625,12 +4863,13 @@ async function qaGuardarAvance(opId){
 
   try{
     await POST('updateOP', payload);
-    toast(`✅ Avance guardado — ${globalPct}% global`);
+    toast(`✅ Avance guardado — ${globalPct}% global (ponderado por horas)`);
     closeModal();
-    // Actualizar en caché local sin re-fetch completo
     Object.assign(op, payload);
-    if(MOD==='produccion') produccion();
-    else if(MOD==='diseño') controlDiseno();
+    _autoSync(['produccion'], () => {
+      if(MOD==='produccion') produccion();
+      else if(MOD==='diseño') controlDiseno();
+    });
   }catch(e){ toast(e.message,'error'); }
 }
 
@@ -5460,8 +5699,8 @@ function formOP(op={}){
           <input type="number" id="pprecio" value="${op['PRECIO SIN IVA']||0}"></div>
         <div class="field"><label>Horas Total</label>
           <input id="phrs" value="${op['HORAS TOTAL']||''}"></div>
-        <div class="field"><label>% Avance</label>
-          <input type="number" id="p7" value="${op['%AVANCE']||0}" min="0" max="100"></div>
+        <div class="field"><label>% Avance (fórmula)</label>
+          <input type="number" id="p7" value="${qaPct(op['%AVANCE']||0)}" min="0" max="100" disabled style="opacity:.5;cursor:not-allowed;background:var(--card2)" title="Este campo es fórmula en el Sheet — se actualiza automáticamente desde Avance de Procesos"></div>
         <div class="field"><label>Días Entrega</label>
           <input type="number" id="p8" value="${op['DÍAS ENTREGA']||0}"></div>
         <div class="field"><label>Fecha Inicio</label>
@@ -5628,7 +5867,7 @@ async function saveOP(exist){
     CANT:               gn('pa'),
     'PRECIO SIN IVA':   gn('pprecio'),
     'HORAS TOTAL':      gv('phrs'),
-    '%AVANCE':          gn('p7'),
+    // '%AVANCE' es fórmula en el Sheet — NO se envía desde el formulario
     'DÍAS ENTREGA':     gn('p8'),
     'FECHA INICIO':     gv('pb'),
     'FECHA PACTADA':    gv('pc'),
