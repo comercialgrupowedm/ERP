@@ -4713,8 +4713,8 @@ function qaAvanceProcesos(opId){
     return;
   }  // fin if(!procesos.length)
 
-  // Calcular avance global EN VIVO desde los procesos (misma fórmula que el Sheet)
-  const pctActual = Math.round(_promedioPonderado(procesos));
+  // Leer %AVANCE real del Sheet (es fórmula — no recalcular en el HTML)
+  const pctActual = qaPct(op['%AVANCE']||0);
 
   // Construir sliders — uno por CADA proceso individual de la ruta
   const slidersHtml = procesos.map(p => {
