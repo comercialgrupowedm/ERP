@@ -4619,7 +4619,7 @@ const QA_ETAPAS = [
   { id:'diseno',    doneKeys:['INGENIERIA Y PLANEACIÓN','ING_PLANEACION'],
     dateKeys:['FECHA ENTREGA\nPLANEACIÓN\nDD/MM/AA'],
     label:'Diseño OK', icon:'📐', doneLabel:'Diseño ✓', doneIcon:'✅',
-    nombreLargo:'Diseño / Ingeniería y Planeación', cascade:true },
+    nombreLargo:'Diseño / Ingeniería y Planeación' },
   { id:'mp',        doneKeys:['MP\nINSUMOS','MP INSUMOS'],
     dateKeys:['FECHA ENTREGA\nDD/MM/AA','FECHA ENTREGA MP'],
     label:'MP Insumos', icon:'🧱', doneLabel:'MP Insumos ✓', doneIcon:'✅',
@@ -4642,13 +4642,62 @@ const QA_ETAPAS = [
     nombreLargo:'Liberación / Despacho' },
 ];
 
+// Normaliza un nombre de columna para comparar sin importar tildes, mayúsculas,
+// saltos de línea ni espacios extra (el header real del Sheet a veces llega con
+// una codificación de acento distinta a la hardcodeada aquí, o con \n en vez de espacio).
+function _qaNormKey(k){
+  return String(k||'')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'') // quita tildes
+    .replace(/[\n\r]+/g,' ')
+    .trim().toUpperCase()
+    .replace(/\s+/g,' ');
+}
+function _qaTruthy(v){
+  if(v===true || v===1) return true;
+  if(v==null) return false;
+  const s = String(v).trim().toUpperCase();
+  return s==='TRUE' || s==='Y' || s==='YES' || s==='SI' || s==='SÍ' || s==='1' || s==='X' || s==='✓';
+}
 function _qaEtapaDone(op, etapa){
-  return etapa.doneKeys.some(k => op[k]==='TRUE' || op[k]==='Y');
+  if(!op) return false;
+  // 1) intento directo con las llaves declaradas
+  if(etapa.doneKeys.some(k => _qaTruthy(op[k]))) return true;
+  // 2) fallback: comparar TODAS las llaves reales de la fila normalizadas,
+  //    por si el nombre exacto de columna llega con distinta tilde/espaciado
+  const wanted = etapa.doneKeys.map(_qaNormKey);
+  return Object.keys(op).some(realKey =>
+    wanted.includes(_qaNormKey(realKey)) && _qaTruthy(op[realKey])
+  );
 }
 // Devuelve la etapa actual pendiente (la siguiente a completar), o null si ya se completaron todas.
+// La etapa "Servicio Externo" es condicional: si el Semáforo de Avance no está en
+// "TRABAJO EXTERNO", se salta (no se muestra como paso a completar) y el botón pasa
+// directo a la siguiente etapa (Entrega de Producción). En cuanto el semáforo se pone
+// en "TRABAJO EXTERNO", vuelve a aparecer como paso pendiente.
 function qaEtapaActual(op){
-  for(const et of QA_ETAPAS){ if(!_qaEtapaDone(op, et)) return et; }
+  for(const et of QA_ETAPAS){
+    if(_qaEtapaDone(op, et)) continue;
+    if(et.id === 'servicio'){
+      const semActual = _qaNormKey(op['SEMAFORO AVANCE']||'');
+      if(semActual !== _qaNormKey('TRABAJO EXTERNO')) continue; // se salta, no se muestra
+    }
+    return et;
+  }
   return null;
+}
+// Diagnóstico manual: abrir consola del navegador y ejecutar qaDebugEtapa('OP-13531' o IDQR)
+// para ver exactamente qué valores está recibiendo del backend en las columnas de checklist.
+function qaDebugEtapa(opId){
+  const op = qaFindOP(opId);
+  if(!op){ console.warn('OP no encontrada:', opId); return; }
+  console.log('── Diagnóstico etapas OP', op.OP||opId, '──');
+  QA_ETAPAS.forEach(et=>{
+    console.log(et.id, '| done=', _qaEtapaDone(op, et), '| doneKeys buscadas:', et.doneKeys,
+      '| valores encontrados:', et.doneKeys.map(k=>`${k}=${JSON.stringify(op[k])}`));
+  });
+  console.log('Todas las llaves del objeto OP:', Object.keys(op));
+  console.log('Objeto OP completo:', op);
+  return op;
 }
 // Config del botón dinámico — label/ícono cambian solos según en qué etapa esté la OP.
 function qaEtapaBtn(op){
@@ -4662,12 +4711,41 @@ async function qaAvanzarEtapa(opId){
   if(!op){ toast('OP no encontrada: '+opId,'error'); return; }
   const et = qaEtapaActual(op);
   if(!et){ toast('✅ Esta OP ya completó todas las etapas','info'); return; }
+
+  // ── Regla especial: Servicio Externo solo se puede avanzar si el
+  // Semáforo de Avance está en "TRABAJO EXTERNO". Al avanzarla, el semáforo
+  // vuelve solo a "EN PROCESO".
+  if(et.id === 'servicio'){
+    const semActual = _qaNormKey(op['SEMAFORO AVANCE']||'');
+    if(semActual !== _qaNormKey('TRABAJO EXTERNO')){
+      toast('⚠️ Para avanzar "Servicio Externo" primero pon el Semáforo de Avance en "TRABAJO EXTERNO"','error');
+      return;
+    }
+  }
+
+  // ── Regla especial: al marcar Calidad, además hay que pedir el
+  // responsable de Liberación antes de guardar.
+  if(et.id === 'calidad'){
+    qaPedirResponsableLiberacion(op, et);
+    return;
+  }
+
   const msg = `¿Marcar "${et.nombreLargo}" como completado en OP-${op.OP||opId}?`;
   if(!confirm(msg)) return;
   const hoy = new Date().toISOString().slice(0,10);
   const payload = { IDQR: op.IDQR };
-  et.doneKeys.forEach(k => payload[k] = 'TRUE');
-  et.dateKeys.forEach(k => payload[k] = hoy);
+  // Si la llave real ya existe en la fila (aunque con tilde/espaciado distinto), usar esa
+  // exacta al escribir, para no crear una columna nueva que el Sheet no reconozca.
+  const _realKey = (candidates) => {
+    const wanted = candidates.map(_qaNormKey);
+    return Object.keys(op).find(rk => wanted.includes(_qaNormKey(rk))) || candidates[0];
+  };
+  payload[_realKey(et.doneKeys)] = 'TRUE';
+  if(et.dateKeys.length) payload[_realKey(et.dateKeys)] = hoy;
+  if(et.id === 'servicio'){
+    // El semáforo vuelve a EN PROCESO en cuanto se completa el servicio externo
+    payload[_realKey(['SEMAFORO AVANCE'])] = 'EN PROCESO';
+  }
   let etCascada = null;
   if(et.cascade){
     const idx = QA_ETAPAS.indexOf(et);
@@ -4683,10 +4761,81 @@ async function qaAvanzarEtapa(opId){
     toast(etCascada
       ? `✅ ${et.nombreLargo} marcado — ${etCascada.nombreLargo} avanzado`
       : `✅ ${et.nombreLargo} marcado`);
+    // Si el panel de detalle de esta misma OP está abierto, refrescarlo de inmediato
+    // para que el botón dinámico y el resto de la info se vean actualizados sin esperar el autosync.
+    const dpEl = document.getElementById('dp');
+    if(dpEl && dpEl.classList.contains('open') && typeof detailOP==='function'){
+      detailOP(op.IDQR || opId);
+    }
     _autoSync(['produccion'], ()=>{ if(MOD==='produccion') produccion(); else if(MOD==='diseño') controlDiseno(); });
   }catch(e){ toast(e.message,'error'); }
 }
 async function qaDisenioOK(opId){ return qaAvanzarEtapa(opId); }
+
+// ── Calidad → pedir responsable de Liberación ───────────────────
+// Al marcar la etapa Calidad, además de CALIDAD=TRUE y su fecha, se pide
+// elegir quién queda como responsable de Liberación (o escribir otro nombre).
+const QA_LIBERACION_NOMBRES = ['C.POSADA','F.GIRALDO','J.GARCIA'];
+const QA_RESPONSABLE_LIB_KEYS = ['RESPONSABLE LIBERACION','RESPONSABLE LIBERACIÓN','LIBERADO POR','RESPONSABLE_LIBERACION'];
+
+function qaPedirResponsableLiberacion(op, et){
+  const safeId = String(op.IDQR).replace(/'/g,"\\'");
+  openModal(`🔍 Calidad — Responsable de Liberación`, `
+    <p style="font-size:12px;color:var(--muted);margin-bottom:12px">
+      Se marcará "Calidad" en OP-${op.OP||op.IDQR}. Elige quién queda como responsable de Liberación:
+    </p>
+    <div id="qa-lib-opts" style="display:flex;flex-direction:column;gap:8px">
+      ${QA_LIBERACION_NOMBRES.map(n=>`
+        <button type="button" class="btn btn-ghost" style="text-align:left"
+          onclick="qaConfirmarCalidad('${safeId}','${n}')">${n}</button>`).join('')}
+      <button type="button" class="btn btn-ghost" style="text-align:left"
+        onclick="qaMostrarInputLiberacion()">✏️ Escribir otro nombre…</button>
+    </div>
+    <div id="qa-lib-custom" class="field" style="display:none;margin-top:12px">
+      <label>Nombre del responsable</label>
+      <input type="text" id="qa-lib-custom-input" placeholder="Ej: N.APELLIDO">
+    </div>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+     <button class="btn btn-primary" id="qa-lib-custom-btn" style="display:none"
+       onclick="qaConfirmarCalidadCustom('${safeId}')">✓ Confirmar</button>`
+  );
+}
+function qaMostrarInputLiberacion(){
+  document.getElementById('qa-lib-opts').style.display='none';
+  document.getElementById('qa-lib-custom').style.display='flex';
+  document.getElementById('qa-lib-custom-btn').style.display='inline-flex';
+  document.getElementById('qa-lib-custom-input')?.focus();
+}
+async function qaConfirmarCalidadCustom(opId){
+  const v = (document.getElementById('qa-lib-custom-input')?.value||'').trim();
+  if(!v){ toast('Escribe un nombre','error'); return; }
+  return qaConfirmarCalidad(opId, v);
+}
+async function qaConfirmarCalidad(opId, responsable){
+  const op = qaFindOP(opId);
+  if(!op){ toast('OP no encontrada: '+opId,'error'); return; }
+  const et = QA_ETAPAS.find(e=>e.id==='calidad');
+  const hoy = new Date().toISOString().slice(0,10);
+  const _realKey = (candidates) => {
+    const wanted = candidates.map(_qaNormKey);
+    return Object.keys(op).find(rk => wanted.includes(_qaNormKey(rk))) || candidates[0];
+  };
+  const payload = { IDQR: op.IDQR };
+  payload[_realKey(et.doneKeys)] = 'TRUE';
+  if(et.dateKeys.length) payload[_realKey(et.dateKeys)] = hoy;
+  payload[_realKey(QA_RESPONSABLE_LIB_KEYS)] = responsable;
+  try{
+    await POST('updateOP', payload);
+    Object.keys(payload).forEach(k => { if(k!=='IDQR') op[k] = payload[k]; });
+    toast(`✅ Calidad marcada — Liberación asignada a ${responsable}`);
+    closeModal();
+    const dpEl = document.getElementById('dp');
+    if(dpEl && dpEl.classList.contains('open') && typeof detailOP==='function'){
+      detailOP(op.IDQR || opId);
+    }
+    _autoSync(['produccion'], ()=>{ if(MOD==='produccion') produccion(); else if(MOD==='diseño') controlDiseno(); });
+  }catch(e){ toast(e.message,'error'); }
+}
 
 // ── Semáforo de avance ─────────────────────────────────────────
 const QA_SEMAFORO_OPTS = ['CANCELADO','EN PROCESO','PAUSADO','TRABAJO EXTERNO'];
@@ -4799,12 +4948,7 @@ function qaFinalizacion(opId){
         <input type="checkbox" id="qa-fin-cal" ${isTrue(op.CALIDAD)?'checked':''}> Calidad</label></div>
       <div class="field"><label style="display:flex;align-items:center;gap:8px;cursor:pointer">
         <input type="checkbox" id="qa-fin-lib" ${(isTrue(op.LIBERACION)||isTrue(op.DESPACHO))?'checked':''}> Liberación / Despacho</label></div>
-      <div class="field"><label>Estado final</label>
-        <select id="qa-fin-estado">
-          <option value="TERMINADO" ${op.ESTADO==='TERMINADO'?'selected':''}>TERMINADO</option>
-          <option value="ENTREGADO" ${op.ESTADO==='ENTREGADO'?'selected':''}>ENTREGADO</option>
-        </select>
-      </div>
+      <div class="field"><label style="color:var(--muted);font-weight:400">Estado: <b>${op.ESTADO||'—'}</b> (automático, calculado por fórmula en el Sheet a partir de estas casillas)</label></div>
     </div>`,
     `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
      <button class="btn btn-primary" onclick="qaGuardarFinalizacion('${String(opId).replace(/'/g,"\\'")}')">✓ Guardar</button>`
@@ -4817,14 +4961,13 @@ async function qaGuardarFinalizacion(opId){
   const prod   = document.getElementById('qa-fin-prod').checked;
   const cal    = document.getElementById('qa-fin-cal').checked;
   const lib    = document.getElementById('qa-fin-lib').checked;
-  const estado = document.getElementById('qa-fin-estado').value;
   try{
     await POST('updateOP', {
       IDQR: op.IDQR,
       'ENTREGA DE PRODUCCIÓN': prod?'TRUE':'FALSE',
       CALIDAD: cal?'TRUE':'FALSE',
-      LIBERACION: lib?'TRUE':'FALSE',
-      ESTADO: estado
+      LIBERACION: lib?'TRUE':'FALSE'
+      // ESTADO NO se envía — se calcula solo por fórmula en el Sheet
     });
     toast('✅ Finalización guardada');
     closeModal();
@@ -5067,12 +5210,11 @@ async function qaGuardarAvanceManual(opId){
   if(!el){ toast('No se encontró el slider','error'); return; }
   const globalPct = Number(el.value);
   // '%AVANCE' NO se envía — es fórmula automática en el Sheet
+  // ESTADO tampoco se envía — también es fórmula automática en el Sheet
   const payload = { IDQR: op.IDQR };
-  if(globalPct >= 100 && op.ESTADO === 'EN PROCESO') payload.ESTADO = 'TERMINADO';
-  else if(globalPct > 0 && op.ESTADO === 'PENDIENTE MP') payload.ESTADO = 'EN PROCESO';
   try{
     await POST('updateOP', payload);
-    toast(`✅ Estado actualizado — ${globalPct}% (avance calculado por fórmula en Sheet)`);
+    toast(`✅ Avance guardado — ${globalPct}% (estado calculado por fórmula en Sheet)`);
     closeModal();
     Object.assign(op, payload);
     _autoSync(['produccion'], () => {
@@ -5113,13 +5255,7 @@ async function qaGuardarAvance(opId){
     procesos.map(p => ({ val: payload['PROCESO '+p.n+' R']*100, hrs: p.hrs }))
   ));
   // '%AVANCE' NO se envía — es fórmula automática en el Sheet
-
-  // Auto-estado según avance
-  if(globalPct >= 100 && op.ESTADO === 'EN PROCESO'){
-    payload.ESTADO = 'TERMINADO';
-  } else if(globalPct > 0 && op.ESTADO === 'PENDIENTE MP'){
-    payload.ESTADO = 'EN PROCESO';
-  }
+  // ESTADO tampoco se envía — también es fórmula automática en el Sheet
 
   try{
     await POST('updateOP', payload);
@@ -5437,14 +5573,9 @@ function qaKanban(opId){
 }
 
 async function qaMoverKanban(opId, estado){
-  const op = qaFindOP(opId);
-  if(!op){ toast('OP no encontrada','error'); return; }
-  try{
-    await POST('updateOP', { IDQR: op.IDQR, ESTADO: estado });
-    toast(`✅ Movido a "${estado}"`);
-    closeModal();
-    _autoSync(['produccion'], () => { if(typeof renderProduccion==='function') renderProduccion(); });
-  }catch(e){ toast(e.message,'error'); }
+  // ESTADO se calcula por fórmula en el Sheet — ya no se puede forzar manualmente.
+  toast('El estado se calcula automáticamente por fórmula en la hoja y no se puede mover a mano','info');
+  closeModal();
 }
 
 // ── Ver Compras vinculadas a esta OP ─────────────────────────
@@ -5979,8 +6110,8 @@ function formOP(op={}){
           <div class="rich-desc-hint">✎ Editor tipo Word: puedes escribir y pegar imágenes (Ctrl+V) en el mismo texto</div></div>
         <div class="field"><label>Tipo</label>
           <select id="p5">${Object.keys(TIPOS_COT).map(t=>`<option ${op.TIPO===t?'selected':''}>${t}</option>`).join('')}</select></div>
-        <div class="field"><label>Estado</label>
-          <select id="p6">${['PENDIENTE MP','EN PROCESO','PAUSADO','CANCELADO','ENTREGADO'].map(s=>`<option ${(op.ESTADO||'PENDIENTE MP')===s?'selected':''}>${s}</option>`).join('')}</select></div>
+        <div class="field"><label>Estado <span style="font-weight:400;color:var(--muted)">(automático — fórmula del Sheet)</span></label>
+          <input value="${op.ESTADO||'—'}" disabled style="opacity:.7"></div>
         <div class="field"><label>Asesor</label>
           <select id="pase">
             ${ASESORES.map(a=>`<option ${(op.ASESOR||'')===a?'selected':''}>${a}</option>`).join('')}
@@ -6160,7 +6291,7 @@ async function saveOP(exist){
     CLIENTE:            gv('p2'),
     DESCRIPCION:        richGet('p3'),
     TIPO:               gv('p5'),
-    ESTADO:             gv('p6'),
+    // ESTADO NO se envía — tiene fórmula propia en el Sheet, no se debe pisar
     ASESOR:             gv('pase'),
     DISEÑADOR:          gv('pdis'),
     PRIORIDAD:          gv('p9'),
