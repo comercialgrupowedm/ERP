@@ -378,6 +378,7 @@ td.mono{font-family:var(--mono);font-size:11px}
 .rich-desc img{max-width:100%;display:block;margin:8px 0;border-radius:4px;border:1px solid #e2e2e2}
 .rich-desc:empty:before{content:attr(data-placeholder);color:#9a9a9a;font-style:italic}
 .rich-desc-hint{font-size:10px;color:var(--muted);margin-top:4px}
+.rich-desc-view img{max-width:100%;display:block;margin:8px 0;border-radius:4px;border:1px solid #e2e2e2}
 
 /* ═══ DETAIL PANEL ═══════════════════════= */
 .detail-panel{
@@ -3194,6 +3195,188 @@ function _renderFmaePanel(panel){
   document.getElementById('btn-fmae-add-'+cotId)?.addEventListener('click',()=>cotFmaeAddRow(cotId));
 }
 
+// ══════════════════════════════════════════════════════════════
+//   FMEA — ACCESO RÁPIDO EN PANTALLA COMPLETA (igual que Hoja de Ruta)
+// ══════════════════════════════════════════════════════════════
+
+// ── Abrir el panel de FMEA en pantalla completa ────────────────
+function qaFmea(cotId){
+  const c = (DB.cotizaciones||[]).find(x=>String(x.COTIZACION)===String(cotId)||String(x.ID_PEDIDO)===String(cotId));
+  if(!c){ toast('Cotización no encontrada: '+cotId,'error'); return; }
+  window._FMEA = { cotId: String(cotId), c };
+  _fmeaOpenPanel();
+}
+
+function _fmeaOpenPanel(){
+  const old = document.getElementById('fmea-editor-panel');
+  if(old) old.remove();
+
+  const { cotId, c } = window._FMEA;
+  const panel = document.createElement('div');
+  panel.id = 'fmea-editor-panel';
+  panel.style.cssText = `
+    position:fixed;inset:0;z-index:700;
+    display:flex;flex-direction:column;background:var(--surface);
+    animation:slideUp .18s ease`;
+  panel.innerHTML = `
+    <style>
+    #fmea-editor-panel * { box-sizing:border-box }
+    #fmea-topbar {
+      background:linear-gradient(135deg,#7a1414,#c62828);
+      color:#fff;flex-shrink:0;
+      padding:0 12px;
+      display:flex;align-items:center;gap:8px;
+      min-height:54px;
+    }
+    #fmea-topbar-back {
+      background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);
+      color:#fff;border-radius:10px;padding:7px 12px;font-size:13px;
+      font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0;
+    }
+    #fmea-topbar-title {
+      flex:1;min-width:0;
+      font-size:13px;font-weight:700;
+      overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+    }
+    #fmea-topbar-title span {
+      opacity:.7;font-size:11px;font-weight:400;display:block;margin-top:1px;
+    }
+    #fmea-btn-add {
+      background:#fbbf24;border:none;
+      color:#1a1a1a;border-radius:10px;padding:8px 14px;font-size:13px;
+      font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0;
+      box-shadow:0 2px 8px rgba(251,191,36,.4);
+    }
+    #fmea-body-scroll {
+      flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;
+      padding:14px;background:var(--bg);
+    }
+    </style>
+
+    <div id="fmea-topbar">
+      <button id="fmea-topbar-back" onclick="_fmeaClose()">← Volver</button>
+      <div id="fmea-topbar-title">
+        ⚠️ FMEA — Modo y Efecto de Falla
+        <span>COT-${c.COTIZACION||''} · ${c.EMPRESA||c.Empresa||''}</span>
+      </div>
+      <button id="fmea-btn-add" onclick="cotFmaeAddRow('${cotId}')">＋ Agregar</button>
+    </div>
+
+    <div id="fmea-body-scroll">
+      <div class="dp-tabpanel active" data-panel="fmae" id="dp-fmae-${cotId}"></div>
+      <div class="dp-tabpanel active" data-panel="reco" id="dp-reco-${cotId}" style="margin-top:18px"></div>
+    </div>
+  `;
+  document.body.appendChild(panel);
+  _renderFmaePanel(document.getElementById('dp-fmae-'+cotId));
+  _renderRecoPanel(document.getElementById('dp-reco-'+cotId));
+}
+
+function _fmeaClose(){
+  document.getElementById('fmea-editor-panel')?.remove();
+}
+
+// ── Recomendaciones del Comercial (independiente del FMEA técnico) ──
+function _renderRecoPanel(panel){
+  if(!panel) return;
+  const cotId = window._FMEA?.cotId;
+  const c = (DB.cotizaciones||[]).find(x=>String(x.COTIZACION)===String(cotId)||String(x.ID_PEDIDO)===String(cotId));
+  if(!c){ panel.innerHTML=''; return; }
+
+  let reco=[];
+  try{ reco=JSON.parse(c.RECOMENDACIONES_JSON||'[]'); }catch(e){}
+
+  const tarjetas = reco.length
+    ? reco.map((r,i)=>`
+      <div style="background:var(--card2);border-radius:12px;padding:12px 14px;margin-bottom:10px;position:relative">
+        <div class="rich-desc-view" style="font-size:13px;line-height:1.5;padding-right:24px">${r.texto||'—'}</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:10px;color:var(--muted)">
+          <span>${r.resp?'👤 '+r.resp:''}</span>
+          <span>${r.fecha?fmtDate(r.fecha):''}</span>
+        </div>
+        <button data-reco-del="${i}" style="position:absolute;top:10px;right:10px;background:none;border:none;cursor:pointer;color:var(--danger);font-size:16px">🗑</button>
+      </div>`).join('')
+    : `<div style="padding:16px;text-align:center;color:var(--muted);font-size:12px">Sin recomendaciones — toca ＋ Agregar para dejar una</div>`;
+
+  panel.innerHTML = `
+    <div class="dp-section">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <h4 style="margin:0">💡 Recomendaciones del Comercial</h4>
+        <button class="btn btn-primary btn-sm" id="btn-reco-add-${cotId}">＋ Agregar</button>
+      </div>
+      <div style="font-size:10px;color:var(--muted);margin-bottom:10px">
+        Notas o instrucciones que el asesor comercial deja para diseño/producción, para evitar errores con el cliente o la pieza.
+      </div>
+      ${tarjetas}
+    </div>`;
+
+  document.getElementById('btn-reco-add-'+cotId)?.addEventListener('click',()=>cotRecoAddRow(cotId));
+  panel.querySelectorAll('[data-reco-del]').forEach(btn=>{
+    btn.addEventListener('click',()=>cotRecoDelRow(cotId, Number(btn.dataset.recoDel)));
+  });
+}
+
+function cotRecoAddRow(cotId){
+  openModal('Nueva Recomendación — Comercial',`
+    <div class="form-grid">
+      <div class="field span2"><label>Recomendación / Instrucción ★</label>
+        <div id="rc-texto" class="rich-desc" contenteditable="true" data-placeholder="ej. Confirmar tolerancia crítica con el cliente antes de fabricar… — puedes pegar una captura de pantalla (Ctrl+V)" onpaste="richPaste(event,'rc-texto')"></div>
+        <div class="rich-desc-hint">✎ Editor tipo Word: puedes escribir y pegar imágenes (Ctrl+V) en el mismo texto</div></div>
+      <div class="field span2"><label>Responsable / Comercial</label>
+        <input id="rc-resp" placeholder="ej. Francisco Giraldo"></div>
+    </div>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+     <button class="btn btn-primary" onclick="cotRecoSaveRow('${cotId}')">✓ Agregar recomendación</button>`
+  );
+}
+
+async function cotRecoSaveRow(cotId){
+  const fila={
+    texto: richGet('rc-texto'),
+    resp:  document.getElementById('rc-resp')?.value?.trim()||'',
+    fecha: new Date().toISOString().slice(0,10),
+  };
+  if(!fila.texto){ toast('Escribe la recomendación','error'); return; }
+
+  const c=(DB.cotizaciones||[]).find(x=>String(x.COTIZACION)===String(cotId)||String(x.ID_PEDIDO)===String(cotId));
+  if(!c){ toast('Cotización no encontrada','error'); return; }
+
+  let reco=[];
+  try{ reco=JSON.parse(c.RECOMENDACIONES_JSON||'[]'); }catch(e){}
+  reco.push(fila);
+
+  try{
+    const btn=document.querySelector('#modal-foot .btn-primary');
+    if(btn){btn.disabled=true;btn.textContent='Guardando…';}
+    await POST('updateCotizacion',{...c, RECOMENDACIONES_JSON: JSON.stringify(reco)});
+    c.RECOMENDACIONES_JSON=JSON.stringify(reco);
+    toast('✅ Recomendación agregada');
+    closeModal();
+    const panel=document.getElementById('dp-reco-'+cotId);
+    if(panel) _renderRecoPanel(panel);
+  }catch(e){
+    toast('❌ '+e.message,'error');
+    const btn=document.querySelector('#modal-foot .btn-primary');
+    if(btn){btn.disabled=false;btn.textContent='✓ Agregar recomendación';}
+  }
+}
+
+async function cotRecoDelRow(cotId, idx){ idx=Number(idx);
+  if(!confirm('¿Eliminar esta recomendación?')) return;
+  const c=(DB.cotizaciones||[]).find(x=>String(x.COTIZACION)===String(cotId)||String(x.ID_PEDIDO)===String(cotId));
+  if(!c) return;
+  let reco=[];
+  try{ reco=JSON.parse(c.RECOMENDACIONES_JSON||'[]'); }catch(e){}
+  reco.splice(idx,1);
+  try{
+    await POST('updateCotizacion',{...c, RECOMENDACIONES_JSON: JSON.stringify(reco)});
+    c.RECOMENDACIONES_JSON=JSON.stringify(reco);
+    toast('🗑 Eliminada');
+    const panel=document.getElementById('dp-reco-'+cotId);
+    if(panel) _renderRecoPanel(panel);
+  }catch(e){ toast('❌ '+e.message,'error'); }
+}
+
 function _renderHojaRutaPanel(panel){
   if(!panel) return;
   const cotId = _getCotIdFromPanel(panel);
@@ -3406,20 +3589,40 @@ function addDias(fechaISO, dias){
 }
 
 
-async function modalCrearOP(cotId){
+async function modalCrearOP(cotId, soloItemId){
   if(!DB.items) DB.items=await GET('getItems');
   if(!DB.produccion) DB.produccion=await GET('getControlProduccion');
   const c=(DB.cotizaciones||[]).find(x=>String(x.COTIZACION)===String(cotId));
   if(!c){ toast('Cotización no encontrada','error'); return; }
-  const its=DB.items.filter(x=>String(x.COTIZACION)===String(cotId)||String(x.ID_PEDIDO)===String(cotId));
+  let its=DB.items.filter(x=>String(x.COTIZACION)===String(cotId)||String(x.ID_PEDIDO)===String(cotId));
   if(!its.length){
     toast('La cotización no tiene items. Agrégalos primero.','error'); return;
   }
 
+  // Si venimos desde el detalle de un ítem puntual, restringir SOLO a ese ítem
+  // (no se debe crear OP para el resto de ítems de la cotización).
+  if(soloItemId){
+    its = its.filter(it=>String(it.ID_ITEM)===String(soloItemId));
+    if(!its.length){ toast('Ítem no encontrado en esta cotización','error'); return; }
+  }
+
   // ¿Ya existe OP para esta cotización?
   const opsExistentes = (DB.produccion||[]).filter(x=>String(x.COT)===String(cotId));
-  const opExistenteNum = its.find(it=>it.OP_ID)?.OP_ID || opsExistentes[0]?.OP || '';
-  const itsFaltantes = its.filter(it=>!it.OP_ID);
+  // Prioridad: número de OP real tomado de Control Producción (opsExistentes).
+  // it.OP_ID queda solo como respaldo, porque ese campo puede estar
+  // desactualizado y apuntar a una OP que ya no corresponde a esta cotización.
+  const opExistenteNum = opsExistentes[0]?.OP || its.find(it=>it.OP_ID)?.OP_ID || '';
+  // Un item se considera "ya en Producción" solo si existe una fila real en
+  // Control Producción con el mismo COT+ITEM (no basta con que el item tenga
+  // OP_ID escrito, ese campo puede quedar desactualizado o duplicado).
+  const itsFaltantes = its.filter(it=>
+    !opsExistentes.some(op=>String(op.ITEM)===String(it.ITEM||it.ITEM_NUM))
+  );
+
+  if(soloItemId && !itsFaltantes.length){
+    toast('Este ítem ya está en Producción.','error');
+    return;
+  }
 
   if(opExistenteNum && !itsFaltantes.length){
     toast(`Esta cotización ya tiene la OP-${opExistenteNum} con todos sus ítems en Producción.`,'error');
@@ -3433,9 +3636,16 @@ async function modalCrearOP(cotId){
   _opModalLeadDias = Number(c['LEAD TIME COT']||c['LEAD TIME']||0);
   const fpCalc = addDias(hoy, _opModalLeadDias);
 
-  const avisoTexto = opExistenteNum
-    ? `Esta cotización ya tiene la <strong>OP-${newOP}</strong>. Se agregarán <strong>${itemsAUsar.length} ítem(s)</strong> que aún no estaban en Producción (los demás no se duplican).`
-    : `Se crearán <strong>${itemsAUsar.length} fila(s)</strong> en Control Producción, una por item, todas con el mismo Nº OP-<strong>${newOP}</strong>`;
+  const avisoTexto = soloItemId
+    ? `Se creará la fila de Producción solo para el <strong>Ítem ${itemsAUsar[0]?.ITEM||''}</strong> de esta cotización, con el Nº OP-<strong>${newOP}</strong>. Los demás ítems de la cotización no se tocan.`
+    : opExistenteNum
+      ? `Esta cotización ya tiene la <strong>OP-${newOP}</strong>. Selecciona abajo cuáles de los ítems pendientes quieres agregar (los que ya estén en Producción no se duplican).`
+      : `Selecciona abajo los ítems que quieres crear en Control Producción — todos con el mismo Nº OP-<strong>${newOP}</strong>`;
+
+  // Si otro item de esta cotización ya tiene diseñador asignado (por ejemplo,
+  // los items que ya están en la OP existente), se usa ese mismo como valor
+  // por defecto — todos los items de una misma OP normalmente comparten diseñador.
+  const disActual = its.find(it=>it.DISEÑADOR)?.DISEÑADOR || '';
 
   openModal('🏭 Crear Orden de Producción — COT-'+cotId,`
     <div style="background:#0d2137;border:1px solid #1565c0;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#90caf9">
@@ -3449,7 +3659,7 @@ async function modalCrearOP(cotId){
       <div class="field"><label>Diseñador</label>
         <select id="op-dis">
           <option value="">-- Seleccionar --</option>
-          ${DISEÑADORES.map(d=>`<option>${d}</option>`).join('')}
+          ${DISEÑADORES.map(d=>`<option ${disActual===d?'selected':''}>${d}</option>`).join('')}
         </select></div>
       <div class="field"><label>Prioridad</label>
         <select id="op-prio"><option>Alta</option><option selected>Media</option><option>Baja</option></select></div>
@@ -3466,29 +3676,77 @@ async function modalCrearOP(cotId){
     <div class="divider"></div>
     <p style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">Items que se incluirán en la OP</p>
     <div class="sub-tbl"><table>
-      <thead><tr><th>#</th><th>Descripción</th><th>Cant</th><th>Hrs Total</th><th>Ruta</th></tr></thead>
-      <tbody>${itemsAUsar.map(it=>`<tr>
+      <thead><tr>${!soloItemId?`<th style="width:26px"><input type="checkbox" id="op-chk-all" checked onchange="_opToggleAllItems(this)"></th>`:''}<th>#</th><th>Descripción</th><th>Cant</th><th>Hrs Total</th><th>Ruta</th></tr></thead>
+      <tbody>${itemsAUsar.map(it=>{
+        const descIt = String(it['DESCRIPCION ITEM']||it.DESCRIPCION||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim() || '—';
+        const cantIt = it.UNIDADES||it.CANT||0;
+        const hrsIt  = it['HORAS TOTAL']||it.HORAS_TOTAL||'—';
+        const rutaIt = [it['RUTA MQ1'],it['RUTA MQ2'],it['RUTA MQ3']].filter(Boolean).join(' → ')||'—';
+        return `<tr>
+        ${!soloItemId?`<td><input type="checkbox" class="op-item-chk" value="${String(it.ID_ITEM).replace(/"/g,'&quot;')}" checked onchange="_opUpdateItemCount()"></td>`:''}
         <td>${it.ITEM||'—'}</td>
-        <td style="max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${it.DESCRIPCION||'—'}</td>
-        <td>${it.CANT||0}</td>
-        <td style="font-family:var(--mono)">${it.HORAS_TOTAL||'—'}</td>
-        <td style="font-size:10px">${[it.RUTA_MQ1,it.RUTA_MQ2].filter(Boolean).join(' → ')||'—'}</td>
-      </tr>`).join('')}</tbody>
+        <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${descIt.replace(/"/g,'&quot;')}">${descIt}</td>
+        <td>${cantIt}</td>
+        <td style="font-family:var(--mono)">${hrsIt}</td>
+        <td style="font-size:10px">${rutaIt}</td>
+      </tr>`;}).join('')}</tbody>
     </table></div>
+    ${!soloItemId?`<p style="font-size:11px;color:var(--muted);margin-top:8px">✅ <span id="op-item-count">${itemsAUsar.length}</span> de ${itemsAUsar.length} ítem(s) seleccionados para crear</p>`:''}
     ${its.length>itemsAUsar.length?`<p style="font-size:11px;color:var(--muted);margin-top:8px">ℹ️ ${its.length-itemsAUsar.length} ítem(s) de esta cotización ya estaban en Producción y no se van a duplicar.</p>`:''}`,
     `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
-     <button class="btn btn-primary" onclick="ejecutarCrearOP('${cotId}')" style="background:#1565c0">🏭 Crear OP</button>`);
+     <button class="btn btn-primary" onclick="ejecutarCrearOP('${cotId}','${soloItemId?String(soloItemId).replace(/'/g,"\\'"):''}')" style="background:#1565c0">🏭 Crear OP</button>`);
+
+  // Forzar el estado "marcado" por JS (además del atributo HTML) para que
+  // el conteo inicial sea siempre correcto sin depender solo del parseo del navegador.
+  if(!soloItemId){
+    document.querySelectorAll('.op-item-chk').forEach(cb=>{ cb.checked = true; });
+    const master = document.getElementById('op-chk-all');
+    if(master) master.checked = true;
+    _opUpdateItemCount();
+  }
 }
 
-async function ejecutarCrearOP(cotId){
+// Marca/desmarca todos los checkboxes de ítems del modal Crear OP
+function _opToggleAllItems(master){
+  document.querySelectorAll('.op-item-chk').forEach(c=>c.checked=master.checked);
+  _opUpdateItemCount();
+}
+// Actualiza el contador "X de Y seleccionados" y el checkbox maestro
+function _opUpdateItemCount(){
+  const boxes = document.querySelectorAll('.op-item-chk');
+  const total = boxes.length;
+  const checked = document.querySelectorAll('.op-item-chk:checked').length;
+  const span = document.getElementById('op-item-count');
+  if(span) span.textContent = checked;
+  const master = document.getElementById('op-chk-all');
+  if(master) master.checked = total>0 && checked===total;
+}
+
+async function ejecutarCrearOP(cotId, soloItemId){
   const c=(DB.cotizaciones||[]).find(x=>String(x.COTIZACION)===String(cotId));
   if(!c){ toast('Cotización no encontrada','error'); return; }
   const numOP=gv('op-num');
   if(!numOP){ toast('Número de OP requerido','error'); return; }
 
-  const its=(DB.items||[]).filter(x=>String(x.COTIZACION)===String(cotId)||String(x.ID_PEDIDO)===String(cotId));
-  const itsFaltantes=its.filter(it=>!it.OP_ID);
-  if(!itsFaltantes.length){ toast('Todos los ítems de esta cotización ya están en Producción.','error'); return; }
+  let its=(DB.items||[]).filter(x=>String(x.COTIZACION)===String(cotId)||String(x.ID_PEDIDO)===String(cotId));
+  if(soloItemId) its = its.filter(it=>String(it.ID_ITEM)===String(soloItemId));
+
+  // Mismo criterio que modalCrearOP: cruzar COT+ITEM contra Control Producción,
+  // no fiarse solo del campo OP_ID del item.
+  const opsExistentesCot = (DB.produccion||[]).filter(x=>String(x.COT)===String(cotId));
+  let itsFaltantes=its.filter(it=>
+    !opsExistentesCot.some(op=>String(op.ITEM)===String(it.ITEM||it.ITEM_NUM))
+  );
+
+  // Si el usuario pudo elegir ítems (no venimos con un ítem forzado desde su
+  // detalle), respetar solo los que dejó marcados en el checklist del modal.
+  if(!soloItemId){
+    const seleccionados = Array.from(document.querySelectorAll('.op-item-chk:checked')).map(chk=>chk.value);
+    if(!seleccionados.length){ toast('Selecciona al menos un ítem para crear la OP','error'); return; }
+    itsFaltantes = itsFaltantes.filter(it=>seleccionados.includes(String(it.ID_ITEM)));
+  }
+
+  if(!itsFaltantes.length){ toast('Los ítems seleccionados ya están en Producción.','error'); return; }
 
   // ── Blindaje anti-duplicados: revalidar contra el servidor (no la caché) ──
   let prodFresca;
@@ -3498,7 +3756,7 @@ async function ejecutarCrearOP(cotId){
   if(tomadaPorOtraCot){
     toast(`La OP-${numOP} ya fue tomada por otra cotización justo ahora. Se recalculó el número, revisa e intenta de nuevo.`,'error');
     closeModal();
-    modalCrearOP(cotId);
+    modalCrearOP(cotId, soloItemId||undefined);
     return;
   }
 
@@ -3587,6 +3845,7 @@ async function ejecutarCrearOP(cotId){
         // ── Estado ─────────────────────────────────────────
         PRIORIDAD:           prioridad,
         ESTADO:              'PENDIENTE MP',
+        'SEMAFORO AVANCE':   'EN PROCESO',
         'DÍAS ENTREGA':      diasEntrega,
         '%AVANCE':           0,
         'HORAS RESTANTES':   0,
@@ -3742,7 +4001,8 @@ async function formCot(c={}){
         <div class="field"><label>Fecha Emisión COT. ${isNew?'★':'<span style="font-size:9px;color:var(--muted)">(no editable)</span>'}</label>
           <input type="date" id="fe"
             value="${c['FECHA EMISION COT.']||new Date().toISOString().slice(0,10)}"
-            ${isNew?'oninput="if(document.getElementById(\'fd\')?.value) calcFechaEntrega()"':'readonly style="opacity:.6;background:var(--card2)"'}></div>
+            readonly style="opacity:.6;background:var(--card2)"
+            ${isNew ? 'oninput="if(document.getElementById(\'fd\')?.value) calcFechaEntrega()"' : ''}></div>
 
         <div class="field span2"><label>Tipo</label>
           <select id="f1" onchange="onTipoCot(this.value)" style="font-weight:700">
@@ -5431,6 +5691,35 @@ function dpUploadSectionCot(cotId){
   </div>`;
 }
 
+// Panel de documentos a nivel de ÍTEM: reutiliza dpUploadSection() de su OP
+// vinculada (mismo cruce confiable COT+ITEM que usa detailItem) — los archivos
+// que se suban acá son los MISMOS que se ven en la ficha de la OP en Control
+// Producción, no una copia aparte.
+function dpUploadSectionItem(itemId){
+  const it = (DB.items||[]).find(x=>String(x.ID_ITEM)===String(itemId));
+  if(!it) return '<p style="font-size:12px;color:var(--muted);padding:6px 0">Ítem no encontrado.</p>';
+
+  const op = (DB.produccion||[]).find(x=>
+    String(x.COT)===String(it.COTIZACION) && String(x.ITEM)===String(it.ITEM)
+  );
+
+  if(!op){
+    return `<p style="font-size:12px;color:var(--muted);padding:6px 0">
+      📁 Este ítem aún no tiene Orden de Producción — crea la OP para poder subir plano, imagen o pedir material.
+    </p>`;
+  }
+
+  const idqr = op.IDQR||op.OP;
+  const body = dpUploadSection(idqr);
+  return `<div class="dp-section">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+      <div style="font-weight:700;font-size:13px">OP-${op.OP||idqr}</div>
+      <button class="btn btn-ghost btn-sm" onclick="detailOP('${String(idqr).replace(/'/g,"\\'")}')">Ver OP ↗</button>
+    </div>
+    ${body||'<p style="font-size:11px;color:var(--muted);margin-top:6px">Sin archivos aún.</p>'}
+  </div>`;
+}
+
 async function detailOP(id){
   // IDQR es la llave única por fila/ítem (misma OP puede tener varios ítems, cada uno con su propia imagen/plano).
   // Se busca primero por IDQR; el fallback por OP/ID_OP es solo compatibilidad con llamadas viejas
@@ -5610,7 +5899,13 @@ async function detailOP(id){
       <h4>Cotización Vinculada</h4>
       ${dr('COT',`<span onclick="detailCot('${cot.COTIZACION}')" style="color:var(--accent);cursor:pointer;text-decoration:underline">COT-${cot.COTIZACION}</span>`)}
       ${dr('Empresa',cot.EMPRESA)} ${dr('Total',fmt(cot.PRECIO_TOTAL))} ${dr('Estado COT',bEst(cot.ESTADO))}
-    </div>`:''}
+    </div>` : ''}
+    ${cot?`
+    <!-- PANEL FMAE — mismo FMAE_JSON de la cotización, se alimenta y edita igual
+         desde Cotización, Ítem y OP: es un único registro, no una copia por vista -->
+    <div class="dp-section" id="dp-fmae-${op.COT}">
+      <div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">Cargando FMAE…</div>
+    </div>` : ''}
     <div class="dp-section">
       <h4>Items vinculados (${its.length})</h4>
       ${its.length?`<div class="sub-tbl"><table>
@@ -5642,6 +5937,12 @@ async function detailOP(id){
         else dpBody2.insertAdjacentHTML('beforeend', _pedidosHtml(id, d));
       }
     }).catch(()=>{});
+  }
+  // Renderizar el panel FMAE (mismo dato de la cotización — no es lazy por tab
+  // porque el detalle de OP no usa dp-tabs, así que se carga de una vez aquí)
+  if(cot){
+    const fmaePanel = document.getElementById('dp-fmae-'+op.COT);
+    if(fmaePanel) _renderFmaePanel(fmaePanel);
   }
 }
 
@@ -5997,45 +6298,272 @@ async function items(){
 }
 
 function detailItem(id){
-  const it=(DB.items||[]).find(x=>String(x.ID_ITEM)===String(id)); if(!it) return;
-  const cot=cotInfo(it.COTIZACION);
-  const op=(DB.produccion||[]).find(x=>String(x.ID_OP)===String(it.OP_ID));
-  openDetail(`Item ${it.ITEM||''} — COT-${it.COTIZACION||''}`,`
-    <div class="dp-section">
-      <h4>Identificación</h4>
-      ${dr('Item #',it.ITEM)} ${dr('Cantidad',it.CANT)}
-      ${dr('COT',cot?`<span onclick="detailCot('${cot.COTIZACION}')" style="color:var(--accent);cursor:pointer;text-decoration:underline">COT-${cot.COTIZACION} · ${cot.EMPRESA}</span>`:'—')}
-      ${dr('OP',op?`<span onclick="detailOP('${op.IDQR||op.OP}')" style="color:var(--accent);cursor:pointer;text-decoration:underline">OP-${op.OP}</span>`:'—')}
-      ${dr('Diseñador',it.DISEÑADOR||'—')}
+  const it = (DB.items || []).find(x => String(x.ID_ITEM) === String(id));
+  if(!it) return;
+
+  const cot = cotInfo(it.COTIZACION);
+
+  // Prioridad: cruce confiable por COT+ITEM contra Control Producción.
+  // OP_ID/IDQR del item quedan solo como respaldo, y solo se usan si el item
+  // realmente TIENE un OP_ID (nunca comparar dos vacíos: si ambos lados son
+  // undefined, String(undefined)===String(undefined) da "true" y produce un
+  // falso positivo con la primera fila de la cotización). Además se compara
+  // contra x.OP —el campo real que existe en Control Producción— porque las
+  // filas de producción no tienen una columna llamada "OP_ID".
+  const op = (DB.produccion || []).find(x =>
+    String(x.COT) === String(it.COTIZACION) &&
+    String(x.ITEM) === String(it.ITEM)
+  ) || (it.OP_ID ? (DB.produccion || []).find(x =>
+    String(x.COT) === String(it.COTIZACION) &&
+    (String(x.IDQR) === String(it.OP_ID) || String(x.OP) === String(it.OP_ID))
+  ) : undefined);
+
+  const itemJson = JSON.stringify(it).replace(/"/g, '&quot;');
+  const safeId = String(id).replace(/'/g, "\\'");
+  const safeCot = String(cot?.COTIZACION || it.COTIZACION || '').replace(/'/g, "\\'");
+
+  const cant = Number(it.UNIDADES || it.CANT || 0);
+  const precioUnit = Number(it['PRECIO UNITARIO'] || it['PRECIO SIN IVA'] || 0);
+  const precioTotal = Number(it['PRECIO X ITEM']) || (precioUnit * (cant || 1));
+  const horasTotal = it.HORAS_TOTAL || it['HORAS TOTAL'] || 0;
+  // "Crear OP" debe seguir disponible aunque la cotización ya haya pasado a
+  // EN PROCESO (eso ocurre automáticamente en cuanto el primer ítem se envía
+  // a producción) — de lo contrario los ítems que se agreguen después nunca
+  // podrían sumarse a la OP existente. APROBADA y EN PROCESO son los dos
+  // estados válidos para crear/agregar OP.
+  const cotAprobada = !!(cot && (cot.ESTADO === 'APROBADA' || cot.ESTADO === 'EN PROCESO'));
+  const pct = op ? Number(op['%AVANCE'] || 0) : Number(it.AVANCE_PCT || 0);
+
+  // ── Timeline de estado de producción del ítem (toma el estado real de la OP si existe) ──
+  const ITEM_STEPS = [
+    { label:'En Espera',    key:'EN ESPERA'    },
+    { label:'Pendiente MP', key:'PENDIENTE MP' },
+    { label:'En Proceso',   key:'EN PROCESO'   },
+    { label:'Terminado',    key:'TERMINADO'    },
+    { label:'Entregado',    key:'ENTREGADO'    },
+  ];
+  const estadoActual = op ? op.ESTADO : (it.ESTADO_PROD || 'EN ESPERA');
+  const timelineHtml = timelineH(ITEM_STEPS, estadoActual, {
+    'EN ESPERA':    cot?.['FECHA EMISION COT.'],
+    'PENDIENTE MP': op?.['FECHA INICIO'],
+    'ENTREGADO':    op?.['FECHA DE DESPACHO'] || op?.['FECHA PACTADA'],
+  });
+
+  // ── Barra de plazo (solo si hay OP vinculada con fecha pactada) ──
+  const fechaPactadaOp = op?.['FECHA PACTADA'];
+  let diasRestantes=null, colorPlazo='var(--muted)';
+  if(fechaPactadaOp){
+    const hoy=new Date(); hoy.setHours(0,0,0,0);
+    const entrega=new Date(String(fechaPactadaOp).includes('T')?fechaPactadaOp:fechaPactadaOp+'T00:00:00');
+    diasRestantes=Math.round((entrega-hoy)/86400000);
+    colorPlazo = diasRestantes<0?'var(--danger)':diasRestantes<5?'var(--warn)':'var(--accent)';
+  }
+  const kpiPlazoCls = diasRestantes==null?'':diasRestantes<0?'danger-kpi':diasRestantes<5?'warn-kpi':'';
+  const kpiPlazoValCls = diasRestantes==null?'':diasRestantes<0?'danger':diasRestantes<5?'warn':'';
+
+  openDetail(`Item ${it.ITEM || ''} — COT-${it.COTIZACION || ''}`, `
+    <!-- HERO -->
+    <div class="cot-hero">
+      <div class="cot-hero-top">
+        <div class="cot-hero-left">
+          <div class="cot-hero-id">ITEM ${it.ITEM||'—'}
+            <button class="cot-hero-copy" onclick="copyText('COT-${it.COTIZACION||''}-ITEM-${it.ITEM||''}')" title="Copiar ID">⧉</button>
+          </div>
+          <div class="cot-hero-empresa">${it['DESCRIPCION ITEM'] || it.DESCRIPCION || 'Sin descripción'}</div>
+          <div class="cot-hero-sub">COT-${it.COTIZACION||'—'} · ${cot?.EMPRESA || cot?.Empresa || 'Sin empresa'}</div>
+        </div>
+        <div class="cot-hero-right">
+          <div class="cot-hero-total-label">Precio × Ítem</div>
+          <div class="cot-hero-total-value">${fmt(precioTotal)}</div>
+        </div>
+      </div>
+      <div class="cot-hero-badges">
+        ${bEst(estadoActual)}
+        ${it.DISEÑADOR?`<span class="cot-hero-asesor">✏️ ${it.DISEÑADOR}</span>`:''}
+        <span style="font-size:10px;opacity:.7;margin-left:auto">📦 Cant: ${cant}</span>
+      </div>
     </div>
-    <div class="dp-section">
-      <h4>Descripción</h4>
-      <p style="font-size:13px;line-height:1.5">${it.DESCRIPCION||'—'}</p>
+
+    <!-- TIMELINE -->
+    ${timelineHtml}
+
+    <!-- KPIs -->
+    <div class="cot-kpis">
+      <div class="kpi-mini gold-kpi">
+        <span class="ki">💰</span>
+        <div class="kv gold">${fmt(precioUnit)}</div>
+        <div class="kl">Precio Unit.</div>
+      </div>
+      <div class="kpi-mini">
+        <span class="ki">📦</span>
+        <div class="kv">${cant}</div>
+        <div class="kl">Cantidad</div>
+      </div>
+      <div class="kpi-mini ${kpiPlazoCls}">
+        <span class="ki">${op?'⚙️':'🕐'}</span>
+        <div class="kv ${kpiPlazoValCls}">${op?pct+'%':(horasTotal||'—')}</div>
+        <div class="kl">${op?'Avance OP':'Horas Total'}</div>
+      </div>
     </div>
-    <div class="dp-section">
-      <h4>Financiero</h4>
-      ${dr('Precio sin IVA',fmt(it['PRECIO SIN IVA']||it['PRECIO UNITARIO']))} ${dr('Horas Total',it.HORAS_TOTAL||'—')}
+
+    <!-- BARRA DE PLAZO (solo si hay OP con fecha pactada) -->
+    ${fechaPactadaOp && diasRestantes!=null ? `
+    <div class="delivery-bar-wrap">
+      <div class="delivery-bar-header">
+        <span class="delivery-bar-title">⏱ Progreso OP-${op.OP} · ${estadoActual}</span>
+        <span class="delivery-bar-date">🗓 ${fmtDate(fechaPactadaOp)}</span>
+      </div>
+      <div class="delivery-bar">
+        <div class="delivery-bar-fill" style="width:${pct}%;background:${colorPlazo}"></div>
+      </div>
+      <div class="delivery-bar-footer">
+        <span>Inicio OP</span>
+        <span style="color:${colorPlazo};font-weight:700">${diasTag(diasRestantes)}</span>
+        <span>Entrega pactada</span>
+      </div>
+    </div>`:''}
+
+    <!-- ACCIONES AVANZADAS ESTILO APPSHEET -->
+    <div class="cot-action-grid">
+      <button class="cot-action-btn" onclick="formItem(${itemJson})">
+        <span class="cot-action-ic" style="background:#1565c0">✏️</span>
+        <span class="cot-action-lbl">Editar Ítem</span>
+      </button>
+      <button class="cot-action-btn" onclick="duplicarItem('${safeId}')">
+        <span class="cot-action-ic" style="background:#2e7d32">⧉</span>
+        <span class="cot-action-lbl">Duplicar Ítem</span>
+      </button>
+      <button class="cot-action-btn" onclick="modalCopiarItem('${safeId}','${safeCot}')">
+        <span class="cot-action-ic" style="background:#2e7d32">📤</span>
+        <span class="cot-action-lbl">Copiar a otra COT</span>
+      </button>
+      ${cot?`
+      <button class="cot-action-btn" onclick="detailCot('${safeCot}')">
+        <span class="cot-action-ic" style="background:#7b1fa2">📋</span>
+        <span class="cot-action-lbl">Ver Cotización</span>
+      </button>`:''}
+      ${op?`
+      <button class="cot-action-btn" onclick="detailOP('${String(op.IDQR||op.OP).replace(/'/g,"\\'")}')">
+        <span class="cot-action-ic" style="background:#2e7d32">🏭</span>
+        <span class="cot-action-lbl">Ver OP</span>
+      </button>` : cotAprobada ? `
+      <button class="cot-action-btn" onclick="modalCrearOP('${safeCot}','${safeId}')">
+        <span class="cot-action-ic" style="background:#1565c0">🏭</span>
+        <span class="cot-action-lbl">Crear OP</span>
+      </button>` : cot ? `
+      <button class="cot-action-btn" style="opacity:.4;cursor:not-allowed" onclick="toast('Aprueba la cotización antes de crear la OP','error')" title="La cotización debe estar APROBADA">
+        <span class="cot-action-ic" style="background:#555">🏭</span>
+        <span class="cot-action-lbl">Crear OP</span>
+      </button>` : ''}
+      ${cot?`
+      <button class="cot-action-btn" onclick="qaFmea('${safeCot}')">
+        <span class="cot-action-ic" style="background:#c62828">⚠️</span>
+        <span class="cot-action-lbl">FMEA</span>
+      </button>` : ''}
     </div>
-    <div class="dp-section">
-      <h4>Horas Presupuestadas por Máquina</h4>
-      ${dr('Banco',it.BANCO||'—')} ${dr('Fresadora',it.FRESADORA||'—')}
-      ${dr('Torno',it.TORNO||'—')} ${dr('Centro Mecan.',it.CENTRO_MECANIZADO||'—')}
-      ${dr('Rectificadora',it.RECTIFICADORA_PLANA||'—')} ${dr('EDM',it.EDM||'—')}
-      ${dr('Hilo',it.HILO||'—')} ${dr('Soldadura',it.SOLDADURA||'—')} ${dr('Ingeniería',it.INGENIERIA||'—')}
+
+    <!-- ACCIONES RÁPIDAS -->
+    <div class="cot-actions">
+      <button class="btn btn-primary-soft btn-sm" onclick="formItem(${itemJson})">✏️ Editar</button>
+      ${cot?`<button class="btn btn-ghost btn-sm" onclick="detailCot('${safeCot}')">📋 Ver Cotización</button>`:''}
+      <button class="btn btn-danger-soft btn-sm" onclick="deleteItem('${safeId}')" style="margin-left:auto">🗑</button>
     </div>
-    <div class="dp-section">
-      <h4>Ruta & Estado</h4>
-      ${dr('Ruta MQ1',it.RUTA_MQ1||'—')} ${dr('Ruta MQ2',it.RUTA_MQ2||'—')}
-      ${dr('Estado',bEst(it.ESTADO_PROD))} ${dr('% Avance',it.AVANCE_PCT+'%')}
-      ${dr('Días Entrega',diasTag(it.DIAS_ENTREGA))} ${dr('Prioridad',it.PRIORIDAD||'—')}
-    </div>`,
-    `<button class="btn btn-ghost btn-sm" onclick="formItem(${JSON.stringify(it).replace(/"/g,'&quot;')})">✏️</button>
-     <button class="btn btn-danger btn-sm" onclick="deleteItem('${id}')">🗑</button>`
-  );
-  setTimeout(()=>{
-    const dpBody=document.getElementById('dp-body');
-    if(dpBody) dpBody.insertAdjacentHTML('beforeend', dpUploadSectionItem(id));
-  },0);
+
+    <!-- TABS -->
+    <div class="dp-tabs">
+      <div class="dp-tab active" data-tab="resumen" onclick="switchDpTab(this,'resumen')">📋 Resumen</div>
+      <div class="dp-tab" data-tab="tecnico" onclick="switchDpTab(this,'tecnico')">⚙️ Técnico</div>
+      <div class="dp-tab" data-tab="docs" onclick="switchDpTab(this,'docs')">📎 Archivos</div>
+    </div>
+
+    <div class="dp-tabpanel active" data-panel="resumen">
+      <div class="dp-section">
+        <h4>📌 Identificación</h4>
+        ${dr('Item #', it.ITEM)}
+        ${dr('Cantidad', cant)}
+        ${dr('COT', cot
+          ? `<span onclick="detailCot('${safeCot}')"
+              style="color:var(--accent);cursor:pointer;text-decoration:underline">
+              COT-${cot.COTIZACION} · ${cot.EMPRESA || cot.Empresa || ''}
+             </span>`
+          : '—')}
+        ${dr('OP', op
+          ? `<span onclick="detailOP('${String(op.IDQR || op.OP).replace(/'/g, "\\'")}')"
+              style="color:var(--accent);cursor:pointer;text-decoration:underline">
+              OP-${op.OP}
+             </span>`
+          : '—')}
+        ${dr('Diseñador', it.DISEÑADOR || '—')}
+      </div>
+      <div class="dp-section">
+        <h4>📝 Descripción</h4>
+        <div style="font-size:13px;line-height:1.5">
+          ${it['DESCRIPCION ITEM'] || it.DESCRIPCION || '—'}
+        </div>
+      </div>
+      <div class="dp-section">
+        <h4>💵 Financiero</h4>
+        ${dr('Precio sin IVA', fmt(precioUnit))}
+        ${dr('Precio × ítem', `<strong style="color:var(--gold);font-size:15px;font-family:var(--mono)">${fmt(precioTotal)}</strong>`)}
+        ${dr('Horas total', horasTotal || '—')}
+      </div>
+      ${!op && cotAprobada?`
+      <div style="background:linear-gradient(135deg,#0d2137,#0a3060);border:1px solid #1565c0;
+          border-radius:12px;padding:16px;text-align:center;margin-top:4px;box-shadow:0 2px 12px rgba(21,101,192,.2)">
+        <div style="font-size:24px;margin-bottom:6px">🏭</div>
+        <p style="font-size:14px;font-weight:700;color:#42a5f5;margin-bottom:6px">Sin Orden de Producción</p>
+        <p style="font-size:12px;color:rgba(255,255,255,.6);margin-bottom:14px">
+          Puedes crear/agregar la OP para este ítem</p>
+        <button class="btn btn-primary" onclick="modalCrearOP('${safeCot}','${safeId}')"
+          style="background:#1565c0;width:100%;border-radius:10px;height:38px;font-size:13px">
+          🏭 Crear Orden de Producción
+        </button>
+      </div>`:''}
+      ${!op && cot && !cotAprobada?`
+      <div style="background:rgba(255,193,7,.08);border:1px solid rgba(255,193,7,.3);border-radius:10px;padding:12px 14px;font-size:12px;color:#ffd54f;text-align:center">
+        ⚠️ Aprueba la cotización COT-${safeCot} para poder crear la OP de este ítem
+      </div>`:''}
+    </div>
+
+    <div class="dp-tabpanel" data-panel="tecnico">
+      <div class="dp-section">
+        <h4>⚙️ Horas presupuestadas por máquina</h4>
+        ${dr('Banco', it.BANCO || '—')}
+        ${dr('Fresadora', it.FRESADORA || '—')}
+        ${dr('Torno', it.TORNO || '—')}
+        ${dr('Centro mecanizado', it.CENTRO_MECANIZADO || '—')}
+        ${dr('Rectificadora', it.RECTIFICADORA_PLANA || '—')}
+        ${dr('EDM', it.EDM || '—')}
+        ${dr('Hilo', it.HILO || '—')}
+        ${dr('Soldadura', it.SOLDADURA || '—')}
+        ${dr('Ingeniería', it.INGENIERIA || '—')}
+      </div>
+      <div class="dp-section">
+        <h4>🗺️ Ruta y estado</h4>
+        ${dr('Ruta MQ1', it.RUTA_MQ1 || '—')}
+        ${dr('Ruta MQ2', it.RUTA_MQ2 || '—')}
+        ${dr('Estado', bEst(estadoActual))}
+        ${dr('% Avance', pct + '%')}
+        ${dr('Días entrega', diasTag(it.DIAS_ENTREGA))}
+        ${dr('Prioridad', it.PRIORIDAD || '—')}
+      </div>
+    </div>
+
+    <div class="dp-tabpanel" data-panel="docs" id="dp-item-docs-${id}">
+      <p style="font-size:12px;color:var(--muted);padding:6px 0">Cargando…</p>
+    </div>
+  `, '');
+
+  setTimeout(() => {
+    const docsPanel = document.getElementById(`dp-item-docs-${id}`);
+    if(docsPanel){
+      if(typeof dpUploadSectionItem === 'function'){
+        docsPanel.innerHTML = dpUploadSectionItem(id);
+      } else {
+        docsPanel.innerHTML = '<p style="font-size:12px;color:var(--muted);padding:6px 0">Sin gestor de archivos disponible para ítems.</p>';
+      }
+    }
+  }, 0);
 }
 
 async function formItem(it={}){
@@ -7901,12 +8429,19 @@ async function confirmarCopiarItem(){
   const btn=document.getElementById('btn-confirmar-copia');
   if(btn){btn.disabled=true;btn.textContent='Copiando...';}
 
+  // Nº de ítem: siguiente disponible en la COT destino (mayor existente + 1)
+  const itemsDest=(DB.items||[]).filter(x=>
+    String(x.COTIZACION)===String(cotDest.COTIZACION)||String(x.ID_PEDIDO)===String(cotDest.ID_PEDIDO));
+  const maxItemDest=Math.max(...itemsDest.map(x=>Number(x.ITEM)||0), 0);
+  const nuevoNumItem=maxItemDest+1;
+
   // Construir el nuevo ítem sin ID (se crea nuevo)
   const newItem={...it};
   delete newItem.ID_ITEM;
   newItem.COTIZACION=cotDest.COTIZACION;
   newItem.ID_PEDIDO=cotDest.ID_PEDIDO||'';
-  newItem['COT-ITEM']=(cotDest.COTIZACION||'')+'-'+(it.ITEM||'');
+  newItem.ITEM=nuevoNumItem;
+  newItem['COT-ITEM']=(cotDest.COTIZACION||'')+'-'+nuevoNumItem;
   newItem.EMPRESA=cotDest.EMPRESA||cotDest.Empresa||it.EMPRESA||'';
   newItem.ASESOR=cotDest.ASESOR||it.ASESOR||'';
   newItem['DESCRIPCION DEL PROYECTO']=cotDest['DESCRIPCION DEL PROYECTO']||it['DESCRIPCION DEL PROYECTO']||'';
@@ -7915,10 +8450,94 @@ async function confirmarCopiarItem(){
 
   try{
     await POST('createItem',newItem);
-    toast(`✅ Ítem copiado a COT-${_copiarItemDestId}`);
+    toast(`✅ Ítem copiado a COT-${_copiarItemDestId} como ítem #${nuevoNumItem}`);
     closeModal();
     _autoSync(['items']);
   }catch(e){toast(e.message,'error');}
+}
+
+// ══════════════════════════════════════════════════════════════
+//   DUPLICAR ÍTEM (dentro de la misma COT)
+// ══════════════════════════════════════════════════════════════
+function duplicarItem(id){
+  const it=(DB.items||[]).find(x=>String(x.ID_ITEM)===String(id));
+  if(!it){ toast('Ítem no encontrado','error'); return; }
+  const cotId = it.COTIZACION||it.ID_PEDIDO;
+  const cotItems=(DB.items||[]).filter(x=>String(x.COTIZACION)===String(cotId)||String(x.ID_PEDIDO)===String(cotId));
+  const maxItem=Math.max(...cotItems.map(x=>Number(x.ITEM)||0), 0);
+  const newNum=maxItem+1;
+  const cant=Number(it.UNIDADES||it.CANT||1);
+
+  openModal(`⧉ Duplicar Ítem ${it.ITEM||''}`,`
+    <div style="background:linear-gradient(135deg,rgba(37,99,235,.07),rgba(37,99,235,.03));
+        border:1px solid rgba(37,99,235,.2);border-radius:12px;padding:14px;margin-bottom:16px">
+      <div style="font-size:12px;color:var(--accent);font-weight:700;margin-bottom:4px">📦 Origen: Ítem ${it.ITEM||'—'} · COT-${cotId||'—'}</div>
+      <div style="font-size:13px;font-weight:600">${it['DESCRIPCION ITEM']||it.DESCRIPCION||'Sin descripción'}</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:3px">
+        Se creará un ítem nuevo en la misma cotización con los mismos datos técnicos
+        (material, proceso, horas y precio). El diseñador y el avance de producción se reinician.
+      </div>
+    </div>
+    <div class="form-grid">
+      <div class="field"><label>Nuevo Nº Ítem <span style="font-weight:400;opacity:.7">(automático · va de último)</span></label>
+        <input id="dupit-num" value="${newNum}" readonly disabled
+          style="font-family:var(--mono);font-weight:700;font-size:15px;color:var(--accent);
+                 background:var(--card2);cursor:not-allowed"></div>
+      <div class="field"><label>Cantidad</label>
+        <input id="dupit-cant" type="number" min="1" value="${cant}"></div>
+    </div>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+     <button class="btn btn-primary" onclick="ejecutarDuplicarItem('${String(id).replace(/'/g,"\\'")}')">⧉ Duplicar Ítem</button>`);
+}
+
+async function ejecutarDuplicarItem(idOrigen){
+  const it=(DB.items||[]).find(x=>String(x.ID_ITEM)===String(idOrigen));
+  if(!it){ toast('Ítem no encontrado','error'); return; }
+
+  // El número siempre se recalcula al momento de ejecutar (max actual +1),
+  // así queda de último aunque se hayan agregado ítems mientras el modal estaba abierto.
+  const cotId = it.COTIZACION||it.ID_PEDIDO;
+  const cotItems=(DB.items||[]).filter(x=>String(x.COTIZACION)===String(cotId)||String(x.ID_PEDIDO)===String(cotId));
+  const maxItem=Math.max(...cotItems.map(x=>Number(x.ITEM)||0), 0);
+  const newNum=maxItem+1;
+  const newCant=gv('dupit-cant');
+
+  const btn=document.querySelector('#modal-foot .btn-primary');
+  if(btn){btn.disabled=true;btn.textContent='Duplicando...';}
+
+  const cant=Number(newCant)||Number(it.UNIDADES||it.CANT||1);
+  const precioUnit=Number(it['PRECIO UNITARIO']||it['PRECIO SIN IVA']||0);
+
+  const newItem={...it,
+    ID_ITEM:      undefined,
+    ITEM:         newNum,
+    'COT-ITEM':   cotId+'-'+newNum,
+    UNIDADES:     cant,
+    CANT:         cant,
+    'PRECIO X ITEM': precioUnit*cant,
+    // Limpiar datos de OP y producción — el ítem duplicado empieza en cero
+    OP:           '',
+    OP_ID:        '',
+    ESTADO_PROD:  'EN ESPERA',
+    '%AVANCE':    0,
+    AVANCE_PCT:   0,
+    DISEÑADOR:    '',
+    MP_INSUMOS:   '',
+    FECHA_INICIO_OP: '',
+    RUTA_MQ1:'', RUTA_MQ2:'', RUTA_MQ3:'', RUTA_MQ4:'', RUTA_MQ5:'',
+  };
+  delete newItem.ID_ITEM;
+
+  try{
+    await POST('createItem',newItem);
+    toast(`✅ Ítem #${newNum} creado en COT-${cotId}`);
+    closeModal();
+    if(cotId) await recalcularTotalesCot(cotId);
+    _autoSync(['items'], ()=>detailCot(cotId));
+  }catch(e){
+    if(btn){btn.disabled=false;btn.textContent='⧉ Duplicar Ítem';}
+    toast(e.message,'error');
+  }
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -8585,9 +9204,10 @@ async function procesos(){
     const sorted = sortData('procesos', data);
     const isTable = getView('procesos') === 'table';
     if (isTable) {
-      setContent(moduleBanner('⚙️','Procesos','Centros de maquinado y tarifas por hora','','linear-gradient(135deg,#374151,#6b7280)')+fb + viewToggleBtns('procesos') + `
+      setContent(moduleBanner('⚙️','Procesos','Centros de maquinado y tarifas por hora',_btnAjustePrecios(),'linear-gradient(135deg,#374151,#6b7280)')+fb + viewToggleBtns('procesos') + `
       <div class="tbl-wrap"><table class="data-tbl">
         <thead><tr>
+          <th style="width:30px"><input type="checkbox" id="prc-sel-all" onchange="_toggleSelAllProc(this.checked)"></th>
           ${thSort('procesos','PROCESO','Proceso / Máquina')}
           ${thSort('procesos','CUADRANTE','Cuadrante')}
           ${thSort('procesos','TARIFA / HR','Tarifa/hr')}
@@ -8595,6 +9215,7 @@ async function procesos(){
         </tr></thead>
         <tbody>${sorted.length ? sorted.map(prc=>`
           <tr>
+            <td><input type="checkbox" class="prc-sel" value="${prc.PROCESO}" ${_procSeleccion.has(prc.PROCESO)?'checked':''} onchange="_toggleSelProc('${prc.PROCESO}',this.checked)"></td>
             <td style="font-weight:600">${prc.PROCESO||'—'}</td>
             <td><span class="badge gris">${prc.CUADRANTE||'—'}</span></td>
             <td class="td-num">${fmt(prc['TARIFA / HR'])}/hr</td>
@@ -8602,16 +9223,19 @@ async function procesos(){
               <button class="btn btn-ghost btn-sm" onclick="formPrc(DB.procesos.find(x=>x.PROCESO==='${prc.PROCESO}'))">✏️</button>
               <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="deletePrc('${prc.PROCESO}')">🗑</button>
             </td>
-          </tr>`).join('') : '<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--muted)">Sin resultados</td></tr>'}
+          </tr>`).join('') : '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--muted)">Sin resultados</td></tr>'}
         </tbody>
       </table></div>`);
     } else {
-      setContent(moduleBanner('⚙️','Procesos','Centros de maquinado y tarifas por hora','','linear-gradient(135deg,#374151,#6b7280)')+fb + viewToggleBtns('procesos') + `<div class="card-list">
+      setContent(moduleBanner('⚙️','Procesos','Centros de maquinado y tarifas por hora',_btnAjustePrecios(),'linear-gradient(135deg,#374151,#6b7280)')+fb + viewToggleBtns('procesos') + `<div class="card-list">
         ${sorted.length ? sorted.map(prc=>`<div class="list-card" data-pid="${prc.PROCESO}">
           <div class="lc-top">
-            <div>
-              <div class="lc-title">${prc.PROCESO||'—'}</div>
-              <div class="lc-sub">${prc.CUADRANTE||'Sin cuadrante'}</div>
+            <div style="display:flex;align-items:flex-start;gap:8px">
+              <input type="checkbox" class="prc-sel" value="${prc.PROCESO}" ${_procSeleccion.has(prc.PROCESO)?'checked':''} onchange="_toggleSelProc('${prc.PROCESO}',this.checked)" style="margin-top:3px">
+              <div>
+                <div class="lc-title">${prc.PROCESO||'—'}</div>
+                <div class="lc-sub">${prc.CUADRANTE||'Sin cuadrante'}</div>
+              </div>
             </div>
             <div style="text-align:right">
               <div style="font-family:var(--mono);font-weight:700;color:var(--gold)">${fmt(prc['TARIFA / HR'])}/hr</div>
@@ -8626,6 +9250,131 @@ async function procesos(){
     }
     updateFilterCount('procesos', data.length, all.length);
   }catch(e){setContent(`<div class="empty"><div class="empty-icon">⚠️</div><p>${e.message}</p></div>`);}
+}
+
+// ── Selección de procesos para el ajuste de precios ───────────
+let _procSeleccion = new Set();
+function _toggleSelProc(nombre, checked){
+  if(checked) _procSeleccion.add(nombre); else _procSeleccion.delete(nombre);
+  const all = document.getElementById('prc-sel-all');
+  if(all) all.checked = document.querySelectorAll('.prc-sel:not(:checked)').length===0 && document.querySelectorAll('.prc-sel').length>0;
+}
+function _toggleSelAllProc(checked){
+  document.querySelectorAll('.prc-sel').forEach(cb=>{
+    cb.checked = checked;
+    if(checked) _procSeleccion.add(cb.value); else _procSeleccion.delete(cb.value);
+  });
+}
+
+// ── Ajuste porcentual masivo de tarifas (Procesos) ────────────
+// Guarda el valor original de cada tarifa la primera vez que se toca, para
+// poder "Revertir a original" más adelante. Se guarda en localStorage porque
+// no depende de agregar columnas nuevas al Sheet.
+const LS_KEY_TARIFAS_ORIG = 'hr_tarifas_originales_procesos';
+
+function _btnAjustePrecios(){
+  return `<button class="btn btn-ghost btn-sm" style="color:#fff;border-color:rgba(255,255,255,.4)" onclick="abrirAjustePreciosProcesos()">📈 Ajuste de precios</button>`;
+}
+
+function _leerBackupTarifas(){
+  try { return JSON.parse(localStorage.getItem(LS_KEY_TARIFAS_ORIG) || '{}'); } catch { return {}; }
+}
+function _guardarBackupTarifas(obj){
+  try { localStorage.setItem(LS_KEY_TARIFAS_ORIG, JSON.stringify(obj)); } catch {}
+}
+
+function abrirAjustePreciosProcesos(){
+  const backup = _leerBackupTarifas();
+  const nBackup = Object.keys(backup).length;
+  const conPrecio = (DB.procesos||[]).filter(p=>Number(p['TARIFA / HR'])>0).length;
+  const nSel = [..._procSeleccion].filter(nombre=>{
+    const p = (DB.procesos||[]).find(x=>x.PROCESO===nombre);
+    return p && Number(p['TARIFA / HR'])>0;
+  }).length;
+  const objetivoTxt = nSel>0
+    ? `Se aplicará solo a los <b>${nSel}</b> procesos que marcaste (con tarifa definida).`
+    : `No marcaste ninguno, así que se aplicará a los <b>${conPrecio}</b> procesos que ya tienen tarifa/hr definida. Marca casillas en la lista si quieres elegir solo algunos.`;
+  openModal('📈 Ajuste de precios — Procesos', `
+    <div style="font-size:12px;color:var(--muted);margin-bottom:10px">
+      ${objetivoTxt}
+      El porcentaje siempre se calcula sobre el precio original, así que puedes repetirlo
+      con otro valor sin ir acumulando incrementos.
+    </div>
+    <div class="form-grid">
+      <div class="field span2">
+        <label>Porcentaje de incremento (usa negativo para bajar precios)</label>
+        <input id="ap-pct" type="number" step="any" placeholder="Ej: 10 para +10%, -5 para -5%">
+      </div>
+    </div>
+    ${nBackup ? `<div style="margin-top:10px;font-size:11px;color:var(--muted)">
+      Hay un respaldo guardado de <b>${nBackup}</b> tarifa(s) originales.
+    </div>` : ''}
+  `, `
+    <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+    ${nBackup ? `<button class="btn btn-ghost" style="color:var(--danger)" onclick="revertirPreciosProcesos()">↩️ Revertir a original</button>` : ''}
+    <button class="btn btn-primary" onclick="aplicarAjustePreciosProcesos()">Aplicar incremento</button>
+  `);
+}
+
+async function aplicarAjustePreciosProcesos(){
+  const pct = Number(document.getElementById('ap-pct')?.value);
+  if(!pct && pct!==0){ toast('Ingresa un porcentaje válido','error'); return; }
+
+  // Si hay procesos marcados con checkbox, se usa esa selección; si no, todos
+  // los que ya tienen tarifa.
+  const seleccionados = [..._procSeleccion]
+    .map(nombre=>(DB.procesos||[]).find(x=>x.PROCESO===nombre))
+    .filter(p=>p && Number(p['TARIFA / HR'])>0);
+  const objetivo = seleccionados.length ? seleccionados : (DB.procesos||[]).filter(p=>Number(p['TARIFA / HR'])>0);
+  if(!objetivo.length){ toast('No hay procesos con tarifa para ajustar','error'); return; }
+
+  const backup = _leerBackupTarifas();
+  // Guarda el original solo la primera vez que se toca cada proceso
+  objetivo.forEach(p=>{
+    if(backup[p.PROCESO]===undefined) backup[p.PROCESO] = Number(p['TARIFA / HR']);
+  });
+
+  closeModal();
+  const prog = _progress({ icon:'📈', label:'Ajustando tarifas', steps: objetivo.map(p=>p.PROCESO) });
+  try{
+    for(let i=0;i<objetivo.length;i++){
+      const p = objetivo[i];
+      prog.step(i);
+      const base = backup[p.PROCESO];
+      const nuevo = Math.round(base * (1 + pct/100));
+      await POST('updateProceso', { ID:p.PROCESO, PROCESO:p.PROCESO, CUADRANTE:p.CUADRANTE, 'TARIFA / HR': nuevo });
+      p['TARIFA / HR'] = nuevo;
+    }
+    _guardarBackupTarifas(backup);
+    prog.done('Tarifas actualizadas');
+    toast(`✅ ${objetivo.length} tarifa(s) ajustadas ${pct>0?'+':''}${pct}%`);
+    _procSeleccion.clear();
+    procesos();
+  }catch(e){ toast(e.message,'error'); }
+}
+
+async function revertirPreciosProcesos(){
+  const backup = _leerBackupTarifas();
+  const claves = Object.keys(backup);
+  if(!claves.length){ toast('No hay respaldo de precios originales','error'); return; }
+  if(!confirm(`¿Revertir ${claves.length} tarifa(s) a su valor original?`)) return;
+
+  closeModal();
+  const prog = _progress({ icon:'↩️', label:'Restaurando tarifas originales', steps: claves });
+  try{
+    for(let i=0;i<claves.length;i++){
+      const nombre = claves[i];
+      prog.step(i);
+      const p = (DB.procesos||[]).find(x=>x.PROCESO===nombre);
+      const original = backup[nombre];
+      await POST('updateProceso', { ID:nombre, PROCESO:nombre, CUADRANTE:p?p.CUADRANTE:'', 'TARIFA / HR': original });
+      if(p) p['TARIFA / HR'] = original;
+    }
+    localStorage.removeItem(LS_KEY_TARIFAS_ORIG);
+    prog.done('Restauradas');
+    toast(`✅ ${claves.length} tarifa(s) restauradas a su valor original`);
+    procesos();
+  }catch(e){ toast(e.message,'error'); }
 }
 
 var _disTab = 0; // tab activa en Control Diseño (0=Pendiente Diseño, 1=Control Items)
@@ -10309,8 +11058,22 @@ window._HR = {
   secciones: [],   // secciones estándar activas/orden
   custom: [],      // secciones personalizadas
   obs: '',
+  contenido: {},   // valores escritos a mano dentro del documento (materiales, medidas, firmas…)
   activeTab: 0,
   dragSrc: null
+};
+
+// Permite que el iframe de preview (mismo origen) guarde lo que se escribe
+// directamente sobre el documento sin pasar por el panel lateral.
+window._hrSetContenido = function(key, val) {
+  if (!window._HR.contenido) window._HR.contenido = {};
+  window._HR.contenido[key] = val;
+};
+// Campos de cabecera (Cliente, Descripción, Tipo…) sí pertenecen a la OP real —
+// se guardan aparte para actualizar esas columnas directamente al guardar.
+window._hrSetCampoOP = function(field, val) {
+  if (!window._HR.camposOP) window._HR.camposOP = {};
+  window._HR.camposOP[field] = val;
 };
 
 const HR_SECS_DEFAULT = [
@@ -10356,6 +11119,7 @@ function qaHojaRuta(opId) {
     secciones: savedSecs,
     custom: saved.custom || [],
     obs: saved.obs || '',
+    contenido: saved.contenido || {},
     activeTab: 0
   };
 
@@ -10755,7 +11519,9 @@ function _hrUpdatePreview() {
     procesos:  window._HR.procesos,
     secciones: window._HR.secciones,
     custom:    window._HR.custom,
-    obs:       window._HR.obs
+    obs:       window._HR.obs,
+    contenido: window._HR.contenido||{},
+    editable:  true
   });
   const doc = frame.contentDocument || frame.contentWindow.document;
   doc.open(); doc.write(html); doc.close();
@@ -10763,19 +11529,22 @@ function _hrUpdatePreview() {
 
 // ── Guardar ───────────────────────────────────────────────────
 async function _hrSave(imprimir=false) {
-  const { opId, op, procesos, secciones, custom, obs } = window._HR;
+  const { opId, op, procesos, secciones, custom, obs, contenido, camposOP } = window._HR;
   const hrData = {
     procesos: procesos.filter(p=>p.maquina),
     secciones, custom, obs,
+    contenido: contenido||{},
     fecha: new Date().toLocaleDateString('es-CO')
   };
   try {
     const prog = _progress({ icon:'🗺️', label:'Guardando hoja de ruta', steps:['Guardando…','Listo'] });
     prog.step(0);
     const idqrLimpio = String(op.IDQR).replace(/\.0+$/,'').trim();
-    await POST('updateOP', { IDQR: idqrLimpio, HOJA_RUTA_JSON: JSON.stringify(hrData) });
+    // Si se escribió directamente sobre Cliente/Descripción/Tipo/etc. (campos
+    // reales de la OP), se guardan junto con la hoja de ruta en la misma llamada.
+    await POST('updateOP', { IDQR: idqrLimpio, HOJA_RUTA_JSON: JSON.stringify(hrData), ...(camposOP||{}) });
     const cached = (DB.produccion||[]).find(x=>String(x.IDQR)===String(op.IDQR));
-    if(cached) cached.HOJA_RUTA_JSON = JSON.stringify(hrData);
+    if(cached) { cached.HOJA_RUTA_JSON = JSON.stringify(hrData); Object.assign(cached, camposOP||{}); Object.assign(op, camposOP||{}); }
     prog.done('Guardado');
     if(imprimir) {
       const html = _hrBuildPDFHtml(op, hrData);
@@ -10800,8 +11569,31 @@ function _hrBuildPDFHtml(op, hrData) {
   const secciones = hrData.secciones || HR_SECS_DEFAULT;
   const custom    = hrData.custom    || [];
   const obs       = hrData.obs       || '';
+  const contenido = hrData.contenido || {};
+  const editable  = !!hrData.editable;
   const hoy = new Date().toLocaleDateString('es-CO',{day:'2-digit',month:'2-digit',year:'numeric'});
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(API_ARCH+'?idqr='+String(op.IDQR))}`;
+
+  // Celda escribible: en modo editable (preview dentro del panel) permite
+  // escribir directamente sobre el documento y guarda el valor en tiempo real
+  // vía parent._hrSetContenido; en modo impresión/print solo muestra el texto
+  // guardado.
+  function cell(field, sty='') {
+    const val = (contenido[field]||'').replace(/</g,'&lt;');
+    if (editable) {
+      return `<td style="border:1px solid #ccc;padding:4px 6px;${sty}" contenteditable="true"
+        data-field="${field}" oninput="parent._hrSetContenido('${field}',this.innerText)">${val}</td>`;
+    }
+    return `<td style="border:1px solid #ccc;padding:4px 6px;${sty}">${val}</td>`;
+  }
+  // Igual que cell(), pero para columnas reales de la OP (Cliente, Descripción…)
+  function campoOP(field, val, sty='') {
+    const v = String(val||'').replace(/</g,'&lt;');
+    if (editable) {
+      return `contenteditable="true" data-campo="${field}" oninput="parent._hrSetCampoOP('${field}',this.innerText)" style="${sty}outline:none">${v}`;
+    }
+    return `style="${sty}">${v}`;
+  }
 
   // Imagen
   const imgHtml = op.IMAGEN_B64
@@ -10828,9 +11620,9 @@ function _hrBuildPDFHtml(op, hrData) {
       <td style="border:1px solid #ccc;padding:4px 5px">${p.inst||''}</td>
       <td style="border:1px solid #ccc;padding:4px 5px;text-align:center;color:#1a3a6b;font-weight:700">${p.cota||''}</td>
       <td style="border:1px solid #ccc;padding:4px 5px;text-align:center">${p.tEst||''}</td>
-      <td style="border:1px solid #ccc;padding:4px 5px;text-align:center;color:#aaa">_______</td>
-      <td style="border:1px solid #ccc;padding:4px 5px;height:26px"></td>
-      <td style="border:1px solid #ccc;padding:4px 5px;height:26px"></td>
+      ${cell('proc'+i+'_medida','text-align:center')}
+      ${cell('proc'+i+'_vb','text-align:center')}
+      ${cell('proc'+i+'_firma','text-align:center')}
     </tr>`).join('') + Array(Math.max(0,5-procesos.length)).fill(
     `<tr style="height:24px"><td style="border:1px solid #ccc" colspan="8"></td></tr>`).join('');
 
@@ -10923,13 +11715,13 @@ function _hrBuildPDFHtml(op, hrData) {
 
   <!-- DATOS -->
   <table style="margin-bottom:6px;border:1px solid #ccc">
-    <tr><td class="azul" style="width:70px;padding:3px 6px">Cliente</td><td style="padding:3px 6px;font-weight:700">${op.CLIENTE||'—'}</td>
-    <td class="azul" style="width:60px;padding:3px 6px">Tipo</td><td style="padding:3px 6px">${op.TIPO||'—'}</td>
-    <td class="azul" style="width:60px;padding:3px 6px">Prioridad</td><td style="padding:3px 6px">${op.PRIORIDAD||'—'}</td></tr>
-    <tr><td class="azul" style="padding:3px 6px">Descripción</td><td colspan="5" style="padding:3px 6px;font-weight:700">${op.DESCRIPCION||'—'}</td></tr>
-    <tr><td class="azul" style="padding:3px 6px">F. Inicio</td><td style="padding:3px 6px">${op['FECHA INICIO']||hoy}</td>
-    <td class="azul" style="padding:3px 6px">F. Entrega</td><td style="padding:3px 6px">${op['FECHA ENTREGA PRODUCCION']||'—'}</td>
-    <td class="azul" style="padding:3px 6px">Cantidad</td><td style="padding:3px 6px">${op.CANTIDAD||op.CANT||'1 und'}</td></tr>
+    <tr><td class="azul" style="width:70px;padding:3px 6px">Cliente</td><td ${campoOP('CLIENTE',op.CLIENTE,'padding:3px 6px;font-weight:700')}</td>
+    <td class="azul" style="width:60px;padding:3px 6px">Tipo</td><td ${campoOP('TIPO',op.TIPO,'padding:3px 6px')}</td>
+    <td class="azul" style="width:60px;padding:3px 6px">Prioridad</td><td ${campoOP('PRIORIDAD',op.PRIORIDAD,'padding:3px 6px')}</td></tr>
+    <tr><td class="azul" style="padding:3px 6px">Descripción</td><td colspan="5" ${campoOP('DESCRIPCION',op.DESCRIPCION,'padding:3px 6px;font-weight:700')}</td></tr>
+    <tr><td class="azul" style="padding:3px 6px">F. Inicio</td><td ${campoOP('FECHA INICIO',op['FECHA INICIO']||hoy,'padding:3px 6px')}</td>
+    <td class="azul" style="padding:3px 6px">F. Entrega</td><td ${campoOP('FECHA ENTREGA PRODUCCION',op['FECHA ENTREGA PRODUCCION'],'padding:3px 6px')}</td>
+    <td class="azul" style="padding:3px 6px">Cantidad</td><td ${campoOP('CANTIDAD',op.CANTIDAD||op.CANT||'1 und','padding:3px 6px')}</td></tr>
   </table>
 
   <!-- SECCIONES DINÁMICAS según orden y estado -->
@@ -10945,7 +11737,7 @@ function _hrBuildPDFHtml(op, hrData) {
           <th style="border:1px solid #ccc;padding:3px 6px;width:15%">Estado</th>
           <th style="border:1px solid #ccc;padding:3px 6px;width:15%">Responsable</th>
         </tr>
-        ${[1,2].map(()=>`<tr><td style="border:1px solid #ccc;padding:5px 6px"></td><td style="border:1px solid #ccc;padding:5px 6px"></td><td style="border:1px solid #ccc;padding:5px 6px"></td><td style="border:1px solid #ccc;padding:5px 6px"></td><td style="border:1px solid #ccc;padding:5px 6px"></td></tr>`).join('')}
+        ${[0,1].map(i=>`<tr>${cell('mat'+i+'_material')}${cell('mat'+i+'_dim')}${cell('mat'+i+'_cant','text-align:center')}${cell('mat'+i+'_estado')}${cell('mat'+i+'_resp')}</tr>`).join('')}
       </table>`;
     if(s.id==='procesos') return `
       <div style="background:#1a3a6b;color:#fff;font-weight:700;font-size:8px;padding:3px 8px;margin-bottom:4px">SECUENCIA DE PROCESOS Y CONTROL DE MEDIDAS</div>
@@ -10969,13 +11761,13 @@ function _hrBuildPDFHtml(op, hrData) {
       <div style="background:#1a3a6b;color:#fff;font-weight:700;font-size:8px;padding:3px 8px;margin-bottom:4px">TRATAMIENTO TÉRMICO</div>
       <table style="margin-bottom:6px;font-size:8px">
         <tr style="background:#dde6f0"><th style="border:1px solid #ccc;padding:3px 6px">Tipo</th><th style="border:1px solid #ccc;padding:3px 6px">Temperatura</th><th style="border:1px solid #ccc;padding:3px 6px">Tiempo</th><th style="border:1px solid #ccc;padding:3px 6px">Resultado</th></tr>
-        <tr><td style="border:1px solid #ccc;padding:6px"></td><td style="border:1px solid #ccc;padding:6px"></td><td style="border:1px solid #ccc;padding:6px"></td><td style="border:1px solid #ccc;padding:6px"></td></tr>
+        <tr>${cell('term_tipo')}${cell('term_temp')}${cell('term_tiempo')}${cell('term_resultado')}</tr>
       </table>`;
     if(s.id==='dimcrit') return `
       <div style="background:#1a3a6b;color:#fff;font-weight:700;font-size:8px;padding:3px 8px;margin-bottom:4px">CONTROL DIMENSIONAL CRÍTICO</div>
       <table style="margin-bottom:6px;font-size:8px">
         <tr style="background:#dde6f0"><th style="border:1px solid #ccc;padding:3px 6px">Cota</th><th style="border:1px solid #ccc;padding:3px 6px">Nominal</th><th style="border:1px solid #ccc;padding:3px 6px">Tolerancia</th><th style="border:1px solid #ccc;padding:3px 6px">Valor real</th><th style="border:1px solid #ccc;padding:3px 6px">OK/NOK</th></tr>
-        ${[1,2,3].map(()=>`<tr><td style="border:1px solid #ccc;padding:5px 6px"></td><td style="border:1px solid #ccc;padding:5px 6px"></td><td style="border:1px solid #ccc;padding:5px 6px"></td><td style="border:1px solid #ccc;padding:5px 6px"></td><td style="border:1px solid #ccc;padding:5px 6px"></td></tr>`).join('')}
+        ${[0,1,2].map(i=>`<tr>${cell('dim'+i+'_cota','text-align:center')}${cell('dim'+i+'_nominal','text-align:center')}${cell('dim'+i+'_tol','text-align:center')}${cell('dim'+i+'_real','text-align:center')}${cell('dim'+i+'_oknok','text-align:center')}</tr>`).join('')}
       </table>`;
     if(s.id==='firmas') return `
       <table style="margin-top:8px">
@@ -11024,6 +11816,29 @@ async function generarPDFHojaRuta(opId, hrDataParam) {
 
 
 function _abrirDocParaImprimir(html, filename) {
+  // Espera a que todas las <img> del documento terminen de cargar (o fallen)
+  // antes de imprimir. Antes se usaba un setTimeout fijo de 500ms, insuficiente
+  // cuando la imagen viene de una URL remota (Drive) y tarda más en cargar —
+  // eso hacía que la foto saliera en blanco en el PDF.
+  function _esperarImagenes(win, doc, cb) {
+    const imgs = Array.from(doc.images || []);
+    if (!imgs.length) { cb(); return; }
+    let pendientes = imgs.length;
+    let resuelto = false;
+    const terminar = () => {
+      if (resuelto) return;
+      pendientes--;
+      if (pendientes <= 0) { resuelto = true; cb(); }
+    };
+    imgs.forEach(img => {
+      if (img.complete) { terminar(); return; }
+      img.addEventListener('load', terminar, { once:true });
+      img.addEventListener('error', terminar, { once:true });
+    });
+    // Salvavidas: si alguna imagen nunca dispara load/error, no bloquear la impresión
+    setTimeout(() => { if(!resuelto){ resuelto = true; cb(); } }, 4000);
+  }
+
   // Usar iframe oculto — no muestra la URL ni fecha del navegador al imprimir
   try {
     // Eliminar iframe anterior si existe
@@ -11040,14 +11855,16 @@ function _abrirDocParaImprimir(html, filename) {
     doc.write(html);
     doc.close();
 
-    // Esperar a que cargue imágenes y estilos
+    // Esperar a que cargue el iframe y luego a que carguen las imágenes
     iframe.onload = () => {
-      setTimeout(() => {
-        iframe.contentWindow.focus();
-        iframe.contentWindow.print();
-        // Limpiar después de imprimir
-        setTimeout(() => iframe.remove(), 2000);
-      }, 500);
+      _esperarImagenes(iframe.contentWindow, doc, () => {
+        setTimeout(() => {
+          iframe.contentWindow.focus();
+          iframe.contentWindow.print();
+          // Limpiar después de imprimir
+          setTimeout(() => iframe.remove(), 2000);
+        }, 150);
+      });
     };
     return;
   } catch(e) {
@@ -11059,7 +11876,7 @@ function _abrirDocParaImprimir(html, filename) {
   win.document.write(html);
   win.document.close();
   win.document.title = filename.replace('.pdf','');
-  setTimeout(() => win.print(), 600);
+  _esperarImagenes(win, win.document, () => setTimeout(() => win.print(), 150));
 }
 
 // ╔══════════════════════════════════════════════════════════════
@@ -11153,9 +11970,23 @@ async function generarPDFCotizacion(cotId) {
   // Cargar datos si no están en cache
   if(!DB.cotizaciones) await load('cotizaciones','getCotizaciones');
   if(!DB.items)        await load('items','getItems');
+  if(!DB.clientes)     await load('clientes','getClientes');
 
   const c    = (DB.cotizaciones||[]).find(x=>String(x.COTIZACION)===String(cotId));
   if(!c){ toast('Cotización no encontrada','error'); return; }
+
+  // La cotización solo guarda NIT/CIUDAD si se llenaron al crearla; DIRECCIÓN y
+  // TELÉFONO viven en la ficha del cliente. Se cruza por EMPRESA para completar
+  // los datos que falten en la cotización.
+  const cli = (DB.clientes||[]).find(x =>
+    String(x.Empresa||x.EMPRESA||'').trim().toLowerCase() === String(c.EMPRESA||c.Empresa||'').trim().toLowerCase()
+  ) || {};
+  const empresaInfo = {
+    Nit:      c.Nit||c.NIT||cli.Nit||cli.NIT||'',
+    Ciudad:   c.Ciudad||c.CIUDAD||cli.Ciudad||cli.CIUDAD||'',
+    Dirección: c.Dirección||c.DIRECCION||cli.Dirección||cli.DIRECCION||'',
+    Teléfono: c.Teléfono||c.TELEFONO||cli.Teléfono||cli.TELEFONO||''
+  };
 
   // ── Helpers para limpiar datos de Sheets ──────────────────
   // Limpia valores con fórmula rota (#NAME?, #REF!, #VALUE!, etc.)
@@ -11215,14 +12046,30 @@ async function generarPDFCotizacion(cotId) {
   const total    = Number(c['PRECIO TOTAL']||0) || subtotal+iva;
   const descPct  = Number(c['DESCUENTO%']||0);
   const descVal  = Number(c.DESCUENTO||0);
-  const letras   = c.LETRAS || numeroALetras(total);
+  const letras   = clean(c.LETRAS, '') || numeroALetras(total);
+
+  // Convierte LEAD TIME COT a días enteros: normalmente es número, pero a
+  // veces Apps Script lo devuelve como Date (formato de celda en Sheets),
+  // serializado tipo "1900-01-11T04:56:16.000Z" — hay que reconvertir a días.
+  function fmtDiasEntrega(v) {
+    if (v === undefined || v === null || v === '') return '—';
+    const s = String(v).trim();
+    if (s.startsWith('#')) return '—';
+    if (/^\d{4}-\d{2}-\d{2}T/.test(s)) {
+      const ms = Date.parse(s) - Date.parse('1899-12-30T00:00:00Z');
+      const dias = Math.round(ms / 86400000);
+      return isNaN(dias) ? '—' : dias;
+    }
+    const n = Number(s);
+    return isNaN(n) ? clean(s) : n;
+  }
 
   // Filas de items — si no hay items separados, mostrar la cotización como un solo item
   const itemRows = (its.length > 0 ? its : [c]).map((it,i)=>{
     const isC = its.length === 0; // fallback a cotización
     const itemNum = isC ? 1 : (it.ITEM || i+1);
     const cant    = Number(isC ? 1 : (it.CANT || it.CANTIDAD || 1));
-    const desc    = isC ? (c['DESCRIPCION DEL PROYECTO']||'—') : (it.DESCRIPCION || it.DESCRIPCION_ITEMS || '—');
+    const desc    = isC ? (c['DESCRIPCION DEL PROYECTO']||'—') : (it['DESCRIPCION ITEM'] || it.DESCRIPCION || it.DESCRIPCION_ITEMS || '—');
     const pu      = isC ? Number(c['PRECIO SIN IVA']||c['PRECIO TOTAL']||0) : getPrecioUnit(it);
     const pt      = isC ? Number(c['PRECIO SIN IVA']||c['PRECIO TOTAL']||0) : getPrecioTotal(it);
     return `
@@ -11270,11 +12117,11 @@ async function generarPDFCotizacion(cotId) {
         <table style="font-size:9.5px;width:100%">
           <tr><td style="color:#1a3a6b;font-weight:700;width:90px">FECHA:</td><td>${hoy}</td></tr>
           <tr><td style="color:#1a3a6b;font-weight:700">SEÑORES:</td><td>${clean(c.EMPRESA)}</td></tr>
-          <tr><td style="color:#1a3a6b;font-weight:700">NIT:</td><td>${clean(c.Nit)}</td></tr>
-          <tr><td style="color:#1a3a6b;font-weight:700">DIRECCIÓN:</td><td>${clean(c.Dirección)}</td></tr>
-          <tr><td style="color:#1a3a6b;font-weight:700">CIUDAD:</td><td>${clean(c.Ciudad)}</td></tr>
+          <tr><td style="color:#1a3a6b;font-weight:700">NIT:</td><td>${clean(empresaInfo.Nit)}</td></tr>
+          <tr><td style="color:#1a3a6b;font-weight:700">DIRECCIÓN:</td><td>${clean(empresaInfo.Dirección)}</td></tr>
+          <tr><td style="color:#1a3a6b;font-weight:700">CIUDAD:</td><td>${clean(empresaInfo.Ciudad)}</td></tr>
           <tr><td style="color:#1a3a6b;font-weight:700">ENCARGADO:</td><td>${clean(c.ENCARGADO||c.CONTACTO)}</td></tr>
-          <tr><td style="color:#1a3a6b;font-weight:700">TELÉFONO:</td><td>${c.Teléfono||'—'}</td></tr>
+          <tr><td style="color:#1a3a6b;font-weight:700">TELÉFONO:</td><td>${clean(empresaInfo.Teléfono)}</td></tr>
         </table>
         <table style="margin-top:10px;font-size:9.5px;width:100%;border-collapse:collapse">
           <tr>
@@ -11358,7 +12205,7 @@ async function generarPDFCotizacion(cotId) {
           </tr>
           <tr>
             <td class="azul borde">ENTREGA (días)</td>
-            <td class="borde center">${clean(c['LEAD TIME COT'])}</td>
+            <td class="borde center">${fmtDiasEntrega(c['LEAD TIME COT'])}</td>
           </tr>
         </table>
       </td>
@@ -13357,6 +14204,30 @@ function _loginBack() {
   _updatePinDisplay();
 }
 
+// ── Soporte teclado físico para PIN ─────────────────────────────
+document.addEventListener('keydown', function _pinKeyboard(e) {
+  // Solo actuar si el paso 2 del login está visible
+  const paso2 = document.getElementById('ls-2');
+  if (!paso2 || !paso2.classList.contains('active')) return;
+  // No interferir si el foco está en un input de texto
+  const tag = document.activeElement?.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+
+  if (e.key >= '0' && e.key <= '9') {
+    e.preventDefault();
+    _pinKey(e.key);
+  } else if (e.key === 'Backspace') {
+    e.preventDefault();
+    _pinDel();
+  } else if (e.key === 'Delete') {
+    e.preventDefault();
+    _pinClear();
+  } else if (e.key === 'Escape') {
+    e.preventDefault();
+    _loginBack();
+  }
+});
+
 // ── Iniciar sesión ───────────────────────────────────────────────
 function _iniciarSesion(usuario) {
   _SESSION = { id: usuario.id, nombre: usuario.nombre, rol: usuario.rol, avatar: usuario.avatar };
@@ -13730,8 +14601,7 @@ async function cotFmaeSaveRow(cotId){
     c.FMAE_JSON=JSON.stringify(fmae);
     toast('✅ Falla agregada al FMAE');
     closeModal();
-    detailCot(cotId);
-    setTimeout(()=>{ document.querySelector('.dp-tab[data-tab="fmae"]')?.click(); },350);
+    _fmaeRefreshAfterChange(cotId);
   }catch(e){
     toast('❌ '+e.message,'error');
     const btn=document.querySelector('#modal-foot .btn-primary');
@@ -13750,9 +14620,22 @@ async function cotFmaeDelRow(cotId, idx){ idx=Number(idx);
     await POST('updateCotizacion',{...c, FMAE_JSON: JSON.stringify(fmae)});
     c.FMAE_JSON=JSON.stringify(fmae);
     toast('🗑 Eliminado');
-    detailCot(cotId);
-    setTimeout(()=>{ document.querySelector('.dp-tab[data-tab="fmae"]')?.click(); },350);
+    _fmaeRefreshAfterChange(cotId);
   }catch(e){ toast('❌ '+e.message,'error'); }
+}
+
+// Refresca el FMEA donde esté visible: si el panel de pantalla completa
+// está abierto lo repinta ahí mismo (sin navegar); si no, usa el flujo
+// clásico de la pestaña dentro de detailCot.
+function _fmaeRefreshAfterChange(cotId){
+  const fullscreen = document.getElementById('fmea-editor-panel');
+  if(fullscreen){
+    const body = document.getElementById('dp-fmae-'+cotId);
+    if(body) _renderFmaePanel(body);
+    return;
+  }
+  detailCot(cotId);
+  setTimeout(()=>{ document.querySelector('.dp-tab[data-tab="fmae"]')?.click(); },350);
 }
 // ══════════════════════════════════════════════════════════════════════════
 
