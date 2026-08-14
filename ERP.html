@@ -1049,30 +1049,71 @@ kbd{
     text-align: center;
   }
 
-  /* ── TIMELINE VERTICAL (para detalle OP) ────────────── */
-  .tl-vertical { padding: 8px 0; }
+  /* ── TIMELINE VERTICAL v2 (moderna, para detalle OP) ── */
+  .tl-v2-section{
+    background: linear-gradient(180deg, var(--card2) 0%, var(--card) 100%);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 16px 16px 14px;
+    box-shadow: 0 4px 18px rgba(0,0,0,.08);
+  }
+  .tl-vertical { padding: 10px 2px 2px; }
   .tl-v-item {
-    display: flex; gap: 12px; align-items: flex-start;
-    padding: 6px 0; position: relative;
+    display: flex; gap: 14px; align-items: flex-start;
+    padding: 9px 8px; position: relative;
+    border-radius: 10px;
+    transition: background .15s ease, transform .15s ease;
+  }
+  .tl-v-item[onclick]{ cursor:pointer; }
+  .tl-v-item[onclick]:hover{
+    background: rgba(255,255,255,.04);
+    transform: translateX(2px);
   }
   .tl-v-item:not(:last-child) .tl-v-line {
-    position: absolute; left: 11px; top: 28px;
-    width: 2px; height: calc(100% - 4px);
+    position: absolute; left: 21px; top: 34px;
+    width: 2px; height: calc(100% - 6px);
     background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
   }
-  .tl-v-item.done .tl-v-line { background: var(--accent); }
+  .tl-v-item.done .tl-v-line {
+    background: linear-gradient(180deg, var(--accent), var(--accent) 60%, var(--border));
+  }
   .tl-v-dot {
-    width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0;
+    width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0;
     display: flex; align-items: center; justify-content: center;
-    font-size: 11px; font-weight: 700;
+    font-size: 12px; font-weight: 800;
     background: var(--border); color: var(--muted);
+    border: 2px solid var(--card);
+    box-shadow: 0 0 0 2px var(--border);
+    position: relative; z-index: 1;
+    transition: transform .2s ease, box-shadow .2s ease;
   }
-  .tl-v-item.done .tl-v-dot { background: var(--accent); color: #fff; }
-  .tl-v-item.now  .tl-v-dot { background: var(--gold);   color: #000; }
-  .tl-v-item.pend .tl-v-dot { background: var(--border);  color: var(--muted); }
-  .tl-v-content { flex: 1; }
-  .tl-v-title { font-size: 12px; font-weight: 600; color: var(--text); }
-  .tl-v-date  { font-size: 11px; color: var(--muted); margin-top: 1px; }
+  .tl-v-item.done .tl-v-dot {
+    background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 70%, #000));
+    color: #fff;
+    box-shadow: 0 0 0 2px var(--accent), 0 2px 8px rgba(0,0,0,.25);
+  }
+  .tl-v-item.now .tl-v-dot {
+    background: linear-gradient(135deg, var(--gold), color-mix(in srgb, var(--gold) 75%, #fff));
+    color: #000;
+    box-shadow: 0 0 0 2px var(--gold), 0 0 0 6px rgba(255,193,7,.18);
+    animation: tlPulse 1.8s ease-in-out infinite;
+  }
+  .tl-v-item.pend .tl-v-dot { background: var(--border); color: var(--muted); box-shadow: 0 0 0 2px var(--border); }
+  @keyframes tlPulse {
+    0%, 100% { box-shadow: 0 0 0 2px var(--gold), 0 0 0 6px rgba(255,193,7,.18); }
+    50%      { box-shadow: 0 0 0 2px var(--gold), 0 0 0 9px rgba(255,193,7,.06); }
+  }
+  .tl-v-content { flex: 1; padding-top: 3px; min-width: 0; }
+  .tl-v-title { font-size: 12.5px; font-weight: 700; color: var(--text); letter-spacing: .1px; }
+  .tl-v-item.pend .tl-v-title { color: var(--muted); font-weight: 600; }
+  .tl-v-item.now .tl-v-title  { color: var(--gold); }
+  .tl-v-date  {
+    display: inline-block; font-size: 10.5px; color: var(--muted);
+    margin-top: 3px; background: var(--card2); border: 1px solid var(--border);
+    padding: 1px 7px; border-radius: 20px;
+  }
 
   
   /* ── VISTA TABLA EXCEL ──────────────────────────────── */
@@ -1420,7 +1461,7 @@ async function POST_ARCH(action, data = {}) {
 //    IMAGENES_DESCRIPCION) del caché para evitar que localStorage se
 //    llene (límite ~5 MB) y corrompa otros datos. Las imágenes se
 //    obtienen siempre desde el servidor.
-const CACHE_TTL = 10 * 60 * 1000; // 10 minutos
+const CACHE_TTL = 30 * 60 * 1000; // 30 minutos (sync optimista mantiene DB fresco)
 const CACHE_KEY_PREFIX = 'erp_wedm_';
 // Campos pesados que NO se cachean
 const CACHE_EXCLUDE_FIELDS = ['PLANO_B64','IMAGENES_DESCRIPCION','IMAGEN_NOMBRE','PLANO_NOMBRE','HOJA_RUTA_JSON']; // IMAGEN_B64=URL corta, no excluir
@@ -1542,7 +1583,7 @@ function hideBusy(){
 
 // ══ API ════════════════════════════════════════════════════════
 // Timeout helper — GAS tiene cold-start; si tarda más de 25 s algo falló
-function _fetchTimeout(url, opts={}, ms=25000){
+function _fetchTimeout(url, opts={}, ms=20000){
   const ctrl = new AbortController();
   const timer = setTimeout(()=>ctrl.abort(), ms);
   return fetch(url, {...opts, signal:ctrl.signal}).finally(()=>clearTimeout(timer));
@@ -1556,47 +1597,52 @@ const ACTION_TO_KEY = {
   getCompras:'compras',
 };
 
-// ── Auto-sincronización tras cualquier acción ─────────────────
-// Invalida caché, recarga datos frescos y re-renderiza el módulo
-// sin que el usuario tenga que pulsar sincronizar manualmente.
-// keys: array de keys de DB a refrescar, ej: ['produccion','items']
-// renderFn: función opcional que se llama tras recargar (ej: detailOP)
-async function _autoSync(keys=[], renderFn=null){
-  const KEY_TO_ACTION = {
-    produccion:'getControlProduccion', cotizaciones:'getCotizaciones',
-    items:'getItems', clientes:'getClientes', remisiones:'getRemisiones',
-    materiales:'getMateriales', servicios:'getServicios', procesos:'getProcesos',
-    compras:'getCompras'
-  };
-  const KEY_TO_MOD = {
-    produccion: produccion, cotizaciones: cotizaciones,
-    clientes: clientes, remisiones: remisiones,
-    materiales: materiales, servicios: servicios, procesos: procesos,
-    compras: compras
-  };
-  // Mostrar progreso
-  const prog = _progress({ icon:'🔄', label:'Sincronizando…', steps:['Actualizando datos…','Cargando cambios…'] });
-  prog.step(0);
-  // Invalidar caché local
-  keys.forEach(k => {
-    DB[k] = null;
-    try { localStorage.removeItem(CACHE_KEY_PREFIX + k); } catch(e){}
-  });
-  // Recargar en paralelo
+// ── Mapa de acciones para sync ────────────────────────────────
+const _SYNC_ACTION = {
+  produccion:'getControlProduccion', cotizaciones:'getCotizaciones',
+  items:'getItems', clientes:'getClientes', remisiones:'getRemisiones',
+  materiales:'getMateriales', servicios:'getServicios', procesos:'getProcesos',
+  compras:'getCompras'
+};
+
+// ── Auto-sincronización OPTIMISTA ─────────────────────────────
+// Los datos ya están en DB (el POST los aplicó localmente antes de llamar aquí).
+// Solo re-renderiza de inmediato, luego refresca caché en background.
+// NO bloquea la UI ni espera al servidor → respuesta instantánea.
+function _autoSync(keys=[], renderFn=null){
+  // 1. Re-renderizar YA con los datos actuales en DB
   try {
-    await Promise.all(keys.map(async k => {
-      const action = KEY_TO_ACTION[k];
-      if(!action) return;
-      DB[k] = await GET(action);
-    }));
-  } catch(e) { /* si falla la recarga no bloqueamos la UI */ }
-  prog.step(1);
-  prog.done('Datos actualizados');
-  // Re-renderizar
-  if(renderFn) { renderFn(); return; }
-  const modFn = KEY_TO_MOD[keys[0]];
-  if(modFn && typeof modFn === 'function') modFn();
+    if(renderFn) { renderFn(); }
+    else {
+      const modMap = { produccion, cotizaciones, clientes, remisiones,
+                       materiales, servicios, procesos, compras };
+      const fn = modMap[keys[0]];
+      if(typeof fn==='function') fn();
+    }
+  } catch(e) { console.warn('_autoSync render error:', e); }
+
+  // 2. Refrescar caché en background (sin bloquear, sin re-renderizar)
+  _syncBackground(keys);
 }
+
+// Recarga silenciosa: actualiza DB y localStorage sin tocar la UI.
+let _bgSyncTimer = null;
+function _syncBackground(keys=[], delay=900){
+  clearTimeout(_bgSyncTimer);
+  _bgSyncTimer = setTimeout(async () => {
+    try {
+      await Promise.all(keys.map(async k => {
+        const action = _SYNC_ACTION[k];
+        if(!action) return;
+        const data = await GET(action);
+        if(data) DB[k] = data; // GET ya actualiza localStorage via cacheSet
+      }));
+    } catch(e) { /* silencioso */ }
+  }, delay);
+}
+// Versión rápida para creates/deletes que necesitan el ID del servidor pronto
+function _syncNow(keys=[]){ _syncBackground(keys, 200); }
+
 
 async function GET(action, id='', extraParams={}, _retry=1) {
   try{
@@ -1614,7 +1660,7 @@ async function GET(action, id='', extraParams={}, _retry=1) {
     if(_retry > 0 && (e.name==='AbortError' || e.message?.includes('fetch'))){
       // 1 reintento automático ante timeout o error de red
       console.warn(`GET ${action} falló (${e.message}), reintentando…`);
-      await new Promise(r=>setTimeout(r,1200));
+      await new Promise(r=>setTimeout(r,800));
       return GET(action, id, extraParams, _retry-1);
     }
     // Fallback: devolver datos del caché aunque estén viejos
@@ -4380,7 +4426,7 @@ async function saveCot(exist){
     const _pedId = data['ID_PEDIDO'] || '';
     toast(exist ? '✅ Cotización actualizada' : '✅ Cotización creada — puedes agregar ítems');
     closeModal();
-    await _autoSync(['cotizaciones'], cotizaciones);
+    _autoSync(['cotizaciones'], cotizaciones);
     // Si es nueva cotización, preguntar si quiere agregar ítems inmediatamente
     if(_cotCreada){
       setTimeout(()=>{
@@ -4405,7 +4451,9 @@ async function deleteCot(id){
   if(!confirm('¿Eliminar COT-'+id+'?'))return;
   try{
     await POST('deleteCotizacion',{ID_PEDIDO:uuid, ID_COT:id});
-    toast('Eliminada'); closeDetail(); _autoSync(['cotizaciones'], cotizaciones);
+    toast('Eliminada'); closeDetail();
+    if(DB.cotizaciones) DB.cotizaciones = DB.cotizaciones.filter(x=>String(x.COTIZACION)!==String(id)&&x.ID_PEDIDO!==uuid);
+    cotizaciones(); _syncNow(['cotizaciones']);
   }catch(e){toast(e.message,'error');}
 }
 
@@ -4685,6 +4733,17 @@ function qaEtapaActual(op){
   }
   return null;
 }
+// Etapas aplicables a esta OP en concreto, en el orden del recorrido — para
+// pintar la Línea de Tiempo. "Servicio Externo" solo aparece en el recorrido
+// cuando el Semáforo de Avance está (o estuvo) en TRABAJO EXTERNO; de lo
+// contrario se omite (mismo criterio que ya usa qaEtapaActual).
+function _qaEtapasParaOP(op){
+  return QA_ETAPAS.filter(et => {
+    if(et.id !== 'servicio') return true;
+    const semActual = _qaNormKey(op['SEMAFORO AVANCE']||'');
+    return semActual === _qaNormKey('TRABAJO EXTERNO') || _qaEtapaDone(op, et);
+  });
+}
 // Diagnóstico manual: abrir consola del navegador y ejecutar qaDebugEtapa('OP-13531' o IDQR)
 // para ver exactamente qué valores está recibiendo del backend en las columnas de checklist.
 function qaDebugEtapa(opId){
@@ -4776,7 +4835,7 @@ async function qaDisenioOK(opId){ return qaAvanzarEtapa(opId); }
 // Al marcar la etapa Calidad, además de CALIDAD=TRUE y su fecha, se pide
 // elegir quién queda como responsable de Liberación (o escribir otro nombre).
 const QA_LIBERACION_NOMBRES = ['C.POSADA','F.GIRALDO','J.GARCIA'];
-const QA_RESPONSABLE_LIB_KEYS = ['RESPONSABLE LIBERACION','RESPONSABLE LIBERACIÓN','LIBERADO POR','RESPONSABLE_LIBERACION'];
+const QA_RESPONSABLE_LIB_KEYS = ['LIBERACION','RESPONSABLE LIBERACION','RESPONSABLE LIBERACIÓN','LIBERADO POR','RESPONSABLE_LIBERACION'];
 
 function qaPedirResponsableLiberacion(op, et){
   const safeId = String(op.IDQR).replace(/'/g,"\\'");
@@ -4833,6 +4892,195 @@ async function qaConfirmarCalidad(opId, responsable){
     if(dpEl && dpEl.classList.contains('open') && typeof detailOP==='function'){
       detailOP(op.IDQR || opId);
     }
+    _autoSync(['produccion'], ()=>{ if(MOD==='produccion') produccion(); else if(MOD==='diseño') controlDiseno(); });
+  }catch(e){ toast(e.message,'error'); }
+}
+
+// Mini modal para pedir el responsable de Liberación cuando "Calidad" queda
+// dentro del tramo que se completa al mover la OP directo a una etapa
+// posterior desde la Línea de Tiempo (qaSetEtapa). Devuelve una Promise que
+// resuelve con el nombre elegido, o null si el usuario cancela.
+function _qaPedirResponsableLib(op){
+  return new Promise(resolve=>{
+    openModal(`🔍 Calidad — Responsable de Liberación`, `
+      <p style="font-size:12px;color:var(--muted);margin-bottom:12px">
+        Se marcará "Calidad" en OP-${op.OP||op.IDQR} de camino a la etapa elegida. Elige quién queda como responsable de Liberación:
+      </p>
+      <div id="qa-lib-opts2" style="display:flex;flex-direction:column;gap:8px">
+        ${QA_LIBERACION_NOMBRES.map(n=>`
+          <button type="button" class="btn btn-ghost qa-lib2-opt" data-val="${n}" style="text-align:left">${n}</button>`).join('')}
+        <button type="button" class="btn btn-ghost" style="text-align:left" onclick="
+          document.getElementById('qa-lib-opts2').style.display='none';
+          document.getElementById('qa-lib-custom2').style.display='flex';
+          document.getElementById('qa-lib-custom2-btn').style.display='inline-flex';
+          document.getElementById('qa-lib-custom2-input')?.focus();
+        ">✏️ Escribir otro nombre…</button>
+      </div>
+      <div id="qa-lib-custom2" class="field" style="display:none;margin-top:12px">
+        <label>Nombre del responsable</label>
+        <input type="text" id="qa-lib-custom2-input" placeholder="Ej: N.APELLIDO">
+      </div>`,
+      `<button class="btn btn-ghost" id="qa-lib2-cancel">Cancelar</button>
+       <button class="btn btn-primary" id="qa-lib-custom2-btn" style="display:none">✓ Confirmar</button>`
+    );
+    setTimeout(()=>{
+      document.querySelectorAll('.qa-lib2-opt').forEach(btn=>{
+        btn.addEventListener('click', ()=>{ closeModal(); resolve(btn.dataset.val); });
+      });
+      document.getElementById('qa-lib-custom2-btn')?.addEventListener('click', ()=>{
+        const v = (document.getElementById('qa-lib-custom2-input')?.value||'').trim();
+        if(!v){ toast('Escribe un nombre','error'); return; }
+        closeModal(); resolve(v);
+      });
+      document.getElementById('qa-lib2-cancel')?.addEventListener('click', ()=>{ closeModal(); resolve(null); });
+    },0);
+  });
+}
+
+// Mover la OP directamente a la etapa que se tocó en la Línea de Tiempo.
+// Si la etapa tocada es la última ya completada, se interpreta como
+// "retroceder" (desmarcarla, para corregir un clic accidental o corregir el
+// proceso). En cualquier otro caso avanza, marcando también todas las
+// etapas anteriores — igual que si se presionaran en cadena sus botones
+// rápidos. Solo administradores pueden usar este control.
+async function qaSetEtapa(opId, etapaId){
+  if(!_puedeEditar()){ toast('No tienes permisos para modificar etapas','error'); return; }
+  const op = qaFindOP(opId);
+  if(!op){ toast('OP no encontrada: '+opId,'error'); return; }
+  const etapas = _qaEtapasParaOP(op); // respeta el filtro (Servicio Externo solo si aplica)
+  const idx = etapas.findIndex(e=>e.id===etapaId);
+  if(idx<0) return;
+
+  const _realKey = (candidates) => {
+    const wanted = candidates.map(_qaNormKey);
+    return Object.keys(op).find(rk => wanted.includes(_qaNormKey(rk))) || candidates[0];
+  };
+  const yaDone = _qaEtapaDone(op, etapas[idx]);
+  const hoy = new Date().toISOString().slice(0,10);
+  const payload = { IDQR: op.IDQR };
+
+  if(yaDone){
+    // Solo admin puede retroceder etapas
+    if(!_esAdmin()){ toast('Solo un administrador puede retroceder etapas','error'); return; }
+    // RETROCEDER: el usuario "se devuelve" en el proceso hasta esta etapa.
+    // Se borra la fecha y los datos de esta etapa y de TODAS las posteriores
+    // que ya estuvieran marcadas (quedan pendientes de nuevo). Antes de
+    // borrar se guarda un respaldo recuperable desde 🕘 Historial.
+    const etapasABorrar = etapas.slice(idx).filter(et => _qaEtapaDone(op, et));
+    if(!etapasABorrar.length){ toast('No hay nada que retroceder aquí','info'); return; }
+    const extraTxt = etapasABorrar.length>1 ? ` y de ${etapasABorrar.length-1} etapa(s) posteriores` : '';
+    if(!confirm(`¿Retroceder el proceso de OP-${op.OP||opId} hasta "${etapas[idx].nombreLargo}"? Se borrará la fecha y los datos de esta etapa${extraTxt}. Podrás recuperarlos luego desde 🕘 Historial.`)) return;
+
+    const valoresPrevios = {};
+    etapasABorrar.forEach(et=>{
+      const kDone = _realKey(et.doneKeys), kFecha = et.dateKeys.length ? _realKey(et.dateKeys) : null;
+      valoresPrevios[kDone] = op[kDone] ?? '';
+      payload[kDone] = 'FALSE';
+      if(kFecha){ valoresPrevios[kFecha] = op[kFecha] ?? ''; payload[kFecha] = ''; }
+      if(et.id==='calidad'){
+        const kResp = _realKey(QA_RESPONSABLE_LIB_KEYS);
+        if(op[kResp]){ valoresPrevios[kResp] = op[kResp] ?? ''; payload[kResp] = ''; }
+      }
+    });
+    payload.HISTORIAL_RETROCESOS_JSON = _qaGuardarHistorialRetroceso(op, etapas[idx].nombreLargo, valoresPrevios);
+
+    try{
+      await POST('updateOP', payload);
+      Object.keys(payload).forEach(k=>{ if(k!=='IDQR') op[k]=payload[k]; });
+      toast(`↩️ Proceso retrocedido hasta "${etapas[idx].nombreLargo}"`);
+      detailOP(opId);
+      _autoSync(['produccion'], ()=>{ if(MOD==='produccion') produccion(); else if(MOD==='diseño') controlDiseno(); });
+    }catch(e){ toast(e.message,'error'); }
+    return;
+  }
+
+  // AVANZAR: mover la OP directo a esta etapa, completando también todas las
+  // anteriores — como si se presionara cada botón rápido en orden. Si
+  // "Calidad" queda dentro del tramo y aún no está marcada, se pide antes
+  // el responsable de Liberación.
+  if(!confirm(`¿Mover OP-${op.OP||opId} directamente a "${etapas[idx].nombreLargo}"? Se marcarán como completadas todas las etapas anteriores, como si presionaras cada botón en orden.`)) return;
+
+  let responsableLib = null;
+  for(let i=0;i<=idx;i++){
+    if(etapas[i].id==='calidad' && !_qaEtapaDone(op, etapas[i])){
+      responsableLib = await _qaPedirResponsableLib(op);
+      if(responsableLib===null) return; // canceló
+    }
+  }
+
+  for(let i=0;i<=idx;i++){
+    const et = etapas[i];
+    if(_qaEtapaDone(op, et)) continue;
+    payload[_realKey(et.doneKeys)] = 'TRUE';
+    if(et.dateKeys.length) payload[_realKey(et.dateKeys)] = hoy;
+    if(et.id==='calidad' && responsableLib) payload[_realKey(QA_RESPONSABLE_LIB_KEYS)] = responsableLib;
+    if(et.id==='servicio') payload[_realKey(['SEMAFORO AVANCE'])] = 'EN PROCESO';
+  }
+
+  try{
+    await POST('updateOP', payload);
+    Object.keys(payload).forEach(k=>{ if(k!=='IDQR') op[k]=payload[k]; });
+    toast(`✅ OP movida a "${etapas[idx].nombreLargo}"`);
+    detailOP(opId);
+    _autoSync(['produccion'], ()=>{ if(MOD==='produccion') produccion(); else if(MOD==='diseño') controlDiseno(); });
+  }catch(e){ toast(e.message,'error'); }
+}
+
+// Guarda un snapshot de los valores que se están por borrar en un retroceso,
+// para poder recuperarlos después desde el botón 🕘 Historial. Devuelve el
+// JSON actualizado del historial (máx. 20 registros más recientes).
+function _qaGuardarHistorialRetroceso(op, etapaDestino, valoresPrevios){
+  let historial = [];
+  try{ historial = JSON.parse(op.HISTORIAL_RETROCESOS_JSON||'[]'); }catch(e){}
+  historial.push({
+    fecha: new Date().toISOString(),
+    quien: _SESSION?.nombre || '',
+    etapaDestino,
+    valores: valoresPrevios,
+  });
+  if(historial.length>20) historial = historial.slice(-20);
+  return JSON.stringify(historial);
+}
+
+// ── 🕘 Historial de retrocesos — recuperar valores borrados ──────
+function qaHistorialEtapas(opId){
+  const op = qaFindOP(opId);
+  if(!op){ toast('OP no encontrada: '+opId,'error'); return; }
+  let historial=[];
+  try{ historial=JSON.parse(op.HISTORIAL_RETROCESOS_JSON||'[]'); }catch(e){}
+
+  const filas = historial.length ? historial.slice().map((h,realIdx)=>{
+    return { h, realIdx };
+  }).reverse().map(({h,realIdx})=>`
+    <div style="background:var(--card2);border-radius:10px;padding:10px 12px;margin-bottom:8px">
+      <div style="font-size:12px;font-weight:600">↩️ Retroceso hasta "${h.etapaDestino}"</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:2px">${h.quien?('👤 '+h.quien+' · '):''}📅 ${fmtDate(h.fecha)}</div>
+      <button class="btn btn-primary btn-sm" style="margin-top:8px" onclick="qaRecuperarHistorial('${String(opId).replace(/'/g,"\\'")}',${realIdx})">↩️ Recuperar este punto</button>
+    </div>`).join('')
+    : `<div style="text-align:center;padding:24px;color:var(--muted);font-size:12px">Sin retrocesos registrados para esta OP</div>`;
+
+  openModal(`🕘 Historial de Retrocesos — OP-${op.OP||opId}`, filas,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cerrar</button>`);
+}
+
+async function qaRecuperarHistorial(opId, histIdx){
+  if(!_esAdmin()){ toast('Solo un administrador puede recuperar el historial','error'); return; }
+  const op = qaFindOP(opId);
+  if(!op) return;
+  let historial=[];
+  try{ historial=JSON.parse(op.HISTORIAL_RETROCESOS_JSON||'[]'); }catch(e){}
+  const snap = historial[histIdx];
+  if(!snap){ toast('Registro de historial no encontrado','error'); return; }
+  if(!confirm(`¿Recuperar la fecha y los datos de "${snap.etapaDestino}" que se habían borrado?`)) return;
+
+  historial.splice(histIdx,1);
+  const payload = { IDQR: op.IDQR, ...snap.valores, HISTORIAL_RETROCESOS_JSON: JSON.stringify(historial) };
+  try{
+    await POST('updateOP', payload);
+    Object.keys(payload).forEach(k=>{ if(k!=='IDQR') op[k]=payload[k]; });
+    toast('✅ Datos recuperados');
+    closeModal();
+    detailOP(opId);
     _autoSync(['produccion'], ()=>{ if(MOD==='produccion') produccion(); else if(MOD==='diseño') controlDiseno(); });
   }catch(e){ toast(e.message,'error'); }
 }
@@ -5865,6 +6113,29 @@ async function detailOP(id){
   const procActual = calcProcActual(op);
   openDetail(`OP-${op.OP||id}`,`
     ${qaBar(op.IDQR||id,'full')}
+    <div class="dp-section tl-v2-section">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+        <h4 style="margin:0">🗓 Línea de Tiempo — Etapas OP</h4>
+        ${_esAdmin()?`<button class="btn btn-ghost btn-sm" onclick="qaHistorialEtapas('${String(op.IDQR||id).replace(/'/g,"\\'")}')">🕘 Historial</button>`:''}
+      </div>
+      ${(()=>{
+        const _etapasOP = _qaEtapasParaOP(op);
+        const _idxEtapaActual = _etapasOP.findIndex(et=>!_qaEtapaDone(op,et));
+        return timelineV(_etapasOP.map((et,i)=>{
+          const isDone = _qaEtapaDone(op, et);
+          const kResp = QA_RESPONSABLE_LIB_KEYS.find(k=>op[k]);
+          return {
+            id: et.id,
+            label: et.nombreLargo,
+            done: isDone,
+            date: isDone ? et.dateKeys.map(k=>op[k]).find(Boolean) : null,
+            extra: et.id==='calidad' && isDone && kResp ? `👤 ${op[kResp]}` : '',
+            now: i===_idxEtapaActual,
+          };
+        }), { opId: op.IDQR||id, editable: _puedeEditar() });
+      })()}
+      ${_puedeEditar()?`<div style="font-size:10px;color:var(--muted);margin-top:8px">✎ Toca cualquier etapa para moverla directamente ahí (marca automáticamente las anteriores)${_esAdmin()?' o para retroceder (borra fecha y datos — recuperables en 🕘 Historial)':''}.</div>`:''}
+    </div>
     <div class="dp-section">
       <h4>Identificación</h4>
       ${dr('OP','<strong style="color:var(--accent);font-size:16px">OP-'+( op.OP||id)+'</strong>')}
@@ -6006,25 +6277,6 @@ async function detailOP(id){
       ${dr('Torno',op['TORNO R']||'—')} ${dr('Centro Mecan.',op['CENTRO DE MECANIZADO R']||'—')}
       ${dr('Rectificadora',op['RECTIFICADORA PLANA R']||'—')} ${dr('EDM',op['EDM R']||'—')}
       ${dr('Hilo',op['EROSIONADORA DE HILO R']||'—')} ${dr('Total Hrs R',op['TOTAL HRS R']||'—')}
-    </div>
-    <div class="dp-section">
-      <h4>🗓 Línea de Tiempo — Etapas OP</h4>
-      ${timelineV([
-        { label:'Ingeniería y Planeación', done: op['INGENIERIA Y PLANEACIÓN']==='TRUE',
-          date: op['FECHA ENTREGA\nPLANEACIÓN\nDD/MM/AA']||op['FECHA ENTREGA PLANEACION'],
-          now: op['INGENIERIA Y PLANEACIÓN']!=='TRUE' && op.ESTADO!=='PENDIENTE MP' },
-        { label:'MP / Insumos',            done: (op['MP\nINSUMOS']||op['MP INSUMOS'])==='TRUE',
-          date: op['FECHA ENTREGA\nDD/MM/AA']||op['FECHA ENTREGA MP'],
-          now: (op['MP\nINSUMOS']||op['MP INSUMOS'])!=='TRUE' && op['INGENIERIA Y PLANEACIÓN']==='TRUE' },
-        { label:'Servicio Externo',        done: op['SERVICIO EXTERNO']==='TRUE',
-          date: op['FECHA ENTREGA\nDD/MM/AA2']||op['FECHA ENTREGA SVC'] },
-        { label:'Entrega de Producción',   done: (op['ENTREGA DE PRODUCCIÓN']||op['ENTREGA DE PRODUCCION'])==='TRUE',
-          date: op['FECHA ENTREGA\nDD/MM/AA3']||op['FECHA ENTREGA PROD2'] },
-        { label:'Calidad',                 done: op['CALIDAD']==='TRUE',
-          date: op['FECHA \nCALIDAD\nDD/MM/AA']||op['FECHA CALIDAD'] },
-        { label:'Liberación / Despacho',   done: op['LIBERACION']==='TRUE' || op.DESPACHO==='TRUE',
-          date: op['FECHA DE DESPACHO'] },
-      ])}
     </div>
     ${cot?`<div class="dp-section">
       <h4>Cotización Vinculada</h4>
@@ -6325,13 +6577,16 @@ async function saveOP(exist){
     await POST(exist?'updateOP':'createOP',data);
     toast(exist?'OP actualizada ✓':'OP creada ✓');
     closeModal();
-    _autoSync(['produccion'], produccion);
+    if(!exist){ _syncNow(['produccion']); setTimeout(produccion, 250); }
+    else { _autoSync(['produccion'], produccion); }
   }catch(e){toast(e.message,'error');}
 }
 
 async function deleteOP(id){
   if(!confirm('¿Eliminar OP-'+id+'?'))return;
-  try{ await POST('deleteOP',{ID_OP:id}); toast('OP eliminada'); closeDetail(); _autoSync(['produccion'], produccion); }
+  try{ await POST('deleteOP',{ID_OP:id}); toast('OP eliminada'); closeDetail();
+    if(DB.produccion) DB.produccion = DB.produccion.filter(x=>String(x.ID_OP)!==String(id)&&String(x.IDQR)!==String(id));
+    produccion(); _syncNow(['produccion']); }
   catch(e){toast(e.message,'error');}
 }
 
@@ -8000,18 +8255,29 @@ function timelineH(steps, current, fechas) {
 // ══════════════════════════════════════════════════════════
 //  TIMELINE VERTICAL — para checklist de OP
 // ══════════════════════════════════════════════════════════
-function timelineV(steps) {
-  // steps: [{label, done:bool, date, now:bool}]
+function timelineV(steps, opts={}) {
+  // steps: [{id, label, done:bool, date, now:bool, extra}]
+  // opts.editable + opts.opId → cada etapa queda clicable y llama a
+  // qaSetEtapa(opId, step.id) para mover la OP directo a esa etapa
+  // (equivale a presionar en cadena los botones rápidos de cada etapa
+  // anterior: Diseño → MP Insumos → Servicio Externo → …).
+  const clickable = !!(opts.editable && opts.opId);
   return `<div class="tl-vertical">
     ${steps.map((s, i) => {
       const cls = s.done ? 'done' : s.now ? 'now' : 'pend';
       const icon = s.done ? '✓' : s.now ? '●' : (i + 1);
-      return `<div class="tl-v-item ${cls}">
+      const clickAttrs = clickable && s.id
+        ? ` style="cursor:pointer" onclick="qaSetEtapa('${String(opts.opId).replace(/'/g,"\\'")}','${s.id}')" title="Tocar para mover la OP a esta etapa"`
+        : '';
+      return `<div class="tl-v-item ${cls}"${clickAttrs}>
         <div class="tl-v-line"></div>
         <div class="tl-v-dot">${icon}</div>
         <div class="tl-v-content">
           <div class="tl-v-title">${s.label}</div>
-          ${s.date ? `<div class="tl-v-date">${fmtDate(s.date)}</div>` : ''}
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:3px">
+            ${s.date ? `<div class="tl-v-date">${fmtDate(s.date)}</div>` : ''}
+            ${s.extra ? `<div class="tl-v-date" style="background:transparent;padding:1px 0">${s.extra}</div>` : ''}
+          </div>
         </div>
       </div>`;
     }).join('')}
@@ -8820,7 +9086,9 @@ async function saveCliente(exist){
 }
 async function deleteCliente(id){
   if(!confirm('¿Eliminar cliente?'))return;
-  try{ await POST('deleteCliente',{ID:id}); toast('Eliminado'); closeDetail(); _autoSync(['clientes'], clientes); }
+  try{ await POST('deleteCliente',{ID:id}); toast('Eliminado'); closeDetail();
+    if(DB.clientes) DB.clientes = DB.clientes.filter(x=>String(x.ID_CLIENTE||x.ID)!==String(id));
+    clientes(); _syncNow(['clientes']); }
   catch(e){toast(e.message,'error');}
 }
 
