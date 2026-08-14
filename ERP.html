@@ -5156,7 +5156,7 @@ function qaBar(opId, mode){
     { icon:'📊', label:'Avance',              fn:'qaAvanceProcesos' },
     qaEtapaBtn(op),
     { icon:'📄', label:'Subir Plano',          fn:'qaSubirPlano' },
-    { icon:'🗂️', label:'Kanban',               fn:'qaKanban' },
+    { icon:'📋', label:'Formato QA',            fn:'qaFormatoQA' },
     { icon:'🚦', label:'Semáforo',             fn:'qaSemaforo' },
     { icon:'🖼️', label:'Subir Imagen',         fn:'qaSubirImagen' },
     { icon:'🧱', label:'Pedir Material',       fn:'qaPedirMaterial' },
@@ -5800,31 +5800,651 @@ async function qaGuardarArchivo(opId, kind){
   }
 }
 
-// ── Kanban ───────────────────────────────────────────────────
-function qaKanban(opId){
+// ── Formato QA (antes "Kanban") ─────────────────────────────
+// Réplica digital del "Formato QA (Aseguramiento de la Calidad)":
+// datos generales de la OP/pieza + tabla de Características Clave
+// (KC1-KC10) con Medida/Tolerancia/Instrumento y, por cada pieza
+// fabricada, Dato/Firma/Liberación. Se guarda como JSON en el campo
+// QA_JSON de la fila de producción (mismo patrón que HOJA_RUTA_JSON).
+//
+// Igual que en la Hoja de Ruta, en pantallas de escritorio se muestra
+// una vista previa en vivo (misma maqueta que el PDF) donde se puede
+// escribir directamente sobre la hoja; el panel de la izquierda y la
+// vista previa comparten el mismo estado (window._QAFMT) y se
+// sincronizan entre sí por medio de un "path" (ej: 'header.cliente',
+// 'kc.0.piezas.2.dato') sin perder el foco de escritura.
+const QA_FMT_MAX_KC = 10;
+const QA_FMT_MAX_PZ = 10;
+function esc(v){ return String(v==null?'':v).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function qaFormatoQA(opId){
   const op = qaFindOP(opId);
   if(!op){ toast('OP no encontrada: '+opId,'error'); return; }
-  const idx = QA_ESTADOS.indexOf(op.ESTADO);
-  openModal(`🗂️ Kanban — OP-${op.OP||opId}`,`
-    <div style="display:flex;flex-direction:column;gap:8px">
-      ${QA_ESTADOS.map((e,i)=>`
-        <button type="button" onclick="qaMoverKanban('${String(opId).replace(/'/g,"\\'")}','${e}')"
-          style="text-align:left;padding:10px 12px;border-radius:8px;cursor:pointer;
-          border:1px solid ${i===idx?'var(--accent)':'var(--border)'};
-          background:${i===idx?'var(--accent)':'var(--card2)'};
-          color:${i===idx?'#fff':'var(--text)'};font-size:12px;font-weight:700">
-          ${i===idx?'● ':'○ '}${e}
-        </button>`).join('')}
-    </div>`,
-    `<button class="btn btn-ghost" onclick="closeModal()">Cerrar</button>`
-  );
+
+  let saved = {};
+  try{ saved = JSON.parse(op.QA_JSON||'{}'); }catch(e){}
+
+  const mqAuto = [];
+  for(let n=1;n<=9;n++) mqAuto.push(op['RUTA MQ'+n]||op['RUTA_MQ'+n]||'');
+
+  window._QAFMT = {
+    opId, op,
+    numPiezas: saved.numPiezas || Math.min(Math.max(Number(op.CANT)||1,1), QA_FMT_MAX_PZ),
+    header: Object.assign({
+      qr: op.IDQR||'', comercial: op.ASESOR||'', cot: op.COT||'', opNum: op.OP||'',
+      cliente: op.CLIENTE||'', descripcion: op.DESCRIPCION||'', disenador: op.DISEÑADOR||'',
+      item: op.ITEM||'', cant: op.CANT||'', material: '', tratamiento: '',
+      fechaEntrega: op['FECHA PACTADA']||'', tipo: op.TIPO||'', rev: '',
+      mq: mqAuto
+    }, saved.header||{}),
+    kc: saved.kc && saved.kc.length ? saved.kc : Array.from({length:QA_FMT_MAX_KC}, (_,i)=>({
+      nombre:'KC'+(i+1), medida:'', tolerancia:'', instrumento:'',
+      piezas: Array.from({length:QA_FMT_MAX_PZ}, ()=>({dato:'',firma:'',liberacion:''}))
+    })),
+    resultado: Object.assign({conforme:false,noConforme:false,reproceso:false,derogado:false}, saved.resultado||{}),
+    observaciones: saved.observaciones||'',
+    firmaInspector: saved.firmaInspector||''
+  };
+  // Asegurar que cada KC tenga siempre 10 piezas (por si el JSON guardado es antiguo)
+  window._QAFMT.kc.forEach(k=>{
+    while(k.piezas.length < QA_FMT_MAX_PZ) k.piezas.push({dato:'',firma:'',liberacion:''});
+  });
+
+  _qaFmtOpenPanel();
 }
 
-async function qaMoverKanban(opId, estado){
-  // ESTADO se calcula por fórmula en el Sheet — ya no se puede forzar manualmente.
-  toast('El estado se calcula automáticamente por fórmula en la hoja y no se puede mover a mano','info');
-  closeModal();
+function _qaFmtOpenPanel(){
+  const old = document.getElementById('qafmt-panel');
+  if(old) old.remove();
+  const panel = document.createElement('div');
+  panel.id = 'qafmt-panel';
+  panel.style.cssText = `position:fixed;inset:0;z-index:2000;display:flex;background:var(--surface);animation:slideUp .18s ease`;
+  panel.innerHTML = _qaFmtPanelHTML();
+  document.body.appendChild(panel);
+  _qaFmtUpdatePreview();
 }
+
+function _qaFmtClose(){
+  const panel = document.getElementById('qafmt-panel');
+  if(panel) panel.remove();
+  window._QAFMT = null;
+}
+
+function _qaFmtPanelHTML(){
+  const { op, header, numPiezas } = window._QAFMT;
+  const isMobile = window.innerWidth < 900;
+  return `
+  <style>
+  #qafmt-panel *{box-sizing:border-box}
+  #qafmt-wrap{display:flex;flex-direction:column;width:100%;height:100%}
+  #qafmt-topbar{background:linear-gradient(135deg,#0f2443,#1d4ed8);color:#fff;flex-shrink:0;
+    padding:0 12px;display:flex;align-items:center;gap:8px;min-height:54px}
+  #qafmt-back{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);color:#fff;
+    border-radius:10px;padding:7px 12px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0}
+  #qafmt-title{flex:1;min-width:0;font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #qafmt-title span{opacity:.7;font-size:11px;font-weight:400;display:block;margin-top:1px}
+  #qafmt-save,#qafmt-print{border-radius:10px;padding:8px 12px;font-size:13px;font-weight:700;cursor:pointer;
+    white-space:nowrap;flex-shrink:0;border:none}
+  #qafmt-save{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);color:#fff}
+  #qafmt-print{background:#fbbf24;color:#1a1a1a;box-shadow:0 2px 8px rgba(251,191,36,.4)}
+  #qafmt-body-wrap{display:flex;flex:1;overflow:hidden}
+  #qafmt-editor-col{display:flex;flex-direction:column;overflow:hidden;
+    ${isMobile ? 'width:100%;' : 'width:400px;flex-shrink:0;border-right:1px solid var(--border);'}}
+  #qafmt-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px;background:var(--bg)}
+  #qafmt-preview-col{flex:1;overflow:hidden;display:flex;flex-direction:column;background:#e5e7eb;
+    ${isMobile ? 'display:none;' : ''}}
+  #qafmt-preview-label{padding:7px 14px;background:var(--card);border-bottom:1px solid var(--border);
+    font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;flex-shrink:0}
+  #qafmt-preview-scroll{flex:1;overflow:auto;padding:16px;display:flex;justify-content:center}
+  #qafmt-preview-frame{width:100%;min-width:900px;background:#fff;border:none;box-shadow:0 2px 10px rgba(0,0,0,.15)}
+  .qafmt-sec{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:12px}
+  .qafmt-sec-title{font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:10px}
+  .qafmt-field label{font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;display:block;margin-bottom:4px}
+  .qafmt-field input,.qafmt-field textarea{width:100%;border:1.5px solid var(--border);border-radius:8px;
+    padding:7px 9px;font-size:13px;color:var(--text);background:var(--surface);outline:none;font-family:var(--sans)}
+  .qafmt-field input:focus,.qafmt-field textarea:focus{border-color:var(--accent)}
+  .qafmt-mq-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  .qafmt-piezas-ctrl{display:flex;align-items:center;gap:8px;justify-content:flex-end;margin-bottom:8px}
+  .qafmt-piezas-ctrl button{width:28px;height:28px;border-radius:8px;border:1px solid var(--border);
+    background:var(--card2);color:var(--text);font-weight:800;cursor:pointer}
+  .qafmt-kc-card{border:1px solid var(--border);border-radius:10px;margin-bottom:10px;overflow:hidden}
+  .qafmt-kc-head{display:flex;align-items:center;gap:8px;background:var(--card2);padding:8px 10px;cursor:pointer}
+  .qafmt-kc-head input{flex-shrink:0;width:70px;font-weight:800;font-size:12px;text-align:center;
+    border:1px solid var(--border);border-radius:6px;padding:4px;background:var(--surface);color:var(--accent)}
+  .qafmt-kc-head .qafmt-kc-summary{flex:1;font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .qafmt-kc-head .qafmt-kc-chev{font-size:12px;color:var(--muted);transition:transform .15s}
+  .qafmt-kc-body{padding:10px;display:none;background:var(--surface)}
+  .qafmt-kc-body.open{display:block}
+  .qafmt-kc-spec{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px}
+  .qafmt-pz-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  table.qafmt-pz-table{border-collapse:collapse;font-size:11px;min-width:100%}
+  table.qafmt-pz-table th,table.qafmt-pz-table td{border:1px solid var(--border);padding:4px;text-align:center}
+  table.qafmt-pz-table th{background:var(--card2);font-size:9px;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+  table.qafmt-pz-table td.qafmt-rowlabel{background:var(--card2);font-weight:700;font-size:9px;text-transform:uppercase;
+    color:var(--muted);white-space:nowrap;text-align:left;padding-left:6px}
+  table.qafmt-pz-table input{width:64px;border:1px solid var(--border);border-radius:5px;padding:4px;
+    font-size:11px;text-align:center;background:var(--surface);color:var(--text)}
+  .qafmt-result-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 14px}
+  .qafmt-check{display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:600}
+  </style>
+
+  <div id="qafmt-wrap">
+    <div id="qafmt-topbar">
+      <button id="qafmt-back" onclick="_qaFmtClose()">← Volver</button>
+      <div id="qafmt-title">📋 Formato QA
+        <span>OP-${op.OP||'—'} · Item ${op.ITEM||'—'} · ${op.CLIENTE||''}</span>
+      </div>
+      <button id="qafmt-save" onclick="_qaFmtSave(false)">💾 Guardar</button>
+      <button id="qafmt-print" onclick="_qaFmtSave(true)">🖨️ Imprimir</button>
+    </div>
+
+    <div id="qafmt-body-wrap">
+      <div id="qafmt-editor-col">
+        <div id="qafmt-body">
+
+          <div class="qafmt-sec">
+            <div class="qafmt-sec-title">Datos generales</div>
+            <div class="form-grid">
+              <div class="field qafmt-field"><label>Código QR / IDQR</label><input id="qf-qr" data-qapath="header.qr" oninput="_qaFmtLeftInputChanged(this)" value="${esc(header.qr)}"></div>
+              <div class="field qafmt-field"><label>Comercial</label><input id="qf-comercial" data-qapath="header.comercial" oninput="_qaFmtLeftInputChanged(this)" value="${esc(header.comercial)}"></div>
+              <div class="field qafmt-field"><label>Cotización</label><input id="qf-cot" data-qapath="header.cot" oninput="_qaFmtLeftInputChanged(this)" value="${esc(header.cot)}"></div>
+              <div class="field qafmt-field"><label>OP</label><input id="qf-op" data-qapath="header.opNum" oninput="_qaFmtLeftInputChanged(this)" value="${esc(header.opNum)}"></div>
+              <div class="field qafmt-field span2"><label>Cliente</label><input id="qf-cliente" data-qapath="header.cliente" oninput="_qaFmtLeftInputChanged(this)" value="${esc(header.cliente)}"></div>
+              <div class="field qafmt-field span2"><label>Descripción / Pieza</label><input id="qf-descripcion" data-qapath="header.descripcion" oninput="_qaFmtLeftInputChanged(this)" value="${esc(header.descripcion)}"></div>
+              <div class="field qafmt-field"><label>Diseñador</label><input id="qf-disenador" data-qapath="header.disenador" oninput="_qaFmtLeftInputChanged(this)" value="${esc(header.disenador)}"></div>
+              <div class="field qafmt-field"><label>Ítem</label><input id="qf-item" data-qapath="header.item" oninput="_qaFmtLeftInputChanged(this)" value="${esc(header.item)}"></div>
+              <div class="field qafmt-field"><label>Cantidad</label><input id="qf-cant" type="number" data-qapath="header.cant" oninput="_qaFmtLeftInputChanged(this)" value="${esc(header.cant)}"></div>
+              <div class="field qafmt-field"><label>Material</label><input id="qf-material" data-qapath="header.material" oninput="_qaFmtLeftInputChanged(this)" value="${esc(header.material)}"></div>
+              <div class="field qafmt-field"><label>Tratamiento</label><input id="qf-tratamiento" data-qapath="header.tratamiento" oninput="_qaFmtLeftInputChanged(this)" value="${esc(header.tratamiento)}"></div>
+              <div class="field qafmt-field"><label>Fecha entrega</label><input id="qf-fecha" type="date" data-qapath="header.fechaEntrega" oninput="_qaFmtLeftInputChanged(this)" value="${esc(header.fechaEntrega)}"></div>
+              <div class="field qafmt-field"><label>Tipo</label><input id="qf-tipo" data-qapath="header.tipo" oninput="_qaFmtLeftInputChanged(this)" value="${esc(header.tipo)}"></div>
+              <div class="field qafmt-field"><label>Rev.</label><input id="qf-rev" data-qapath="header.rev" oninput="_qaFmtLeftInputChanged(this)" value="${esc(header.rev)}"></div>
+            </div>
+          </div>
+
+          <div class="qafmt-sec">
+            <div class="qafmt-sec-title">Ruta de máquinas (MQ1-MQ9)</div>
+            <div class="qafmt-mq-grid">
+              ${header.mq.map((v,i)=>`
+              <div class="field qafmt-field"><label>MQ${i+1}</label><input id="qf-mq${i+1}" data-qapath="header.mq.${i}" oninput="_qaFmtLeftInputChanged(this)" value="${esc(v)}"></div>`).join('')}
+            </div>
+          </div>
+
+          <div class="qafmt-sec">
+            <div class="qafmt-sec-title">Características clave (KC)</div>
+            <div class="qafmt-piezas-ctrl">
+              <span style="font-size:11px;color:var(--muted);font-weight:700">Piezas a medir:</span>
+              <button type="button" onclick="_qaFmtPiezas(-1)">−</button>
+              <span id="qafmt-npz" style="font-weight:800;font-size:13px;min-width:18px;text-align:center">${numPiezas}</span>
+              <button type="button" onclick="_qaFmtPiezas(1)">+</button>
+            </div>
+            <div id="qafmt-kc-list">${_qaFmtRenderKCList()}</div>
+          </div>
+
+          <div class="qafmt-sec">
+            <div class="qafmt-sec-title">Resultado de la inspección</div>
+            <div class="qafmt-result-grid">
+              <label class="qafmt-check"><input type="checkbox" id="qf-res-conforme" data-qapath="resultado.conforme" onchange="_qaFmtLeftInputChanged(this)" ${window._QAFMT.resultado.conforme?'checked':''}> ✅ Conforme</label>
+              <label class="qafmt-check"><input type="checkbox" id="qf-res-noconforme" data-qapath="resultado.noConforme" onchange="_qaFmtLeftInputChanged(this)" ${window._QAFMT.resultado.noConforme?'checked':''}> ❌ No conforme</label>
+              <label class="qafmt-check"><input type="checkbox" id="qf-res-reproceso" data-qapath="resultado.reproceso" onchange="_qaFmtLeftInputChanged(this)" ${window._QAFMT.resultado.reproceso?'checked':''}> 🔁 Reproceso</label>
+              <label class="qafmt-check"><input type="checkbox" id="qf-res-derogado" data-qapath="resultado.derogado" onchange="_qaFmtLeftInputChanged(this)" ${window._QAFMT.resultado.derogado?'checked':''}> ⚠️ Derogado (cliente aprueba)</label>
+            </div>
+            <div class="field qafmt-field" style="margin-top:10px"><label>Observaciones</label>
+              <textarea id="qf-observaciones" data-qapath="observaciones" oninput="_qaFmtLeftInputChanged(this)" rows="3">${esc(window._QAFMT.observaciones)}</textarea></div>
+            <div class="field qafmt-field" style="margin-top:10px"><label>Firma inspector</label>
+              <input id="qf-firma-inspector" data-qapath="firmaInspector" oninput="_qaFmtLeftInputChanged(this)" value="${esc(window._QAFMT.firmaInspector)}"></div>
+          </div>
+
+        </div>
+      </div>
+
+      <div id="qafmt-preview-col">
+        <div id="qafmt-preview-label">📄 Vista previa — puedes escribir directamente aquí</div>
+        <div id="qafmt-preview-scroll">
+          <iframe id="qafmt-preview-frame"></iframe>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+// Construye/actualiza la lista de tarjetas KC (una por característica clave, plegable)
+function _qaFmtRenderKCList(){
+  const { kc, numPiezas } = window._QAFMT;
+  return kc.map((k,i)=>{
+    const resumen = [k.medida, k.tolerancia, k.instrumento].filter(Boolean).join(' · ') || 'Sin definir';
+    return `
+    <div class="qafmt-kc-card">
+      <div class="qafmt-kc-head" onclick="_qaFmtToggleKC(${i})">
+        <input onclick="event.stopPropagation()" id="qf-kc${i}-nombre" data-qapath="kc.${i}.nombre" oninput="_qaFmtLeftInputChanged(this)" value="${esc(k.nombre)}">
+        <div class="qafmt-kc-summary" id="qf-kc${i}-summary">${esc(resumen)}</div>
+        <div class="qafmt-kc-chev" id="qf-kc${i}-chev">▾</div>
+      </div>
+      <div class="qafmt-kc-body" id="qf-kc${i}-body">
+        <div class="qafmt-kc-spec">
+          <div class="field qafmt-field"><label>Medida nominal</label>
+            <input id="qf-kc${i}-medida" data-qapath="kc.${i}.medida" oninput="_qaFmtLeftInputChanged(this)" value="${esc(k.medida)}" placeholder="Ej: 20 mm"></div>
+          <div class="field qafmt-field"><label>Tolerancia</label>
+            <input id="qf-kc${i}-tol" data-qapath="kc.${i}.tolerancia" oninput="_qaFmtLeftInputChanged(this)" value="${esc(k.tolerancia)}" placeholder="Ej: +/- 0.05"></div>
+          <div class="field qafmt-field"><label>Instrumento</label>
+            <input id="qf-kc${i}-inst" data-qapath="kc.${i}.instrumento" oninput="_qaFmtLeftInputChanged(this)" value="${esc(k.instrumento)}" placeholder="Ej: Micrómetro"></div>
+        </div>
+        <div class="qafmt-pz-scroll">
+          <table class="qafmt-pz-table">
+            <thead><tr><td></td>${Array.from({length:numPiezas},(_,p)=>`<th>Pieza ${p+1}</th>`).join('')}</tr></thead>
+            <tbody>
+              <tr><td class="qafmt-rowlabel">Dato</td>${Array.from({length:numPiezas},(_,p)=>
+                `<td><input id="qf-kc${i}-p${p}-dato" data-qapath="kc.${i}.piezas.${p}.dato" oninput="_qaFmtLeftInputChanged(this)" value="${esc(k.piezas[p].dato)}"></td>`).join('')}</tr>
+              <tr><td class="qafmt-rowlabel">Firma</td>${Array.from({length:numPiezas},(_,p)=>
+                `<td><input id="qf-kc${i}-p${p}-firma" data-qapath="kc.${i}.piezas.${p}.firma" oninput="_qaFmtLeftInputChanged(this)" value="${esc(k.piezas[p].firma)}"></td>`).join('')}</tr>
+              <tr><td class="qafmt-rowlabel">Liberación</td>${Array.from({length:numPiezas},(_,p)=>
+                `<td><input id="qf-kc${i}-p${p}-lib" data-qapath="kc.${i}.piezas.${p}.liberacion" oninput="_qaFmtLeftInputChanged(this)" value="${esc(k.piezas[p].liberacion)}"></td>`).join('')}</tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function _qaFmtToggleKC(i){
+  const body = document.getElementById(`qf-kc${i}-body`);
+  const chev = document.getElementById(`qf-kc${i}-chev`);
+  if(!body) return;
+  const open = body.classList.toggle('open');
+  chev.style.transform = open ? 'rotate(180deg)' : 'rotate(0deg)';
+}
+
+function _qaFmtKCSpecChange(i){
+  const resumen = [
+    document.getElementById(`qf-kc${i}-medida`)?.value,
+    document.getElementById(`qf-kc${i}-tol`)?.value,
+    document.getElementById(`qf-kc${i}-inst`)?.value
+  ].filter(Boolean).join(' · ') || 'Sin definir';
+  const s = document.getElementById(`qf-kc${i}-summary`);
+  if(s) s.textContent = resumen;
+}
+
+// Cambia el número de columnas "Pieza N" visibles (1 a 10), guardando lo ya escrito
+function _qaFmtPiezas(delta){
+  const st = window._QAFMT;
+  st.numPiezas = Math.min(QA_FMT_MAX_PZ, Math.max(1, st.numPiezas + delta));
+  document.getElementById('qafmt-npz').textContent = st.numPiezas;
+  const abiertas = st.kc.map((_,i)=> !!document.getElementById(`qf-kc${i}-body`)?.classList.contains('open'));
+  document.getElementById('qafmt-kc-list').innerHTML = _qaFmtRenderKCList();
+  abiertas.forEach((wasOpen,i)=>{ if(wasOpen) _qaFmtToggleKC(i); });
+  _qaFmtUpdatePreview(); // cambia el número de columnas de la hoja, requiere re-armar la vista previa
+}
+
+// ── Sincronización panel ⇄ vista previa por "path" ────────────
+// path: 'header.cliente' | 'header.mq.2' | 'kc.0.medida' | 'kc.0.piezas.3.dato'
+// | 'resultado.conforme' | 'observaciones' | 'firmaInspector'
+function _qaFmtGetPath(path){
+  let obj = window._QAFMT;
+  for(const part of path.split('.')){ if(obj==null) return ''; obj = obj[part]; }
+  return obj;
+}
+function _qaFmtSetPath(path, value){
+  const parts = path.split('.');
+  let obj = window._QAFMT;
+  for(let i=0;i<parts.length-1;i++){ obj = obj[parts[i]]; if(obj==null) return; }
+  obj[parts[parts.length-1]] = value;
+}
+
+// Un campo del panel izquierdo cambió: actualiza el estado y refleja el
+// cambio en la celda correspondiente de la vista previa (sin redibujarla
+// entera, para no perder el foco si el usuario está escribiendo ahí).
+function _qaFmtLeftInputChanged(el){
+  const path = el.dataset.qapath;
+  if(!path) return;
+  const val = el.type === 'checkbox' ? el.checked : el.value;
+  _qaFmtSetPath(path, val);
+  const m = path.match(/^kc\.(\d+)\.(nombre|medida|tolerancia|instrumento)$/);
+  if(m) _qaFmtKCSpecChange(+m[1]);
+  _qaFmtSyncPreviewCell(path, val);
+}
+function _qaFmtSyncPreviewCell(path, val){
+  const frame = document.getElementById('qafmt-preview-frame');
+  const doc = frame && frame.contentDocument;
+  if(!doc) return;
+  const cell = doc.querySelector(`[data-qapath="${path}"]`);
+  if(!cell || doc.activeElement === cell) return; // no interrumpir si se está escribiendo ahí mismo
+  if(cell.tagName === 'SPAN' && cell.dataset.chk !== undefined) cell.textContent = val ? '☑' : '☐';
+  else cell.textContent = val==null ? '' : String(val);
+}
+
+// Se llama desde dentro del iframe (parent._qaFmtPreviewInput) cuando se
+// escribe directamente sobre la hoja: actualiza el estado y refleja el
+// cambio en el input equivalente del panel izquierdo.
+window._qaFmtPreviewInput = function(el){
+  const path = el.dataset.qapath;
+  if(!path) return;
+  const val = el.innerText;
+  _qaFmtSetPath(path, val);
+  const m = path.match(/^kc\.(\d+)\.(nombre|medida|tolerancia|instrumento)$/);
+  if(m) _qaFmtKCSpecChange(+m[1]);
+  const leftEl = document.querySelector(`[data-qapath="${path}"]`);
+  if(leftEl && document.activeElement !== leftEl) leftEl.value = val;
+};
+window._qaFmtPreviewToggle = function(el){
+  const path = el.dataset.qapath;
+  if(!path) return;
+  const next = !_qaFmtGetPath(path);
+  _qaFmtSetPath(path, next);
+  el.textContent = next ? '☑' : '☐';
+  const leftEl = document.querySelector(`[data-qapath="${path}"]`);
+  if(leftEl) leftEl.checked = next;
+};
+
+function _qaFmtUpdatePreview(){
+  const frame = document.getElementById('qafmt-preview-frame');
+  if(!frame) return;
+  const st = window._QAFMT;
+  const qaData = {
+    numPiezas: st.numPiezas, header: st.header, kc: st.kc,
+    resultado: st.resultado, observaciones: st.observaciones, firmaInspector: st.firmaInspector,
+    editable: true
+  };
+  const html = _qaFmtBuildPDFHtml(st.op, qaData);
+  const doc = frame.contentDocument || frame.contentWindow.document;
+  doc.open(); doc.write(html); doc.close();
+}
+
+async function _qaFmtSave(imprimir=false){
+  const st = window._QAFMT;
+  const qaData = {
+    numPiezas: st.numPiezas, header: st.header, kc: st.kc,
+    resultado: st.resultado, observaciones: st.observaciones, firmaInspector: st.firmaInspector,
+    fecha: new Date().toLocaleDateString('es-CO')
+  };
+  try{
+    const prog = _progress({ icon:'📋', label:'Guardando Formato QA', steps:['Guardando…','Listo'] });
+    prog.step(0);
+    const idqrLimpio = String(st.op.IDQR).replace(/\.0+$/,'').trim();
+    await POST('updateOP', { IDQR: idqrLimpio, QA_JSON: JSON.stringify(qaData) });
+    const cached = (DB.produccion||[]).find(x=>String(x.IDQR)===String(st.op.IDQR));
+    if(cached) cached.QA_JSON = JSON.stringify(qaData);
+    st.op.QA_JSON = JSON.stringify(qaData);
+    prog.done('Guardado');
+    if(imprimir){
+      const html = _qaFmtBuildPDFHtml(st.op, qaData);
+      _qaFmtClose();
+      setTimeout(()=>_abrirDocParaImprimir(html, `FORMATO_QA_OP-${st.op.OP}_Item${st.op.ITEM||1}.pdf`), 300);
+    } else {
+      toast('✅ Formato QA guardado');
+    }
+  }catch(e){ toast(e.message,'error'); }
+}
+
+// Construye el HTML del formato (imprimible o editable en vivo dentro del
+// panel, según qa.editable) replicando el formato en papel (bordes tipo tabla)
+function _qaFmtBuildPDFHtml(op, qa){
+  const h        = qa.header||{};
+  const editable = !!qa.editable;
+  const numPiezas= qa.numPiezas || QA_FMT_MAX_PZ;
+  const r        = qa.resultado||{};
+  const mq       = h.mq||[];
+
+  function ce(path){
+    if(!editable) return '';
+    return ` contenteditable="true" data-qapath="${path}" oninput="parent._qaFmtPreviewInput(this)" style="outline:none"`;
+  }
+  function chk(path,checked,label){
+    const s = checked?'☑':'☐';
+    if(!editable) return `${s} ${label}`;
+    return `<span data-qapath="${path}" data-chk="1" onclick="parent._qaFmtPreviewToggle(this)" style="cursor:pointer;user-select:none">${s} ${label}</span>`;
+  }
+  function esc(v){ return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  /* ── QR: URL de api.qrserver con el IDQR ── */
+  const qrUrl = op.IDQR
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=90x90&data=${encodeURIComponent(API_ARCH+'?idqr='+String(op.IDQR))}&format=png`
+    : '';
+
+  /* ── Imagen de la OP ── */
+  const imgSrc = op.IMAGEN_B64
+    || (typeof _imgCache!=='undefined' && _imgCache && _imgCache.has && _imgCache.has(String(op.IDQR))
+        ? _imgCache.get(String(op.IDQR)) : '');
+
+  /* ── Logo ── */
+  const LOGO = typeof LOGO_B64_PNG !== 'undefined' ? LOGO_B64_PNG : '';
+
+  const css = `
+    @page{ size:letter landscape; margin:4mm }
+    html,body{ margin:0; padding:0; width:100%; background:#fff }
+    body{ padding:2px; font-family:Arial,Helvetica,sans-serif; font-size:6.5px; color:#000 }
+    table{ border-collapse:collapse; width:100%; table-layout:fixed }
+    td,th{ border:1px solid #000; overflow:hidden; vertical-align:middle }
+
+    /* Cabecera: labels fondo gris, texto negro */
+    .lb{ background:#e0e0e0; font-weight:700; font-size:5.5px; padding:1px 2px; white-space:nowrap }
+    .vl{ padding:1px 2px; font-size:6.5px }
+    .vl-b{ padding:1px 2px; font-size:7px; font-weight:700 }
+
+    /* Encabezado tabla KC */
+    .kch{ background:#ddeeff; font-weight:700; text-align:center; font-size:6px; padding:1.5px 1px; border:1px solid #000 }
+
+    /* Nombre KC: grande, fondo azul claro */
+    .kcn{ background:#ddeeff; font-weight:900; text-align:center; font-size:8px; padding:0; border:1px solid #000 }
+
+    /* Columna Dato: label spec (Medida nominal / Tolerancia / Instrumento) */
+    .kcd{ font-size:6px; padding:1px 2px; background:#f5f5f5; text-align:right; border:1px solid #000 }
+
+    /* Columna Proceso: Medida / Firma / Liberación */
+    .kcp{ font-size:6px; padding:1px 2px; background:#f5f5f5; border:1px solid #000 }
+
+    /* Valor spec KC (Medida, Tolerancia, Instrumento) */
+    .kcv{ font-size:6.5px; padding:1px 3px; border:1px solid #000 }
+
+    /* Celda de pieza */
+    .pzc{ font-size:6.5px; padding:1px; text-align:center; border:1px solid #000 }
+
+    /* Resultado */
+    .rlb{ background:#e0e0e0; font-weight:700; font-size:6px; padding:1px 3px; border:1px solid #000 }
+    .rvl{ font-size:7px; font-weight:700; padding:2px 4px; border:1px solid #000 }
+
+    [contenteditable]:hover{ background:#fffbcc }
+    [contenteditable]:focus{ background:#fff2b8; outline:1px solid #f59e0b }
+  `;
+
+  /* ── MQ defaults (nombres típicos) ── */
+  const MQ_DEF = ['FRESADORA','','','CENTRO MECANIZADO','','','RECTIFICADORA','',''];
+
+  /* ══════════════════════════════════════════════
+     CABECERA — estructura de 4 filas
+     Col 0:  QR (rowspan 4, 52px)
+     Col 1:  Imagen (rowspan 4, 76px)
+     Cols 2-N: datos generales
+     Última col: DESCRIPCION (rowspan 3) + LOGO (rowspan 4)
+  ══════════════════════════════════════════════ */
+  const head = `
+  <table style="margin-bottom:2px">
+    <colgroup>
+      <col style="width:52px">
+      <col style="width:76px">
+      <col style="width:48px"><col style="width:52px">
+      <col style="width:26px"><col style="width:34px">
+      <col style="width:22px"><col style="width:34px">
+      <col style="width:44px"><col>
+      <col style="width:110px">
+      <col style="width:70px">
+    </colgroup>
+
+    <tr style="height:18px">
+      <td rowspan="4" style="text-align:center;padding:1px;vertical-align:middle">
+        ${qrUrl
+          ? `<img src="${qrUrl}" style="width:50px;height:50px;display:block;margin:0 auto">`
+          : `<div class="lb" style="font-size:6px;padding:4px 2px;text-align:center">CODIGO<br>QR.</div>`}
+      </td>
+      <td rowspan="4" style="text-align:center;padding:1px;vertical-align:middle">
+        ${imgSrc
+          ? `<img src="${imgSrc}" style="width:72px;height:72px;object-fit:contain;display:block;margin:0 auto">`
+          : `<div style="font-size:6px;color:#aaa;text-align:center">Vista<br>Isométrica</div>`}
+      </td>
+      <td class="lb">COMERCIAL.</td>
+      <td class="vl-b"${ce('header.comercial')}>${esc(h.comercial||'')}</td>
+      <td class="lb">COT.</td>
+      <td class="vl"${ce('header.cot')}>${esc(h.cot||'')}</td>
+      <td class="lb">OP.</td>
+      <td class="vl"${ce('header.opNum')}>${esc(h.opNum||h.op||'')}</td>
+      <td class="lb">CLIENTE.</td>
+      <td class="vl-b"${ce('header.cliente')}>${esc(h.cliente||'')}</td>
+      <td rowspan="3" style="text-align:center;padding:4px 2px;background:#f0f0f0;vertical-align:middle">
+        <div style="font-size:5px;font-weight:700;color:#777;letter-spacing:.5px;text-transform:uppercase">DESCRIPCIÓN.</div>
+        <div style="font-size:10px;font-weight:900;color:#111;margin-top:3px;line-height:1.2">FORMATO<br>PLANO<br>2026</div>
+      </td>
+      <td rowspan="4" style="text-align:center;padding:1px;vertical-align:middle;background:#ddeeff">
+        ${LOGO ? `<img src="${LOGO}" alt="GRUPOWEDM" style="height:60px;max-width:66px;object-fit:contain">` : '<b style="font-size:8px">GRUPO WEDM</b>'}
+      </td>
+    </tr>
+
+    <tr style="height:15px">
+      <td class="lb">DISEÑADOR.</td>
+      <td class="vl"${ce('header.disenador')}>${esc(h.disenador||'')}</td>
+      <td class="lb">ÍTEM.</td>
+      <td class="vl-b" style="text-align:center"${ce('header.item')}>${esc(h.item||'')}</td>
+      <td class="lb">CANT.</td>
+      <td class="vl-b" style="text-align:center"${ce('header.cant')}>${esc(h.cant||'')}</td>
+      <td class="lb">MATERIAL.</td>
+      <td class="vl"${ce('header.material')}>${esc(h.material||'')}</td>
+    </tr>
+
+    <tr style="height:15px">
+      <td class="lb">FECHA ENTREGA.</td>
+      <td class="vl"${ce('header.fechaEntrega')}>${esc(h.fechaEntrega||'')}</td>
+      <td class="lb">TIPO.</td>
+      <td class="vl-b" style="text-align:center"${ce('header.tipo')}>${esc(h.tipo||'')}</td>
+      <td class="lb">REV.</td>
+      <td class="vl-b" style="text-align:center"${ce('header.rev')}>${esc(h.rev||'')}</td>
+      <td class="lb">TRATAMIENTO.</td>
+      <td class="vl"${ce('header.tratamiento')}>${esc(h.tratamiento||'')}</td>
+    </tr>
+
+    <!-- Fila MQ: 9 máquinas en una fila, ocupa todo el ancho menos QR, IMG y LOGO -->
+    <tr style="height:13px">
+      <td colspan="8" style="padding:0">
+        <table style="border:0;border-collapse:collapse;width:100%;height:13px">
+          <tr>
+            ${Array.from({length:9},(_,i)=>`
+              <td class="lb" style="border:1px solid #000;padding:1px 2px;width:${i<3?'28px':'auto'}">MQ${i+1}</td>
+              <td style="border:1px solid #000;font-size:6px;padding:1px 2px"${ce('header.mq.'+i)}>${esc(mq[i]||MQ_DEF[i]||'')}</td>
+            `).join('')}
+          </tr>
+        </table>
+      </td>
+      <td colspan="1" style="padding:0;border:1px solid #000"></td>
+    </tr>
+  </table>`;
+
+  /* ══════════════════════════════════════════════
+     TABLA KC
+     Columnas: Medida | Dato | Proceso | Pieza1..N
+     - "Medida" = nombre KC (KC1..KC10), rowspan 3
+     - "Dato"   = spec label (Medida nominal / Tolerancia / Instrumento) en cada sub-fila
+     - "Proceso"= spec valor en sub-fila 1; Medida/Firma/Liberación en col "Proceso"
+     
+     Estructura exacta del formato papel (imagen 2):
+       KC1  | 112      | Medida     | □ | □ | …
+            | +/-0.05  | Firma      | □ | □ | …
+            | Micrómetro | Liberación| □ | □ | …
+  ══════════════════════════════════════════════ */
+
+  // Ancho de columnas de pieza: distribuir espacio restante
+  // Medida=38, Dato=55, Proceso=52 → fijo 145px; resto para piezas
+  const pzW = Math.max(35, Math.floor((680 - 145) / numPiezas));
+
+  const pzH = Array.from({length:numPiezas},(_,p)=>`<th class="kch" style="width:${pzW}px">Pieza ${p+1}</th>`).join('');
+
+  const kcRows = (qa.kc||[]).map((k,i)=>{
+    const pCell = (j,key)=>{
+      const pz  = (k.piezas||[])[j]||{};
+      const val = esc(pz[key]||'');
+      if(editable) return `<td class="pzc" contenteditable="true" data-qapath="kc.${i}.piezas.${j}.${key}" oninput="parent._qaFmtPreviewInput(this)" style="outline:none">${val}</td>`;
+      return `<td class="pzc">${val}</td>`;
+    };
+    const dato  = Array.from({length:numPiezas},(_,j)=>pCell(j,'dato')).join('');
+    const firma = Array.from({length:numPiezas},(_,j)=>pCell(j,'firma')).join('');
+    const lib   = Array.from({length:numPiezas},(_,j)=>pCell(j,'liberacion')).join('');
+
+    return `
+    <tr style="height:11px">
+      <td rowspan="3" class="kcn"${ce('kc.'+i+'.nombre')}>${esc(k.nombre||'KC'+(i+1))}</td>
+      <td class="kcd">Medida nominal</td>
+      <td class="kcv"${ce('kc.'+i+'.medida')}>${esc(k.medida||'')}</td>
+      <td class="kcp">Medida</td>
+      ${dato}
+    </tr>
+    <tr style="height:9px">
+      <td class="kcd">Tolerancia</td>
+      <td class="kcv"${ce('kc.'+i+'.tolerancia')}>${esc(k.tolerancia||'')}</td>
+      <td class="kcp">Firma</td>
+      ${firma}
+    </tr>
+    <tr style="height:9px">
+      <td class="kcd">Instrumento</td>
+      <td class="kcv"${ce('kc.'+i+'.instrumento')}>${esc(k.instrumento||'')}</td>
+      <td class="kcp">Liberación</td>
+      ${lib}
+    </tr>`;
+  }).join('');
+
+  const kcTable = `
+  <table style="margin-bottom:2px">
+    <colgroup>
+      <col style="width:38px">
+      <col style="width:60px">
+      <col style="width:52px">
+      <col style="width:48px">
+      ${Array.from({length:numPiezas},()=>`<col style="width:${pzW}px">`).join('')}
+    </colgroup>
+    <thead>
+      <tr style="height:13px">
+        <th class="kch">Medida</th>
+        <th class="kch">Dato</th>
+        <th class="kch">Proceso</th>
+        <th class="kch">Proceso</th>
+        ${pzH}
+      </tr>
+    </thead>
+    <tbody>${kcRows}</tbody>
+  </table>`;
+
+  /* ── RESULTADO ── */
+  const resultHTML = `
+  <table>
+    <colgroup>
+      <col style="width:65px"><col style="width:8px">
+      <col style="width:65px">
+      <col style="width:60px"><col>
+      <col style="width:75px"><col style="width:100px">
+    </colgroup>
+    <tr style="height:14px">
+      <td class="rvl">${chk('resultado.conforme',   r.conforme,   'CONFORME')}</td>
+      <td style="border:0"></td>
+      <td class="rvl">${chk('resultado.reproceso',  r.reproceso,  'REPROCESO')}</td>
+      <td class="rlb">OBSERVACIONES:</td>
+      <td${ce('observaciones')} style="padding:1px 3px;font-size:6.5px">${esc(qa.observaciones||'')}</td>
+      <td class="rlb" style="text-align:center">FIRMA INSPECTOR</td>
+      <td${ce('firmaInspector')} style="padding:1px 3px;font-size:6.5px">${esc(qa.firmaInspector||'')}</td>
+    </tr>
+    <tr style="height:14px">
+      <td class="rvl">${chk('resultado.noConforme',r.noConforme,'NO CONFORME')}</td>
+      <td style="border:0"></td>
+      <td class="rvl">${chk('resultado.derogado',  r.derogado,  'DEROGADO')}</td>
+      <td colspan="4" style="border:1px solid #000"></td>
+    </tr>
+  </table>`;
+
+  return `<!DOCTYPE html><html><head><meta charset="utf-8">
+  <title>FORMATO PLANO 2026</title>
+  <style>${css}</style>
+  </head><body>
+  ${head}
+  ${kcTable}
+  ${resultHTML}
+  </body></html>`;
+}
+
 
 // ── Ver Compras vinculadas a esta OP ─────────────────────────
 async function qaVerComprasOP(opId) {
