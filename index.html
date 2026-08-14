@@ -4615,7 +4615,7 @@ function _scoreLevel(score){
   return           { label:'NORMAL',  color:'#6b7280', bg:'#f9fafb', border:'#e5e7eb' };
 }
 
-function _renderListaProd(allOps){
+function _renderListaProd(allOps, viewMode='cards'){
   // 1. Filtrar: diseño OK + MP OK + no terminado/entregado/cancelado
   const EXCL = ['TERMINADO','ENTREGADO','CANCELADO'];
   const aptas = allOps.filter(op => {
@@ -4659,6 +4659,78 @@ function _renderListaProd(allOps){
       <div style="font-size:24px;font-weight:900;color:#16a34a;font-family:var(--mono)">OK</div>
     </div>
   </div>`;
+
+  // 4. Vista tabla (alternativa a las cards)
+  if (viewMode === 'table') {
+    const rows = scored.map(({op, score}, idx) => {
+      const lvl = _scoreLevel(score);
+      const pct = qaPct(op['%AVANCE']);
+      const dias = Number(op['DÍAS ENTREGA'] ?? '—');
+      const diasTxt = isNaN(dias) ? '—' : dias < 0
+        ? `<span style="color:#dc2626;font-weight:700">${dias}d ⚠️</span>`
+        : `<span style="color:${dias<=5?'#d97706':dias<=15?'#2563eb':'var(--muted)'};font-weight:600">${dias}d</span>`;
+      const etapaSig = qaEtapaActual(op);
+      const rutas = [op['RUTA MQ1'],op['RUTA MQ2'],op['RUTA MQ3'],op['RUTA MQ4'],op['RUTA MQ5']]
+        .filter(Boolean).join(' → ');
+      const cachedImg = (typeof _imgCache!=='undefined' && _imgCache.has && _imgCache.has(String(op.IDQR))) ? _imgCache.get(String(op.IDQR)) : '';
+      const imgSrcTbl = op.IMAGEN_B64 || cachedImg;
+      const imgCell = imgSrcTbl
+        ? `<img src="${imgSrcTbl}" style="width:36px;height:36px;object-fit:cover;border-radius:5px;border:1px solid var(--border);cursor:pointer;display:block" onclick="event.stopPropagation();_lpImgClick('${op.IDQR}')" title="Ver imagen completa">`
+        : (op.IDQR
+          ? `<img data-src="${op.IDQR}" class="lazy-thumb" src="${_THUMB_PH}" style="width:36px;height:36px;object-fit:cover;border-radius:5px;border:1px solid var(--border);cursor:pointer;display:block" onclick="event.stopPropagation();_lpImgClick('${op.IDQR}')" title="Ver imagen / subir">`
+          : `<div style="width:36px;height:36px;border-radius:5px;background:var(--card2);border:1px dashed var(--border);display:flex;align-items:center;justify-content:center;font-size:15px;cursor:pointer" onclick="event.stopPropagation();qaSubirImagen('${op.IDQR||op.OP}')" title="Subir imagen">📷➕</div>`);
+      return `<tr onclick="detailOP('${op.IDQR||op.OP}')">
+        <td>${qaBar(op.IDQR,'sm')}</td>
+        <td style="width:44px;padding:6px 8px">${imgCell}</td>
+        <td style="text-align:center">
+          <div style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:7px;background:${lvl.color};color:#fff;font-size:11px;font-weight:900">#${idx+1}</div>
+        </td>
+        <td class="row-proc">OP-${op.OP||'—'}<span style="color:var(--muted);font-weight:400;font-size:11px"> · ${op.ITEM||'—'}</span></td>
+        <td style="max-width:150px">${op.CLIENTE||'—'}</td>
+        <td style="max-width:200px">${op.DESCRIPCION||'—'}</td>
+        <td>${op.DISEÑADOR||'—'}</td>
+        <td class="td-num" style="color:${lvl.color};font-weight:900;font-family:var(--mono)">${score}</td>
+        <td><span style="font-size:9px;font-weight:700;color:${lvl.color};text-transform:uppercase;background:${lvl.bg};padding:2px 6px;border-radius:5px;border:1px solid ${lvl.border}">${lvl.label}</span></td>
+        <td class="td-num">
+          <div style="display:flex;align-items:center;gap:6px">
+            <div style="width:50px;height:5px;background:var(--border);border-radius:3px;overflow:hidden">
+              <div style="width:${pct}%;height:100%;background:${pct>=70?'var(--accent)':pct>=40?'var(--gold)':'var(--danger)'}"></div>
+            </div>
+            ${pct}%
+          </div>
+        </td>
+        <td class="td-num">${diasTxt}</td>
+        <td>${fmtDate(op['FECHA PACTADA'])||'—'}</td>
+        <td style="color:var(--gold);font-weight:600">${etapaSig ? `${etapaSig.icon} ${etapaSig.label}` : '✓ Todas OK'}</td>
+        <td style="font-size:10px;color:var(--muted)">${rutas||'—'}</td>
+      </tr>`;
+    }).join('');
+
+    return kpis + `
+    <div class="tbl-wrap">
+      <table class="data-tbl">
+        <thead><tr>
+          <th>Acciones</th>
+          <th style="width:44px"></th>
+          <th style="width:40px">#</th>
+          <th>OP</th>
+          <th>Cliente</th>
+          <th>Descripción</th>
+          <th>Diseñador</th>
+          <th>Score</th>
+          <th>Nivel</th>
+          <th>Avance</th>
+          <th>Días Ent.</th>
+          <th>F. Pactada</th>
+          <th>Próxima Etapa</th>
+          <th>Rutas</th>
+        </tr></thead>
+        <tbody>
+          ${rows || '<tr><td colspan="14" style="text-align:center;padding:20px;color:var(--muted)">Sin resultados</td></tr>'}
+        </tbody>
+      </table>
+    </div>`;
+  }
 
   // 4. Cards ordenadas por score
   const cards = scored.map(({op, score}, idx) => {
@@ -4722,9 +4794,11 @@ function _renderListaProd(allOps){
       <div style="padding:10px 12px;display:flex;gap:10px;align-items:flex-start">
         <!-- Imagen -->
         ${imgSrc
-          ? `<img src="${imgSrc}" style="width:52px;height:52px;object-fit:cover;border-radius:8px;border:1px solid var(--border);flex-shrink:0">`
-          : `<div style="width:52px;height:52px;border-radius:8px;background:var(--card2);border:1px solid var(--border);
-              display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">🔩</div>`}
+          ? `<img src="${imgSrc}" style="width:52px;height:52px;object-fit:cover;border-radius:8px;border:1px solid var(--border);flex-shrink:0;cursor:pointer" onclick="event.stopPropagation();_lpImgClick('${op.IDQR}')" title="Ver imagen completa">`
+          : (op.IDQR
+            ? `<img data-src="${op.IDQR}" class="lazy-thumb" src="${_THUMB_PH}" style="width:52px;height:52px;object-fit:cover;border-radius:8px;border:1px solid var(--border);flex-shrink:0;cursor:pointer" onclick="event.stopPropagation();_lpImgClick('${op.IDQR}')" title="Ver imagen / subir">`
+            : `<div style="width:52px;height:52px;border-radius:8px;background:var(--card2);border:1px dashed var(--border);
+                display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;cursor:pointer" onclick="event.stopPropagation();qaSubirImagen('${op.IDQR||op.OP}')" title="Subir imagen">📷➕</div>`)}
 
         <!-- Datos principales -->
         <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">
@@ -4810,8 +4884,15 @@ async function produccion(){
     const isListaProd = _viewProd === 'lista-prod';
 
     if (isListaProd) {
+      const lpSubBtns = `<div style="display:flex;align-items:center;gap:8px;padding:8px 12px 4px;border-bottom:1px solid var(--border);background:var(--surface)">
+        <div class="view-toggle" style="display:flex;gap:3px">
+          <button class="vt-btn ${_LISTA_PROD_SUBVIEW==='cards'?'active':''}" onclick="_toggleListaProdSubView()" title="Vista tarjetas" style="width:34px;height:34px;font-size:16px">☰</button>
+          <button class="vt-btn ${_LISTA_PROD_SUBVIEW==='table'?'active':''}" onclick="_toggleListaProdSubView()" title="Vista tabla" style="width:34px;height:34px;font-size:16px">⊞</button>
+        </div>
+      </div>`;
       setContent(moduleBanner('🏗️','Listo para Producción','OPs con Diseño ✓ · sin terminar · compras OK — ordenadas por Score','',
-        'linear-gradient(135deg,#065f46,#059669)')+fb + viewToggleBtns('produccion') + _renderListaProd(all));
+        'linear-gradient(135deg,#065f46,#059669)')+fb + viewToggleBtns('produccion') + lpSubBtns + _renderListaProd(data, _LISTA_PROD_SUBVIEW));
+      _initLazyThumbs();
       return;
     }
 
@@ -9301,6 +9382,20 @@ function toggleView(mod) {
 function _setViewListaProd(){
   _VIEW['produccion'] = 'lista-prod';
   produccion();
+}
+let _LISTA_PROD_SUBVIEW = 'cards'; // 'cards' | 'table' — solo aplica dentro de lista-prod
+function _toggleListaProdSubView(){
+  _LISTA_PROD_SUBVIEW = _LISTA_PROD_SUBVIEW === 'table' ? 'cards' : 'table';
+  produccion();
+}
+// Clic en la miniatura de "Listo para Producción": si hay imagen la abre en grande,
+// si no hay, abre directamente el modal de subir imagen para esa OP.
+function _lpImgClick(idqr){
+  if(!idqr) return;
+  const op = (DB.produccion||[]).find(o=>String(o.IDQR)===String(idqr));
+  const url = (op && op.IMAGEN_B64) || (typeof _imgCache!=='undefined' && _imgCache.has && _imgCache.has(String(idqr)) ? _imgCache.get(String(idqr)) : '');
+  if(url) window.open(url,'_blank');
+  else qaSubirImagen(idqr);
 }
 
 function sortTable(mod, col) {
