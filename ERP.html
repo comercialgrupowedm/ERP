@@ -10267,7 +10267,12 @@ async function remisiones(){
     if(!DB.cotizaciones)       await load('cotizaciones','getCotizaciones');
     if(!DB.elementosRemision)  await load('elementosRemision','getElementosRemision');
 
-    const all=[...DB.remisiones].sort((a,b)=>String(b.REMISION||'').localeCompare(String(a.REMISION||'')));
+    const all=[...DB.remisiones].sort((a,b)=>{
+      const fa = new Date(a['FECHA EMISION COT.']||a.FECHA||0);
+      const fb = new Date(b['FECHA EMISION COT.']||b.FECHA||0);
+      if(!isNaN(fb) && !isNaN(fa) && fb-fa !== 0) return fb-fa;
+      return Number(b.REMISION||0) - Number(a.REMISION||0);
+    });
     const data = filterData('remisiones', all);
 
     const estados  = [...new Set(all.map(r=>r.ESTADO).filter(Boolean))].sort();
@@ -10284,47 +10289,144 @@ async function remisiones(){
     ]);
 
     if(!all.length){setContent(empty('Sin remisiones'));return;}
-    setContent(moduleBanner("🚚","Remisiones","Despachos y entregas",rangoSelector('remisiones'),"linear-gradient(135deg,#047857,#34d399)")+fb + `<div class="card-list">
+
+    const isTable = getView('remisiones') === 'table';
+
+    if(isTable){
+      setContent(moduleBanner("🚚","Remisiones","Despachos y entregas",rangoSelector('remisiones'),"linear-gradient(135deg,#047857,#34d399)")+fb + viewToggleBtns('remisiones') + `
+      <div class="tbl-wrap">
+        <table class="data-tbl">
+          <thead><tr>
+            ${thSort('remisiones','REMISION','REM #')}
+            ${thSort('remisiones','FECHA EMISION COT.','Fecha')}
+            ${thSort('remisiones','EMPRESA','Empresa')}
+            ${thSort('remisiones','COTIZACION','COT')}
+            ${thSort('remisiones','ESTADO','Estado')}
+            ${thSort('remisiones','ASESOR','Asesor')}
+            ${thSort('remisiones','VALOR_TOTAL','Valor Total')}
+            ${thSort('remisiones','DESCRIPCION DEL PROYECTO','Descripción')}
+          </tr></thead>
+          <tbody>
+            ${data.length ? data.map(r=>{
+              const fecha  = r['FECHA EMISION COT.']||r.FECHA||'';
+              const rawCot = r.COTIZACION||r.COT_ID||'';
+              const cotObj = cotInfo(rawCot);
+              const cotNum = cotObj ? cotObj.COTIZACION : rawCot;
+              const cotLabel = cotNum && !String(cotNum).includes('-') ? `COT-${cotNum}` : (cotNum||'—');
+              const desc   = r['DESCRIPCION DEL PROYECTO']||r.DESCRIPCION||'—';
+              const remId  = r.REMISION||r['NUMERO DE REMISION']||'';
+              return `<tr onclick="detailRem('${remId}')" style="cursor:pointer">
+                <td><b>${remId?`REM-${remId}`:'—'}</b></td>
+                <td>${fmtDate(fecha)||'—'}</td>
+                <td>${r.EMPRESA||'—'}</td>
+                <td style="color:var(--accent)">${cotLabel}</td>
+                <td>${bEst(r.ESTADO)}</td>
+                <td>${r.ASESOR||'—'}</td>
+                <td style="font-family:var(--mono);text-align:right">${fmt(r.VALOR_TOTAL)}</td>
+                <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${desc}</td>
+              </tr>`;
+            }).join('') : `<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--muted)">Sin resultados</td></tr>`}
+          </tbody>
+        </table>
+      </div>`);
+    } else {
+    setContent(moduleBanner("🚚","Remisiones","Despachos y entregas",rangoSelector('remisiones'),"linear-gradient(135deg,#047857,#34d399)")+fb + viewToggleBtns('remisiones') + `<div class="card-list">
       ${data.length ? data.map(r=>{
-        const cot=cotInfo(r.COTIZACION||r.COT_ID);
-        return `<div class="list-card" onclick="detailRem('${r.REMISION}')">
+        const fecha  = r['FECHA EMISION COT.']||r.FECHA||'';
+        const rawCot = r.COTIZACION||r.COT_ID||'';
+        const cotObj = cotInfo(rawCot);
+        const cotNum = cotObj ? cotObj.COTIZACION : rawCot;
+        const cotLabel = cotNum && !String(cotNum).includes('-') ? `COT-${cotNum}` : (cotNum||'—');
+        const desc   = r['DESCRIPCION DEL PROYECTO']||r.DESCRIPCION||'';
+        const remId  = r.REMISION||r['NUMERO DE REMISION']||'';
+        return `<div class="list-card" onclick="detailRem('${remId}')">
           <div class="lc-top">
             <div>
-              <div class="lc-id">REM-${r.REMISION} · ${fmtDate(r.FECHA)}</div>
+              <div class="lc-id">${remId?`REM-${remId}`:'—'} · ${fmtDate(fecha)||'—'}</div>
               <div class="lc-title">${r.EMPRESA||'—'}</div>
-              <div class="lc-sub">COT-${r.COT_ID||'—'} ${cot?'· '+cot.ASESOR:''}</div>
+              <div class="lc-sub">${cotLabel} ${r.ASESOR?'· '+r.ASESOR:''}</div>
             </div>
             <div style="text-align:right;flex-shrink:0">
               <div style="font-family:var(--mono);font-size:13px;color:var(--gold)">${fmt(r.VALOR_TOTAL)}</div>
               ${bEst(r.ESTADO)}
             </div>
           </div>
-          ${r.DESCRIPCION?`<p style="font-size:12px;color:var(--muted);margin-top:6px">${r.DESCRIPCION}</p>`:''}
+          ${desc?`<p style="font-size:12px;color:var(--muted);margin-top:6px">${desc}</p>`:''}
         </div>`;
       }).join('') : empty('Sin resultados para los filtros')}
     </div>`);
+    }
     updateFilterCount('remisiones', data.length, all.length);
   }catch(e){setContent(`<div class="empty"><div class="empty-icon">⚠️</div><p>${e.message}</p></div>`);}
 }
 
 async function detailRem(id){
-  const r=(DB.remisiones||[]).find(x=>String(x.ID_REMISION)===String(id)); if(!r) return;
-  const cot=cotInfo(r.COT_ID);
-  openDetail(`Remisión ${id}`,`
+  const r=(DB.remisiones||[]).find(x=>
+    String(x.REMISION)===String(id) ||
+    String(x['NUMERO DE REMISION']||'')===String(id) ||
+    String(x.ID_REMISION)===String(id) ||
+    String(x.ID_PEDIDO)===String(id)
+  ); if(!r) return;
+
+  const remId  = r.REMISION||r['NUMERO DE REMISION']||id;
+  const rawCot = r.COTIZACION||r.COT_ID||'';
+  const cot    = cotInfo(rawCot);
+  const cotNum = cot ? cot.COTIZACION : rawCot;
+  const cotLabel = cotNum && !String(cotNum).includes('-') ? `COT-${cotNum}` : (cotNum||'—');
+  const fecha  = r['FECHA EMISION COT.']||r.FECHA||'';
+  const desc   = r['DESCRIPCION DEL PROYECTO']||r.DESCRIPCION||'—';
+  // Para datos de cliente: primero buscar en la remisión, si vacío buscar en la COT
+  const emp  = r.EMPRESA  || cot?.EMPRESA || cot?.Empresa || '—';
+  const nit  = r.NIT      || cot?.Nit     || cot?.NIT     || '—';
+  const dir  = r.DIRECCION|| cot?.DIRECCION|| '—';
+  const ciu  = r.CIUDAD   || cot?.Ciudad  || cot?.CIUDAD  || '—';
+  const enc  = r.ENCARGADO|| cot?.ENCARGADO|| '—';
+  const tel  = r.TELEFONO || cot?.TELEFONO|| '—';
+  const ase  = r.ASESOR   || cot?.ASESOR  || '—';
+  const descFinal = r['DESCRIPCION DEL PROYECTO']||r.DESCRIPCION|| cot?.['DESCRIPCION DEL PROYECTO']||'—';
+
+  openDetail(`Remisión REM-${remId}`,`
     <div class="dp-section">
-      <h4>Remisión</h4>
-      ${dr('ID',r.REMISION)} ${dr('Fecha',fmtDate(r.FECHA))}
-      ${dr('COT',cot?`<span onclick="detailCot('${cot.COTIZACION}')" style="color:var(--accent);cursor:pointer;text-decoration:underline">COT-${cot.COTIZACION}</span>`:'—')}
-      ${dr('Empresa',r.EMPRESA)} ${dr('Estado',bEst(r.ESTADO))}
-      ${dr('Valor Total',fmt(r.VALOR_TOTAL))} ${dr('Descripción',r.DESCRIPCION||'—')}
-      ${dr('Observaciones',r.OBSERVACIONES||'—')}
+      <h4>Datos de la Remisión</h4>
+      ${dr('N° Remisión',  remId||'—')}
+      ${dr('Fecha',        fmtDate(fecha)||'—')}
+      ${dr('Tipo',         r.TIPO||cot?.TIPO||'—')}
+      ${dr('Calificación', r.CALIFICACION||'—')}
+      ${dr('Asesor',       ase)}
+      ${dr('Estado',       bEst(r.ESTADO))}
+    </div>
+    <div class="dp-section">
+      <h4>Cliente</h4>
+      ${dr('Empresa',   emp)}
+      ${dr('NIT',       nit)}
+      ${dr('Dirección', dir)}
+      ${dr('Ciudad',    ciu)}
+      ${dr('Encargado', enc)}
+      ${dr('Teléfono',  tel)}
+    </div>
+    <div class="dp-section">
+      <h4>Cotización vinculada</h4>
+      ${dr('COT', cot
+        ? `<span onclick="detailCot('${cot.COTIZACION}')" style="color:var(--accent);cursor:pointer;text-decoration:underline">${cotLabel}</span>`
+        : cotLabel)}
+      ${dr('Descripción', descFinal)}
+      ${dr('OP',              r.OP||'—')}
+      ${dr('Orden de Compra', r['ORDEN DE COMPRA']||'—')}
+    </div>
+    <div class="dp-section">
+      <h4>Valores</h4>
+      ${dr('Valor Total', fmt(r.VALOR_TOTAL))}
+      ${dr('Observaciones', r['OBSERVACIONES ESPECIALES']||r.OBSERVACIONES||'—')}
+      ${r['REMISION PDF']?dr('PDF anterior',`<a href="${r['REMISION PDF']}" target="_blank" style="color:var(--accent)">Ver PDF ↗</a>`):''}
     </div>
     <div class="dp-section">
       <h4>Elementos <span id="er-ct" style="color:var(--muted);font-size:10px"></span></h4>
       <div id="er-body"><div class="loading-wrap"><div class="spinner"></div></div></div>
     </div>`,
-    `<button class="btn btn-primary btn-sm" onclick="formElemRem('${id}')">＋ Elemento</button>
-     <button class="btn btn-ghost btn-sm" onclick="formRemision(${JSON.stringify(r).replace(/"/g,'&quot;')})">✏️</button>`
+    `<button class="btn btn-primary btn-sm" onclick="formElemRem('${remId}')">＋ Elemento</button>
+     <button class="btn btn-ghost btn-sm" onclick="generarPDFRemision('${remId}')">📄 PDF</button>
+     <button class="btn btn-ghost btn-sm" onclick="formRemision(${JSON.stringify(r).replace(/"/g,'&quot;')})">✏️ Editar</button>
+     <button class="btn btn-danger btn-sm" onclick="eliminarRem('${remId}','${r.ID_PEDIDO||r.ID_REMISION_UUID||r.ID_REMISION||remId}')">🗑️</button>`
   );
   // Archivos Drive
   setTimeout(()=>{
@@ -10344,11 +10446,12 @@ async function detailRem(id){
       const bodyEl=document.getElementById('er-body');
       if(ctEl) ctEl.textContent=`(${els.length})`;
       if(bodyEl) bodyEl.innerHTML=els.length?`<div class="sub-tbl"><table>
-        <thead><tr><th>OP/Ítem</th><th>Descripción</th><th>Cant</th><th>P.Unit</th><th>Subtotal</th></tr></thead>
+        <thead><tr><th>OP</th><th>Ítem</th><th>Descripción</th><th>Cant</th><th>P.Unit</th><th>Subtotal</th></tr></thead>
         <tbody>${els.map(e=>`<tr>
-          <td>${e.OP_ID||e.ITEM_ID||'—'}</td>
-          <td>${e.DESCRIPCION||'—'}</td>
-          <td>${e.CANT||0}</td>
+          <td>${e.OP||e.OP_ID||'—'}</td>
+          <td>${e.ITEM||e.ITEM_ID||'—'}</td>
+          <td>${e.DESCRIPCION||e['DESCRIPCION DE ITEMS']||'—'}</td>
+          <td>${e.CANT||e.CANTIDAD||0}</td>
           <td style="font-family:var(--mono)">${fmt(e.PRECIO_UNITARIO)}</td>
           <td style="font-family:var(--mono);font-weight:700">${fmt(e.SUBTOTAL)}</td>
         </tr>`).join('')}</tbody>
@@ -10359,47 +10462,247 @@ async function detailRem(id){
 }
 
 function formRemision(r={}){
-  const isNew=!r.REMISION;
-  const cotOpts=(DB.cotizaciones||[]).map(c=>`<option value="${c.ID_COT}"
-    data-empresa="${(c.Empresa||'').replace(/"/g,'&quot;')}"
-    data-desc="${(c.DESCRIPCION||c.OBJETO||'').replace(/"/g,'&quot;').slice(0,120)}"
-    ${String(r.COT_ID||'')=== String(c.COTIZACION)?'selected':''}>${c.ID_COT} · ${c.EMPRESA||'—'}</option>`).join('');
-  openModal(isNew?'Nueva Remisión':'Editar Remisión '+r.REMISION,`
+  const isNew=!r.REMISION && !r['NUMERO DE REMISION'];
+
+  // Solo mostrar COTs aprobadas o en proceso (que tienen OP o están listas para remisionar)
+  const cotOpts=(DB.cotizaciones||[])
+    .filter(c => c.COTIZACION || c.ID_COT)
+    .sort((a,b)=>Number(b.COTIZACION||0)-Number(a.COTIZACION||0))
+    .map(c=>{
+      const num = String(c.COTIZACION || c.ID_COT || '');
+      const emp = c.EMPRESA || c.Empresa || '—';
+      const sel = (String(r.COT_ID||r.COTIZACION||'')===num) ? 'selected' : '';
+      return `<option value="${num}" ${sel}>COT-${num} · ${emp}</option>`;
+    }).join('');
+
+  openModal(isNew ? 'Nueva Remisión' : `Editar Remisión ${r.REMISION||r['NUMERO DE REMISION']||''}`, `
     <div class="form-grid">
-      <div class="field"><label>Fecha</label><input type="date" id="r0" value="${r.FECHA||new Date().toISOString().slice(0,10)}"></div>
-      <div class="field"><label>Cotización (COT) ★</label>
-        <select id="r1" onchange="onSelectCotRem()">
-          <option value="">— Sin cotización —</option>${cotOpts}
+
+      <div class="field span2">
+        <label>Cotización (COT) ★</label>
+        <select id="r_cot" onchange="onSelectCotRem()">
+          <option value="">— Seleccionar cotización —</option>${cotOpts}
         </select>
       </div>
-      <div class="field span2"><label>Empresa / Cliente</label>
-        <input id="r2" value="${r.EMPRESA||''}" placeholder="Se autocompleta al elegir la COT"></div>
+
+      <!-- Bloque que se llena desde la COT -->
+      <div id="r_cot_preview" style="${isNew?'display:none':''}background:var(--card2);border-radius:10px;padding:10px 14px;margin-bottom:2px;font-size:12px;grid-column:1/-1;border:1px solid var(--border)">
+        <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:6px">📋 Datos de la Cotización</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 16px">
+          <div><span style="color:var(--muted)">Empresa:</span> <strong id="rv_emp">${r.EMPRESA||''}</strong></div>
+          <div><span style="color:var(--muted)">NIT:</span> <strong id="rv_nit">${r.NIT||''}</strong></div>
+          <div><span style="color:var(--muted)">Ciudad:</span> <strong id="rv_ciu">${r.CIUDAD||''}</strong></div>
+          <div><span style="color:var(--muted)">Teléfono:</span> <strong id="rv_tel">${r.TELEFONO||''}</strong></div>
+          <div><span style="color:var(--muted)">Encargado:</span> <strong id="rv_enc">${r.ENCARGADO||''}</strong></div>
+          <div><span style="color:var(--muted)">Asesor:</span> <strong id="rv_ase">${r.ASESOR||''}</strong></div>
+          <div><span style="color:var(--muted)">Tipo COT:</span> <strong id="rv_tipo">${r.TIPO||''}</strong></div>
+          <div><span style="color:var(--muted)">Valor Total:</span> <strong id="rv_val" style="color:var(--gold)"></strong></div>
+        </div>
+        <div style="margin-top:6px"><span style="color:var(--muted)">Descripción:</span> <span id="rv_desc" style="font-size:11px">${r['DESCRIPCION DE LA COTIZACION']||r['DESCRIPCION DEL PROYECTO']||r.DESCRIPCION||''}</span></div>
+        <div style="margin-top:4px"><span style="color:var(--muted)">Dirección:</span> <span id="rv_dir">${r.DIRECCION||''}</span></div>
+      </div>
+
+      <!-- Campos propios de la remisión -->
+      <div class="field"><label>Fecha Remisión</label>
+        <input type="date" id="r_fecha" value="${r.FECHA||new Date().toISOString().slice(0,10)}"></div>
       <div class="field"><label>Estado</label>
-        <select id="r3">${['BORRADOR','ENVIADA','RECIBIDA','FACTURADA','ANULADA'].map(s=>`<option ${(r.ESTADO||'BORRADOR')===s?'selected':''}>${s}</option>`).join('')}</select></div>
-      <div class="field"><label>Valor Total</label><input type="number" id="r4" value="${r.VALOR_TOTAL||0}"></div>
-      <div class="field span2"><label>Descripción</label><textarea id="r5">${r.DESCRIPCION||''}</textarea></div>
-      <div class="field span2"><label>Observaciones</label><textarea id="r6">${r.OBSERVACIONES||''}</textarea></div>
+        <select id="r_estado">${['BORRADOR','ENVIADA','RECIBIDA','FACTURADA','ANULADA'].map(s=>`<option ${(r.ESTADO||'BORRADOR')===s?'selected':''}>${s}</option>`).join('')}</select></div>
+
+      <div class="field"><label>Calificación (1=Mejor · 5=Menor)</label>
+        <select id="r_cal">${[1,2,3,4,5].map(s=>`<option ${Number(r.CALIFICACION||1)===s?'selected':''}>${s}</option>`).join('')}</select></div>
+      <div class="field"><label>Orden de Compra cliente</label>
+        <input id="r_oc" value="${r['ORDEN DE COMPRA']||''}"></div>
+
+      <!-- Bloque OP — se llena dinámicamente al elegir COT -->
+      <div class="field span2" id="r_op_blk">
+        ${r.OP ? `<div style="background:#d1fae5;border:1px solid #6ee7b7;border-radius:8px;padding:8px 12px;font-size:12px">
+          ✅ <strong>OP vinculada:</strong> <span style="background:#065f46;color:#fff;border-radius:4px;padding:2px 8px;margin-left:4px;font-weight:700">OP-${r.OP}</span>
+        </div>` : `<div style="color:var(--muted);font-size:12px;padding:6px 0">← Selecciona una COT para ver la OP vinculada</div>`}
+      </div>
+      <input type="hidden" id="r_op" value="${r.OP||''}">
+
+      <div class="field"><label>Valor Total Remisión</label>
+        <input type="number" id="r_val" value="${r.VALOR_TOTAL||0}"></div>
+
+      <div class="field span2"><label>Observaciones Especiales</label>
+        <textarea id="r_obs">${r['OBSERVACIONES ESPECIALES']||r.OBSERVACIONES||''}</textarea></div>
+
+      <!-- Campos ocultos que se llenan desde la COT -->
+      <input type="hidden" id="r_emp"  value="${r.EMPRESA||''}">
+      <input type="hidden" id="r_nit"  value="${r.NIT||''}">
+      <input type="hidden" id="r_ciu"  value="${r.CIUDAD||''}">
+      <input type="hidden" id="r_dir"  value="${r.DIRECCION||''}">
+      <input type="hidden" id="r_enc"  value="${r.ENCARGADO||''}">
+      <input type="hidden" id="r_tel"  value="${r.TELEFONO||''}">
+      <input type="hidden" id="r_ase"  value="${r.ASESOR||''}">
+      <input type="hidden" id="r_tipo" value="${r.TIPO||''}">
+      <input type="hidden" id="r_desc" value="${r['DESCRIPCION DEL PROYECTO']||r['DESCRIPCION DE LA COTIZACION']||r.DESCRIPCION||''}">
     </div>`,
     `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
-     <button class="btn btn-primary" onclick="saveRem('${r.REMISION||''}')">
+     <button class="btn btn-primary" onclick="saveRem('${r.REMISION||r['NUMERO DE REMISION']||''}')">
        ${isNew?'Crear Remisión':'Guardar'}</button>`);
+
+  // Si es edición, mostrar preview ya cargado
+  if(!isNew && (r.COT_ID||r.COTIZACION)){
+    const preview = document.getElementById('r_cot_preview');
+    if(preview) preview.style.display = '';
+  }
 }
 
 function onSelectCotRem(){
-  const sel=document.getElementById('r1');
-  const opt=sel?.options[sel.selectedIndex];
-  if(!opt||!sel.value) return;
-  const empresa=opt.dataset.empresa||'';
-  const desc=opt.dataset.desc||'';
-  const r2=document.getElementById('r2'); if(r2&&!r2.value) r2.value=empresa;
-  const r5=document.getElementById('r5'); if(r5&&!r5.value&&desc) r5.value=desc;
+  const sel = document.getElementById('r_cot');
+  const num  = sel?.value;
+  if(!num) return;
+
+  // Buscar la COT real en DB
+  const c = (DB.cotizaciones||[]).find(x=>String(x.COTIZACION)===String(num)||String(x.ID_COT)===String(num));
+  if(!c) return;
+
+  const emp  = c.EMPRESA||c.Empresa||'';
+  const nit  = c.Nit||c.NIT||'';
+  const ciu  = c.Ciudad||c.CIUDAD||'';
+  const dir  = c.DIRECCION||c.Direccion||'';
+  const enc  = c.ENCARGADO||c['ENCARGADO/CONTACTO']||'';
+  const tel  = c.TELEFONO||c.Telefono||'';
+  const ase  = c.ASESOR||'';
+  const tipo = c.TIPO||'';
+  const desc = c['DESCRIPCION DEL PROYECTO']||c.DESCRIPCION||'';
+  const val  = Number(c['PRECIO TOTAL']||c['PRECIO SIN IVA']||0);
+
+  // Buscar OPs vinculadas a esta COT en producción
+  const opsVinc = (DB.produccion||[]).filter(op=>String(op.COT)===String(num));
+  const opNums  = [...new Set(opsVinc.map(op=>op.OP).filter(Boolean))];
+
+  // Llenar hidden inputs
+  const sh = (id,v)=>{ const el=document.getElementById(id); if(el) el.value=v||''; };
+  sh('r_emp',  emp);  sh('r_nit', nit);  sh('r_ciu', ciu);
+  sh('r_dir',  dir);  sh('r_enc', enc);  sh('r_tel', tel);
+  sh('r_ase',  ase);  sh('r_tipo',tipo); sh('r_desc',desc);
+
+  // Valor total
+  const valEl = document.getElementById('r_val');
+  if(valEl && (Number(valEl.value)||0)===0) valEl.value = val||0;
+
+  // Actualizar preview visual
+  const sv = (id,v)=>{ const el=document.getElementById(id); if(el) el.textContent=v||'—'; };
+  sv('rv_emp',  emp);  sv('rv_nit', nit);  sv('rv_ciu', ciu);
+  sv('rv_dir',  dir);  sv('rv_enc', enc);  sv('rv_tel', tel);
+  sv('rv_ase',  ase);  sv('rv_tipo',tipo); sv('rv_desc',desc);
+  const rvVal = document.getElementById('rv_val');
+  if(rvVal) rvVal.textContent = val?'$'+val.toLocaleString('es-CO'):'—';
+
+  // ── Bloque de OP ──────────────────────────────────────────
+  const opEl    = document.getElementById('r_op');
+  const opBlk   = document.getElementById('r_op_blk');
+
+  if(opNums.length > 0){
+    // Tiene OPs → autocompletar y mostrar como lectura
+    const opStr = opNums.join(', ');
+    if(opEl) opEl.value = opStr;
+    if(opBlk) opBlk.innerHTML = `
+      <div style="background:#d1fae5;border:1px solid #6ee7b7;border-radius:8px;padding:8px 12px;font-size:12px">
+        ✅ <strong>OP encontrada en Producción:</strong>
+        ${opNums.map(n=>`<span style="background:#065f46;color:#fff;border-radius:4px;padding:2px 8px;margin-left:4px;font-weight:700">OP-${n}</span>`).join('')}
+        <div style="margin-top:4px;color:#065f46;font-size:11px">
+          ${opsVinc.map(op=>`OP-${op.OP} · ${op.CLIENTE||''} · ${op.ESTADO||''}`).join(' | ')}
+        </div>
+      </div>`;
+  } else {
+    // Sin OP → advertencia + botón para continuar igual
+    if(opEl) opEl.value = '';
+    if(opBlk) opBlk.innerHTML = `
+      <div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:8px 12px;font-size:12px">
+        ⚠️ <strong>Esta cotización no tiene OP en Control Producción.</strong>
+        <div style="margin-top:6px;display:flex;align-items:center;gap:8px">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;font-weight:600">
+            <input type="checkbox" id="r_sin_op" onchange="
+              const lbl=document.getElementById('r_sin_op_lbl');
+              if(this.checked){lbl.textContent='✓ Se creará la remisión sin OP vinculada';lbl.style.color='#92400e';}
+              else{lbl.textContent='Marcar para remisionar sin OP';}
+            ">
+            <span id="r_sin_op_lbl">Marcar para remisionar sin OP</span>
+          </label>
+        </div>
+      </div>`;
+  }
+
+  // Mostrar bloque preview
+  const preview = document.getElementById('r_cot_preview');
+  if(preview) preview.style.display = '';
 }
 
 async function saveRem(exist){
-  const data={REMISION:exist||undefined,FECHA:gv('r0'),COTIZACION:gv('r1'),EMPRESA:gv('r2'),
-    ESTADO:gv('r3'),VALOR_TOTAL:gn('r4'),'DESCRIPCION DEL PROYECTO':gv('r5'),OBSERVACIONES:gv('r6')};
-  try{ await POST(exist?'updateRemision':'createRemision',data); toast('Guardada'); closeModal(); _autoSync(['remisiones'], remisiones); }
-  catch(e){toast(e.message,'error');}
+  const cotNum = gv('r_cot');
+  if(!cotNum){ toast('Selecciona una Cotización','error'); return; }
+
+  // Validar: si no hay OP y no marcó el checkbox, bloquear
+  const opVal   = gv('r_op');
+  const sinOpCk = document.getElementById('r_sin_op');
+  if(!opVal && sinOpCk && !sinOpCk.checked){
+    toast('⚠️ Esta COT no tiene OP. Marca "Remisionar sin OP" para continuar.','error');
+    return;
+  }
+
+  const fechaVal = gv('r_fecha');
+
+  // Nombres exactos de columnas según la Sheet:
+  // A:ID_PEDIDO  B:COTIZACION  C:REMISION(fórmula)  D:TIPO  E:CALIFICACION
+  // F:ASESOR  G:DESCRIPCION DEL PROYECTO  H:EMPRESA  I:NIT
+  // J:DIRECCION  K:CIUDAD  L:ENCARGADO  M:TELEFONO  N:FECHA EMISION COT.
+  const data = {
+    // ID_PEDIDO: lo genera el backend (Utilities.getUuid)
+    COTIZACION:                  cotNum,
+    // REMISION (col C): lo genera la fórmula de la Sheet — NO enviar en create
+    ...(exist ? { REMISION: exist } : {}),
+    TIPO:                        gv('r_tipo'),
+    CALIFICACION:                gn('r_cal'),
+    ASESOR:                      gv('r_ase'),
+    'DESCRIPCION DEL PROYECTO':  gv('r_desc'),
+    EMPRESA:                     gv('r_emp'),
+    NIT:                         gv('r_nit'),
+    DIRECCION:                   gv('r_dir'),
+    CIUDAD:                      gv('r_ciu'),
+    ENCARGADO:                   gv('r_enc'),
+    TELEFONO:                    gv('r_tel'),
+    'FECHA EMISION COT.':        fechaVal,
+    // Campos extra que pueden existir más adelante en la Sheet
+    ESTADO:                      gv('r_estado'),
+    OP:                          opVal,
+    'ORDEN DE COMPRA':           gv('r_oc'),
+    VALOR_TOTAL:                 gn('r_val'),
+    'OBSERVACIONES ESPECIALES':  gv('r_obs'),
+    COT_ID:                      cotNum,
+  };
+
+  // Limpiar vacíos y undefined — pero NO eliminar 0 numérico
+  Object.keys(data).forEach(k=>{
+    const v = data[k];
+    if(v===undefined || v===null || String(v).trim()==='undefined' || String(v).trim()==='null') delete data[k];
+  });
+
+  try{
+    await POST(exist?'updateRemision':'createRemision', data);
+    toast('✅ Remisión '+(exist?'actualizada':'creada'));
+    closeModal();
+    DB.remisiones = null;
+    _autoSync(['remisiones'], remisiones);
+  }catch(e){toast(e.message,'error');}
+}
+
+async function eliminarRem(remId, idPedido){
+  if(!confirm(`¿Eliminar Remisión REM-${remId}? Esta acción no se puede deshacer.`)) return;
+  try{
+    // Intentar eliminar por ID_PEDIDO (UUID) primero, luego por REMISION (número)
+    await POST('deleteRemision', {
+      ID_REMISION_UUID: idPedido||remId,
+      ID_REMISION:      remId,
+      REMISION:         remId,
+    });
+    toast('🗑️ Remisión eliminada');
+    closeDetail();
+    DB.remisiones = null;
+    remisiones();
+  }catch(e){ toast(e.message,'error'); }
 }
 
 function formElemRem(remId){
