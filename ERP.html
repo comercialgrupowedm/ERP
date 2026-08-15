@@ -16,7 +16,7 @@
   --mono:'JetBrains Mono','Fira Mono',monospace;
   --sans:-apple-system,'Segoe UI',sans-serif;
   --r:10px; --sh:0 2px 16px rgba(30,41,59,.08);
-  --nav-h:60px; --sidebar-w:260px;
+  --nav-h:70px; --sidebar-w:260px;
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;overflow:hidden;touch-action:manipulation}
@@ -127,40 +127,45 @@ body{display:flex;flex-direction:column;font-family:var(--sans);font-size:14px;
 
 /* ═══ BOTTOM NAV (mobile) ════════════════= */
 #bottom-nav{
-  height:var(--nav-h);
-  background:rgba(255,255,255,0.92);
-  backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
-  border-top:1px solid rgba(0,0,0,.06);
+  height:auto;
+  background:rgba(255,255,255,0.96);
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  border-top:1px solid rgba(0,0,0,.07);
   display:flex;align-items:center;flex-shrink:0;z-index:200;
-  padding:0 6px;
-  box-shadow:0 -4px 24px rgba(30,41,59,.07);
+  padding:8px 8px 10px;
+  box-shadow:0 -4px 24px rgba(30,41,59,.08);
+  overflow-x:auto;
+  -webkit-overflow-scrolling:touch;
+  scrollbar-width:none;
+  gap:5px;
 }
+#bottom-nav::-webkit-scrollbar{display:none}
 .bn-item{
-  flex:1;display:flex;flex-direction:column;align-items:center;
-  justify-content:center;gap:2px;cursor:pointer;padding:6px 4px;
+  flex:0 0 auto;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:2px;cursor:pointer;padding:5px 10px;
   color:var(--muted);font-size:9.5px;font-weight:600;
-  border-top:none;
   transition:all .18s cubic-bezier(.34,1.56,.64,1);
-  user-select:none;position:relative;border-radius:14px;
+  user-select:none;position:relative;border-radius:12px;
   -webkit-tap-highlight-color:transparent;
+  min-width:56px;
 }
 .bn-item:active{transform:scale(.88)}
 .bn-icon{
-  font-size:22px;line-height:1;
-  width:40px;height:32px;
+  font-size:20px;line-height:1;
+  width:36px;height:28px;
   display:flex;align-items:center;justify-content:center;
-  border-radius:10px;
+  border-radius:9px;
   transition:all .18s cubic-bezier(.34,1.56,.64,1);
 }
 .bn-item.active .bn-icon{
   background:linear-gradient(135deg,var(--accent),#60a5fa);
   box-shadow:0 4px 14px rgba(37,99,235,.35);
   transform:scale(1.08) translateY(-2px);
-  font-size:20px;
+  font-size:18px;
 }
 .bn-item.active{color:var(--accent)}
 .bn-badge{
-  position:absolute;top:2px;right:calc(50% - 22px);
+  position:absolute;top:2px;right:6px;
   background:var(--danger);color:#fff;
   font-size:9px;padding:1px 5px;border-radius:8px;font-weight:800;
   border:2px solid var(--surface);
@@ -824,8 +829,7 @@ kbd{
   #topbar{padding:0 24px;height:60px;box-shadow:0 1px 0 var(--border)}
   #page-title{font-size:17px}
   #content{padding:22px 28px 32px}
-  #bottom-nav{display:none}
-  .btn-fab{right:28px;bottom:28px}
+  .btn-fab{right:28px;bottom:80px}
   .kpi-grid{gap:14px}
   @media(min-width:1200px){.kpi-grid{grid-template-columns:repeat(5,1fr)}}
   .tbl-filter{width:200px}
@@ -1186,31 +1190,6 @@ kbd{
   .data-tbl tbody tr:nth-child(even):hover { background: rgba(79,142,247,.08); }
 
   /* Accesos rápidos entre módulos — solo en escritorio */
-  .quick-nav {
-    display: flex;
-    gap: 6px;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    padding: 10px 0 4px;
-    margin-bottom: 10px;
-    scrollbar-width: none;
-  }
-  .quick-nav::-webkit-scrollbar { display: none; }
-  .qn-chip {
-    display: flex; align-items: center; gap: 5px;
-    padding: 5px 11px; border-radius: 20px;
-    border: 1px solid var(--border); background: var(--surface);
-    color: var(--muted); font-size: 11px; font-weight: 600;
-    cursor: pointer; white-space: nowrap; flex-shrink: 0;
-    transition: border-color .15s, color .15s, background .15s;
-    -webkit-tap-highlight-color: transparent;
-  }
-  .qn-chip span { font-size: 12px; }
-  .qn-chip:active, .qn-chip:hover {
-    border-color: var(--accent); color: var(--accent);
-    background: rgba(79,142,247,.08);
-  }
-
   
 /* ══ LOGIN ══════════════════════════════════════════════════════ */
 #login-screen{
@@ -1375,12 +1354,18 @@ kbd{
 
 <!-- ══ BOTTOM NAV ═════════════════════════════= -->
 <div id="bottom-nav">
-  <div class="bn-item active" data-m="dashboard"><div class="bn-icon">📊</div>Dashboard</div>
-  <div class="bn-item" data-m="cotizaciones"><div class="bn-icon">📋</div>Cotizac.<span class="bn-badge" id="bb-cot" style="display:none">0</span></div>
-  <div class="bn-item" data-m="diseño"><div class="bn-icon">🎨</div>Diseño<span class="bn-badge" id="bb-dis" style="display:none">0</span></div>
-  <div class="bn-item" data-m="compras"><div class="bn-icon">🛒</div>Compras<span class="bn-badge" id="bb-comp" style="display:none">0</span></div>
-  <div class="bn-item" data-m="produccion"><div class="bn-icon">🏭</div>Produc.<span class="bn-badge" id="bb-op" style="display:none">0</span></div>
-  <div class="bn-item" data-m="clientes"><div class="bn-icon">🏢</div>Clientes</div>
+  <div class="bn-item active" data-m="dashboard"   onclick="nav('dashboard')"><div class="bn-icon">📊</div>Dashboard</div>
+  <div class="bn-item" data-m="cotizaciones"        onclick="nav('cotizaciones')"><div class="bn-icon">📋</div>Cotizac.<span class="bn-badge" id="bb-cot" style="display:none">0</span></div>
+  <div class="bn-item" data-m="clientes"            onclick="nav('clientes')"><div class="bn-icon">🏢</div>Clientes</div>
+  <div class="bn-item" data-m="remisiones"          onclick="nav('remisiones')"><div class="bn-icon">🚚</div>Remisiones</div>
+  <div class="bn-item" data-m="diseño"              onclick="nav('diseño')"><div class="bn-icon">🎨</div>Diseño<span class="bn-badge" id="bb-dis" style="display:none">0</span></div>
+  <div class="bn-item" data-m="produccion"          onclick="nav('produccion')"><div class="bn-icon">🏭</div>Produc.<span class="bn-badge" id="bb-op" style="display:none">0</span></div>
+  <div class="bn-item" data-m="compras"             onclick="nav('compras')"><div class="bn-icon">🛒</div>Compras<span class="bn-badge" id="bb-comp" style="display:none">0</span></div>
+  <div class="bn-item" data-m="proveedores"         onclick="nav('proveedores')"><div class="bn-icon">🏪</div>Proveed.</div>
+  <div class="bn-item" data-m="items"               onclick="nav('items')"><div class="bn-icon">🔩</div>Ítems</div>
+  <div class="bn-item" data-m="procesos"            onclick="nav('procesos')"><div class="bn-icon">⚙️</div>Procesos</div>
+  <div class="bn-item" data-m="materiales"          onclick="nav('materiales')"><div class="bn-icon">🧱</div>Materiales</div>
+  <div class="bn-item" data-m="servicios"           onclick="nav('servicios')"><div class="bn-icon">🛠️</div>Servicios</div>
 </div>
 
 <!-- ══ FAB ════════════════════════════════════= -->
@@ -1464,7 +1449,7 @@ async function POST_ARCH(action, data = {}) {
 const CACHE_TTL = 30 * 60 * 1000; // 30 minutos (sync optimista mantiene DB fresco)
 const CACHE_KEY_PREFIX = 'erp_wedm_';
 // Campos pesados que NO se cachean
-const CACHE_EXCLUDE_FIELDS = ['PLANO_B64','IMAGENES_DESCRIPCION','IMAGEN_NOMBRE','PLANO_NOMBRE','HOJA_RUTA_JSON']; // IMAGEN_B64=URL corta, no excluir
+const CACHE_EXCLUDE_FIELDS = ['PLANO_B64','IMAGENES_DESCRIPCION','IMAGEN_NOMBRE','PLANO_NOMBRE','HOJA_RUTA_JSON','QA_JSON']; // IMAGEN_B64=URL corta, no excluir
 
 function _stripImages(data){
   if(!Array.isArray(data)) return data;
@@ -1884,30 +1869,7 @@ function moduleBanner(icon,title,sub,actions='',bgGrad='linear-gradient(135deg,#
       </div>
     </div>
     ${actions?`<div style="margin-top:14px;position:relative;z-index:1">${actions}</div>`:''}
-  </div>
-  ${quickNavBar(MOD)}`;}
-
-// ══ ACCESOS RÁPIDOS ENTRE MÓDULOS ═══════════════════════════════
-const QUICK_NAV_MODS = [
-  {m:'dashboard',   icon:'📊', label:'Dashboard'},
-  {m:'cotizaciones',icon:'📋', label:'Cotizaciones'},
-  {m:'clientes',    icon:'🏢', label:'Clientes'},
-  {m:'remisiones',  icon:'🚚', label:'Remisiones'},
-  {m:'diseño',      icon:'🎨', label:'Control Diseño'},
-  {m:'produccion',  icon:'🏭', label:'Control Producción'},
-  {m:'compras',     icon:'🛒', label:'Compras / OC'},
-  {m:'proveedores', icon:'🏭', label:'Proveedores'},
-  {m:'items',       icon:'🔩', label:'Items'},
-  {m:'procesos',    icon:'⚙️', label:'Procesos'},
-  {m:'materiales',  icon:'🧱', label:'Materiales'},
-  {m:'servicios',   icon:'🛠️', label:'Servicios'}
-];
-function quickNavBar(current){
-  const others = QUICK_NAV_MODS.filter(x=>x.m!==current);
-  return `<div class="quick-nav">${others.map(x=>
-    `<button class="qn-chip" onclick="navigate('${x.m}')"><span>${x.icon}</span>${x.label}</button>`
-  ).join('')}</div>`;
-}
+  </div>`;}
 
 function toast(msg,type='ok'){
   const el=document.createElement('div');
@@ -2332,7 +2294,7 @@ async function dashboard(){
         )).then(()=>{
           GET('kpis').then(k => { cacheSet('__kpis__', k); updateBadges(); }).catch(()=>{});
           // Precargar compras en background para que estén disponibles en el detalle de OP
-          POST('getCompras',{}).then(d=>{ _comprasData=d; cacheSet('compras',d); }).catch(()=>{});
+          POST('getCompras',{rango:RANGO_STATE.compras}).then(d=>{ _comprasData=d; cacheSet('compras',d); }).catch(()=>{});
         }).catch(()=>{});
       }, 800); // pequeño delay para no competir con el render
     }
@@ -2374,271 +2336,338 @@ async function dashboard(){
     const fechaActual = now.toLocaleDateString('es-CO',{weekday:'long',day:'numeric',month:'long'});
 
     setContent(`
-    <!-- HEADER DASH -->
-    <div style="
-      background:linear-gradient(135deg,#0f2443 0%,#1a3a6e 55%,#1d4ed8 100%);
-      border-radius:18px;padding:18px 16px 16px;margin-bottom:14px;
-      position:relative;overflow:hidden;
-      box-shadow:0 6px 28px rgba(15,36,67,.22);
-    ">
-      <div style="position:absolute;top:-30px;right:-30px;width:140px;height:140px;
-        border-radius:50%;background:rgba(255,255,255,.05);pointer-events:none"></div>
-      <div style="position:absolute;bottom:-20px;left:20px;width:90px;height:90px;
-        border-radius:50%;background:rgba(99,179,237,.07);pointer-events:none"></div>
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
-        <div style="position:relative;z-index:1">
-          <div style="font-size:11px;font-weight:700;color:rgba(255,255,255,.55);
-            text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">⚡ Sistema ERP</div>
-          <div style="font-size:22px;font-weight:800;color:#fff;letter-spacing:.2px;line-height:1.1">Panel de Control</div>
-          <div style="font-size:12px;color:rgba(255,255,255,.6);margin-top:4px;text-transform:capitalize">
-            ${fechaActual}
+    <style>
+      /* ── Dashboard rediseño estilo panel moderno ── */
+      .db-wrap{display:grid;grid-template-columns:1fr;gap:14px;padding:0}
+      @media(min-width:700px){.db-wrap{grid-template-columns:220px 1fr}}
+
+      /* Sidebar perfil */
+      .db-sidebar{background:linear-gradient(170deg,#0f2443 0%,#1a3a6e 60%,#1e4dbd 100%);
+        border-radius:20px;padding:24px 16px 20px;display:flex;flex-direction:column;gap:16px;
+        box-shadow:0 8px 32px rgba(15,36,67,.22);position:relative;overflow:hidden}
+      .db-sidebar::before{content:'';position:absolute;top:-40px;right:-40px;width:130px;height:130px;
+        border-radius:50%;background:rgba(255,255,255,.04);pointer-events:none}
+      .db-avatar{width:64px;height:64px;border-radius:50%;
+        background:linear-gradient(135deg,#38bdf8,#0ea5e9);
+        display:flex;align-items:center;justify-content:center;
+        font-size:26px;margin:0 auto;border:3px solid rgba(255,255,255,.2);
+        box-shadow:0 4px 16px rgba(14,165,233,.3)}
+      .db-user-name{text-align:center;font-size:13px;font-weight:800;color:#fff;margin-top:4px}
+      .db-user-role{text-align:center;font-size:10px;color:rgba(255,255,255,.5);text-transform:uppercase;letter-spacing:.8px}
+      .db-divider{height:1px;background:rgba(255,255,255,.1);margin:0}
+      .db-nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;
+        cursor:pointer;transition:background .13s;font-size:12px;font-weight:600;color:rgba(255,255,255,.7)}
+      .db-nav-item:hover,.db-nav-item.active{background:rgba(255,255,255,.12);color:#fff}
+      .db-nav-item.active{background:rgba(255,255,255,.18)}
+      .db-nav-icon{font-size:15px;flex-shrink:0;width:20px;text-align:center}
+
+      /* Main content */
+      .db-main{display:flex;flex-direction:column;gap:12px;min-width:0}
+
+      /* Topbar info */
+      .db-topbar{display:flex;align-items:center;gap:10px;
+        background:var(--card);border:1px solid var(--border);border-radius:14px;padding:10px 14px}
+      .db-date{font-size:11px;color:var(--muted);flex:1;text-transform:capitalize}
+      .db-time{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--accent)}
+
+      /* Grid KPI 3 cols */
+      .db-kpi-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+      @media(max-width:600px){.db-kpi-grid{grid-template-columns:repeat(2,1fr)}}
+
+      /* KPI card rediseño */
+      .db-kpi{background:var(--card);border:1px solid var(--border);border-radius:16px;
+        padding:16px 14px;cursor:pointer;transition:transform .15s,box-shadow .15s;
+        position:relative;overflow:hidden}
+      .db-kpi:hover{transform:translateY(-3px);box-shadow:0 8px 24px rgba(30,41,59,.12)}
+      .db-kpi-bar{position:absolute;top:0;left:0;right:0;height:4px;border-radius:16px 16px 0 0}
+      .db-kpi-icon{font-size:20px;margin-bottom:8px}
+      .db-kpi-lbl{font-size:9.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:3px}
+      .db-kpi-val{font-size:32px;font-weight:900;font-family:var(--mono);line-height:1;margin-bottom:4px}
+      .db-kpi-sub{font-size:10px;color:var(--muted)}
+      .db-kpi-prog{height:4px;background:var(--border);border-radius:2px;overflow:hidden;margin-top:10px}
+      .db-kpi-prog-fill{height:100%;border-radius:2px;transition:width .7s ease}
+
+      /* Chart bar */
+      .db-bar-chart{display:flex;align-items:flex-end;gap:5px;height:70px;padding:0 2px}
+      .db-bar{flex:1;border-radius:6px 6px 0 0;transition:opacity .15s;cursor:pointer;min-width:0}
+      .db-bar:hover{opacity:.75}
+
+      /* Distribución OPs */
+      .db-dist-row{display:flex;align-items:center;gap:8px;padding:5px 0;cursor:pointer;border-radius:8px}
+      .db-dist-row:hover{background:var(--card2);margin:0 -6px;padding:5px 6px}
+      .db-dist-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+      .db-dist-lbl{font-size:11px;font-weight:600;flex:1}
+      .db-dist-val{font-size:11px;font-family:var(--mono);font-weight:700}
+      .db-dist-bar{height:4px;background:var(--border);border-radius:2px;overflow:hidden;margin-top:2px}
+
+      /* Diseñadores */
+      .db-des-row{display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:10px;cursor:pointer}
+      .db-des-row:hover{background:var(--card2)}
+      .db-des-av{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;
+        justify-content:center;font-size:11px;font-weight:800;color:#fff;flex-shrink:0}
+
+      /* App grid módulos */
+      .db-modules{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+      @media(max-width:500px){.db-modules{grid-template-columns:repeat(3,1fr)}}
+      .db-mod{display:flex;flex-direction:column;align-items:center;gap:5px;
+        padding:10px 4px;border-radius:12px;cursor:pointer;transition:background .12s}
+      .db-mod:hover{background:var(--card2)}
+      .db-mod-box{width:44px;height:44px;border-radius:12px;display:flex;
+        align-items:center;justify-content:center;font-size:20px;
+        box-shadow:0 3px 10px rgba(0,0,0,.12)}
+      .db-mod-lbl{font-size:9.5px;font-weight:700;color:var(--muted);text-align:center;line-height:1.2}
+
+      /* Section card */
+      .db-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px 14px}
+      .db-card-title{font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;
+        letter-spacing:.8px;margin-bottom:12px;display:flex;align-items:center;gap:6px}
+      .db-card-title::before{content:'';width:3px;height:12px;background:var(--accent);
+        border-radius:2px;flex-shrink:0}
+
+      @keyframes db-fadein{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+      .db-wrap>*{animation:db-fadein .25s ease both}
+      .db-wrap>*:nth-child(1){animation-delay:.03s}
+      .db-wrap>*:nth-child(2){animation-delay:.08s}
+      @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+    </style>
+
+    <div class="db-wrap">
+      <!-- ══ SIDEBAR ══ -->
+      <div class="db-sidebar">
+        <!-- Perfil — datos reales de sesión -->
+        <div>
+          <div class="db-avatar" style="font-size:28px">${_SESSION?.avatar||'👤'}</div>
+          <div class="db-user-name">${_SESSION?.nombre||'Usuario'}</div>
+          <div class="db-user-role">${_rolLabel(_SESSION?.rol||'')}</div>
+        </div>
+        <div class="db-divider"></div>
+        <!-- Navegación lateral -->
+        <div style="display:flex;flex-direction:column;gap:3px">
+          <div class="db-nav-item active">
+            <span class="db-nav-icon">📊</span> Dashboard
+          </div>
+          <div class="db-nav-item" onclick="navigate('cotizaciones')">
+            <span class="db-nav-icon">📋</span> Cotizaciones
+          </div>
+          <div class="db-nav-item" onclick="navigate('produccion')">
+            <span class="db-nav-icon">🏭</span> Control Producción
+          </div>
+          <div class="db-nav-item" onclick="navigate('diseño')">
+            <span class="db-nav-icon">🎨</span> Diseño
+          </div>
+          <div class="db-nav-item" onclick="navigate('compras')">
+            <span class="db-nav-icon">🛒</span> Compras
+          </div>
+          <div class="db-nav-item" onclick="navigate('clientes')">
+            <span class="db-nav-icon">🏢</span> Clientes
+          </div>
+          <div class="db-nav-item" onclick="navigate('remisiones')">
+            <span class="db-nav-icon">🚚</span> Remisiones
+          </div>
+          <div class="db-nav-item" onclick="navigate('proveedores')">
+            <span class="db-nav-icon">🤝</span> Proveedores
           </div>
         </div>
-        <div style="position:relative;z-index:1;display:flex;flex-direction:column;align-items:flex-end;gap:8px">
-          <div style="font-size:13px;font-weight:800;color:rgba(255,255,255,.85);font-family:var(--mono)">
-            ${horaActual}
+        <div class="db-divider"></div>
+        <!-- Resumen rápido en sidebar -->
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div style="font-size:9px;font-weight:700;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:.8px">Resumen rápido</div>
+          <div onclick="navigate('produccion')" style="background:rgba(255,255,255,.08);border-radius:10px;padding:10px;cursor:pointer;border:1px solid rgba(255,255,255,.1)">
+            <div style="font-size:9px;color:rgba(255,255,255,.5);margin-bottom:3px">OPs en proceso</div>
+            <div style="font-size:22px;font-weight:900;color:#38bdf8;font-family:var(--mono)">${opsProceso.length}</div>
+            <div style="height:2px;background:rgba(255,255,255,.1);border-radius:1px;margin-top:6px;overflow:hidden">
+              <div style="height:100%;width:${ops.length?Math.round(opsProceso.length/ops.length*100):0}%;background:#38bdf8;border-radius:1px"></div>
+            </div>
           </div>
+          <div onclick="navigate('cotizaciones')" style="background:rgba(255,255,255,.08);border-radius:10px;padding:10px;cursor:pointer;border:1px solid rgba(255,255,255,.1)">
+            <div style="font-size:9px;color:rgba(255,255,255,.5);margin-bottom:3px">Cotizaciones</div>
+            <div style="font-size:22px;font-weight:900;color:#34d399;font-family:var(--mono)">${cots.length}</div>
+          </div>
+          ${opsVencidas.length>0?`
+          <div onclick="navigate('produccion')" style="background:rgba(220,38,38,.15);border-radius:10px;padding:10px;cursor:pointer;border:1px solid rgba(220,38,38,.25);animation:pulse 2s infinite">
+            <div style="font-size:9px;color:rgba(255,255,255,.5);margin-bottom:3px">⚠️ Vencidas</div>
+            <div style="font-size:22px;font-weight:900;color:#f87171;font-family:var(--mono)">${opsVencidas.length}</div>
+          </div>`:''}
+        </div>
+        <!-- Botones de sesión -->
+        <div style="display:flex;flex-direction:column;gap:6px;margin-top:auto">
           <button onclick="forceSyncAll()" style="
-            background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);
-            color:#fff;border-radius:10px;padding:6px 12px;font-size:12px;font-weight:700;
-            cursor:pointer;display:flex;align-items:center;gap:5px;
-            -webkit-tap-highlight-color:transparent;
-          ">🔄 Sincronizar</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- FILA KPIs: 4 cards en grilla 2x2 (sin card de valor COP) -->
-    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:10px">
-
-      <!-- OPs En Proceso -->
-      <div onclick="navigate('produccion');setTimeout(()=>applyFilter('produccion','ESTADO','EN PROCESO'),600)"
-        style="background:var(--card);border:1px solid rgba(37,99,235,.2);border-radius:16px;
-          padding:16px 14px;cursor:pointer;transition:transform .15s cubic-bezier(.34,1.56,.64,1),box-shadow .15s;
-          position:relative;overflow:hidden;box-shadow:0 2px 10px rgba(37,99,235,.08);"
-        onmouseover="this.style.transform='translateY(-3px)';this.style.boxShadow='0 6px 20px rgba(37,99,235,.16)'"
-        onmouseout="this.style.transform='';this.style.boxShadow='0 2px 10px rgba(37,99,235,.08)'">
-        <div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--accent),#60a5fa);border-radius:16px 16px 0 0"></div>
-        <div style="font-size:18px;margin-bottom:6px">🏭</div>
-        <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px">En Proceso</div>
-        <div style="font-size:34px;font-weight:800;color:var(--accent);margin:3px 0;font-family:var(--mono);line-height:1">${opsProceso.length}</div>
-        <div style="font-size:11px;color:var(--muted)">de ${ops.length} OPs</div>
-        <div style="height:3px;background:var(--border);border-radius:2px;overflow:hidden;margin-top:10px">
-          <div style="height:100%;width:${ops.length?Math.round(opsProceso.length/ops.length*100):0}%;background:var(--accent);border-radius:2px"></div>
+            background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);
+            color:rgba(255,255,255,.8);border-radius:10px;padding:8px;font-size:11px;font-weight:700;
+            cursor:pointer;width:100%;display:flex;align-items:center;justify-content:center;gap:6px">
+            🔄 Sincronizar
+          </button>
+          <button onclick="_logout()" style="
+            background:rgba(220,38,38,.15);border:1px solid rgba(220,38,38,.3);
+            color:#fca5a5;border-radius:10px;padding:8px;font-size:11px;font-weight:700;
+            cursor:pointer;width:100%;display:flex;align-items:center;justify-content:center;gap:6px">
+            🚪 Cerrar Sesión
+          </button>
         </div>
       </div>
 
-      <!-- Avance promedio -->
-      <div onclick="navigate('produccion')"
-        style="background:var(--card);border:1px solid rgba(16,185,129,.2);border-radius:16px;
-          padding:16px 14px;cursor:pointer;transition:transform .15s cubic-bezier(.34,1.56,.64,1),box-shadow .15s;
-          position:relative;overflow:hidden;box-shadow:0 2px 10px rgba(16,185,129,.07);"
-        onmouseover="this.style.transform='translateY(-3px)';this.style.boxShadow='0 6px 20px rgba(16,185,129,.15)'"
-        onmouseout="this.style.transform='';this.style.boxShadow='0 2px 10px rgba(16,185,129,.07)'">
-        <div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#10b981,#34d399);border-radius:16px 16px 0 0"></div>
-        <div style="font-size:18px;margin-bottom:6px">📈</div>
-        <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px">Avance</div>
-        <div style="font-size:34px;font-weight:800;color:${avgAvance>=70?'#059669':avgAvance>=40?'var(--warn)':'var(--danger)'};margin:3px 0;font-family:var(--mono);line-height:1">${avgAvance}%</div>
-        <div style="font-size:11px;color:var(--muted)">Promedio OPs</div>
-        <div style="height:3px;background:var(--border);border-radius:2px;overflow:hidden;margin-top:10px">
-          <div style="height:100%;width:${avgAvance}%;background:${avgAvance>=70?'#10b981':avgAvance>=40?'var(--warn)':'var(--danger)'};border-radius:2px;transition:width .6s"></div>
+      <!-- ══ MAIN ══ -->
+      <div class="db-main">
+        <!-- Topbar fecha/hora -->
+        <div class="db-topbar">
+          <div style="font-size:14px">📊</div>
+          <div class="db-date" style="font-size:12px;font-weight:600;color:var(--text)">
+            Panel de Control
+            <div style="font-size:10px;color:var(--muted);font-weight:400;text-transform:capitalize;margin-top:1px">${fechaActual}</div>
+          </div>
+          <div class="db-time">${horaActual}</div>
         </div>
-      </div>
 
-      <!-- Urgencias -->
-      <div onclick="navigate('cotizaciones');setTimeout(()=>applyFilter('cotizaciones','TIPO','UR'),600)"
-        style="background:var(--card);border:1px solid rgba(217,119,6,.2);border-radius:16px;
-          padding:16px 14px;cursor:pointer;transition:transform .15s cubic-bezier(.34,1.56,.64,1),box-shadow .15s;
-          position:relative;overflow:hidden;box-shadow:0 2px 10px rgba(217,119,6,.08);"
-        onmouseover="this.style.transform='translateY(-3px)';this.style.boxShadow='0 6px 20px rgba(217,119,6,.18)'"
-        onmouseout="this.style.transform='';this.style.boxShadow='0 2px 10px rgba(217,119,6,.08)'">
-        <div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--warn),#fbbf24);border-radius:16px 16px 0 0"></div>
-        <div style="font-size:18px;margin-bottom:6px">🔥</div>
-        <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px">Urgencias</div>
-        <div style="font-size:34px;font-weight:800;color:var(--warn);margin:3px 0;font-family:var(--mono);line-height:1">${urgencias.length}</div>
-        <div style="font-size:11px;color:var(--muted)">Cots. tipo UR</div>
-      </div>
+        <!-- ── FILA 1: 3 KPI cards grandes ── -->
+        <div class="db-kpi-grid">
 
-      <!-- OPs Vencidas -->
-      <div onclick="navigate('produccion');setTimeout(()=>{applyFilter('produccion','__search__','');},600)"
-        style="background:var(--card);border:1px solid ${opsVencidas.length>0?'rgba(220,38,38,.22)':'var(--border)'};border-radius:16px;
-          padding:16px 14px;cursor:pointer;transition:transform .15s cubic-bezier(.34,1.56,.64,1),box-shadow .15s;
-          position:relative;overflow:hidden;box-shadow:0 2px 10px rgba(220,38,38,.06);"
-        onmouseover="this.style.transform='translateY(-3px)';this.style.boxShadow='0 6px 20px rgba(220,38,38,.15)'"
-        onmouseout="this.style.transform='';this.style.boxShadow='0 2px 10px rgba(220,38,38,.06)'">
-        <div style="position:absolute;top:0;left:0;right:0;height:3px;background:${opsVencidas.length>0?'linear-gradient(90deg,var(--danger),#f87171)':'var(--border)'};border-radius:16px 16px 0 0"></div>
-        ${opsVencidas.length>0?`<div style="position:absolute;top:12px;right:12px;width:8px;height:8px;border-radius:50%;background:var(--danger);animation:pulse 1.5s infinite"></div>`:''}
-        <div style="font-size:18px;margin-bottom:6px">⚠️</div>
-        <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px">Vencidas</div>
-        <div style="font-size:34px;font-weight:800;color:${opsVencidas.length>0?'var(--danger)':'var(--muted)'};margin:3px 0;font-family:var(--mono);line-height:1">${opsVencidas.length}</div>
-        <div style="font-size:11px;color:var(--muted)">Días entrega &lt; 0</div>
-      </div>
-    </div>
+          <!-- OPs En Proceso -->
+          <div class="db-kpi" onclick="navigate('produccion');setTimeout(()=>applyFilter('produccion','ESTADO','EN PROCESO'),600)">
+            <div class="db-kpi-bar" style="background:linear-gradient(90deg,#2563eb,#60a5fa)"></div>
+            <div class="db-kpi-icon">🏭</div>
+            <div class="db-kpi-lbl">En Proceso</div>
+            <div class="db-kpi-val" style="color:#2563eb">${opsProceso.length}</div>
+            <div class="db-kpi-sub">de ${ops.length} OPs totales</div>
+            <div class="db-kpi-prog">
+              <div class="db-kpi-prog-fill" style="width:${ops.length?Math.round(opsProceso.length/ops.length*100):0}%;background:#2563eb"></div>
+            </div>
+          </div>
 
-    <!-- FILA 2: Cotizaciones + Terminadas -->
-    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:14px">
+          <!-- Avance Promedio -->
+          <div class="db-kpi" onclick="navigate('produccion')">
+            <div class="db-kpi-bar" style="background:linear-gradient(90deg,#10b981,#34d399)"></div>
+            <div class="db-kpi-icon">📈</div>
+            <div class="db-kpi-lbl">Avance Prom.</div>
+            <div class="db-kpi-val" style="color:${avgAvance>=70?'#059669':avgAvance>=40?'#d97706':'#dc2626'}">${avgAvance}%</div>
+            <div class="db-kpi-sub">Promedio todas las OPs</div>
+            <div class="db-kpi-prog">
+              <div class="db-kpi-prog-fill" style="width:${avgAvance}%;background:${avgAvance>=70?'#10b981':avgAvance>=40?'#f59e0b':'#ef4444'}"></div>
+            </div>
+          </div>
 
-      <!-- Cotizaciones -->
-      <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;cursor:pointer"
-        onclick="navigate('cotizaciones')"
-        onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 4px 12px rgba(30,41,59,.1)'"
-        onmouseout="this.style.transform='';this.style.boxShadow=''">
-        <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:8px">📋 Cotizaciones</div>
-        <div style="font-size:26px;font-weight:800;color:var(--text);font-family:var(--mono)">${cots.length}</div>
-        <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
-          <span onclick="event.stopPropagation();navigate('cotizaciones');setTimeout(()=>applyFilter('cotizaciones','ESTADO','EN ESPERA'),600)"
-            style="font-size:10px;font-weight:700;background:#fef2e2;color:#b5650a;border:1px solid #f6cd97;
-              padding:2px 8px;border-radius:6px;cursor:pointer">
-            ⏳ ${cotsEspera.length} espera
-          </span>
-          <span onclick="event.stopPropagation();navigate('cotizaciones');setTimeout(()=>applyFilter('cotizaciones','ESTADO','APROBADA'),600)"
-            style="font-size:10px;font-weight:700;background:#e6f6ea;color:#1e7d32;border:1px solid #a8ddb5;
-              padding:2px 8px;border-radius:6px;cursor:pointer">
-            ✅ ${cotsAprobadas.length} aprobadas
-          </span>
+          <!-- Urgencias -->
+          <div class="db-kpi" onclick="navigate('cotizaciones');setTimeout(()=>applyFilter('cotizaciones','TIPO','UR'),600)">
+            <div class="db-kpi-bar" style="background:linear-gradient(90deg,#d97706,#fbbf24)"></div>
+            <div class="db-kpi-icon">🔥</div>
+            <div class="db-kpi-lbl">Urgencias</div>
+            <div class="db-kpi-val" style="color:#d97706">${urgencias.length}</div>
+            <div class="db-kpi-sub">Cotizaciones tipo UR</div>
+          </div>
         </div>
-      </div>
 
-      <!-- Terminadas/Entregadas -->
-      <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;cursor:pointer"
-        onclick="navigate('produccion');setTimeout(()=>applyFilter('produccion','ESTADO','TERMINADO'),600)"
-        onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 4px 12px rgba(30,41,59,.1)'"
-        onmouseout="this.style.transform='';this.style.boxShadow=''">
-        <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:8px">✅ Terminadas</div>
-        <div style="font-size:26px;font-weight:800;color:#16a34a;font-family:var(--mono)">${opsTerminadas.length}</div>
-        <div style="display:flex;gap:6px;margin-top:8px">
-          <span onclick="event.stopPropagation();navigate('produccion');setTimeout(()=>applyFilter('produccion','ESTADO','ENTREGADO'),600)"
-            style="font-size:10px;font-weight:700;background:#e6f0fd;color:#1d4ed8;border:1px solid #b3d0f7;
-              padding:2px 8px;border-radius:6px;cursor:pointer">
-            🚚 ${opsEntregadas.length} entregadas
-          </span>
-        </div>
-      </div>
-    </div>
+        <!-- ── FILA 2: Distribución + Top Diseñadores + Barras ── -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
 
-    <!-- FILA 3: Distribución OPs + Top Diseñadores -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
-
-      <!-- Distribución por estado -->
-      <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px">
-        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:12px">
-          Distribución de OPs
-        </div>
-        <div style="display:flex;flex-direction:column;gap:7px">
-          ${estadosDist.map(e=>{
-            const pct = ops.length ? Math.round(e.val/ops.length*100) : 0;
-            const filtroFn = e.filtro==='vencidas'
-              ? `navigate('produccion')`
-              : `navigate('produccion');setTimeout(()=>applyFilter('produccion','ESTADO','${e.filtro}'),600)`;
-            return `<div onclick="${filtroFn}" style="cursor:pointer"
-              onmouseover="this.style.opacity='.8'" onmouseout="this.style.opacity='1'">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
-                <span style="font-size:11px;font-weight:600;color:var(--text)">${e.label}</span>
-                <span style="font-size:11px;font-family:var(--mono);color:${e.color};font-weight:700">${e.val} · ${pct}%</span>
-              </div>
-              <div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden">
-                <div style="height:100%;width:${pct}%;background:${e.color};border-radius:3px;transition:width .6s"></div>
-              </div>
-            </div>`;
-          }).join('')}
-        </div>
-      </div>
-
-      <!-- Top Diseñadores activos -->
-      <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px">
-        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:12px">
-          🎨 Diseñadores — OPs activas
-        </div>
-        ${disTop.length ? `<div style="display:flex;flex-direction:column;gap:8px">
-          ${disTop.map(([dis,cnt],i)=>`
-            <div onclick="navigate('produccion');setTimeout(()=>applyFilter('produccion','DISEÑADOR','${dis}'),600)"
-              style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:6px 8px;
-                border-radius:8px;transition:background .12s"
-              onmouseover="this.style.background='var(--card2)'" onmouseout="this.style.background=''">
-              <div style="width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--info));
-                display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#fff;flex-shrink:0">
-                ${dis.split(' ').map(p=>p[0]).join('').slice(0,2).toUpperCase()}
-              </div>
-              <div style="flex:1;min-width:0">
-                <div style="font-size:12px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${dis}</div>
-                <div style="height:3px;background:var(--border);border-radius:2px;margin-top:3px;overflow:hidden">
-                  <div style="height:100%;width:${disTop[0][1]>0?Math.round(cnt/disTop[0][1]*100):0}%;background:var(--accent);border-radius:2px"></div>
+          <!-- Distribución de OPs -->
+          <div class="db-card">
+            <div class="db-card-title">Distribución de OPs</div>
+            <!-- Mini barras horizontales -->
+            ${estadosDist.length ? estadosDist.map(e=>{
+              const pct = ops.length ? Math.round(e.val/ops.length*100) : 0;
+              const filtroFn = e.filtro==='vencidas'
+                ? `navigate('produccion')`
+                : `navigate('produccion');setTimeout(()=>applyFilter('produccion','ESTADO','${e.filtro}'),600)`;
+              return `<div class="db-dist-row" onclick="${filtroFn}">
+                <div class="db-dist-dot" style="background:${e.color}"></div>
+                <div style="flex:1;min-width:0">
+                  <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+                    <span class="db-dist-lbl">${e.label}</span>
+                    <span class="db-dist-val" style="color:${e.color}">${e.val} <span style="color:var(--muted);font-weight:400">${pct}%</span></span>
+                  </div>
+                  <div class="db-dist-bar">
+                    <div style="height:100%;width:${pct}%;background:${e.color};border-radius:2px;transition:width .7s"></div>
+                  </div>
                 </div>
+              </div>`;
+            }).join('') : `<div style="color:var(--muted);font-size:12px;text-align:center;padding:16px 0">Sin datos</div>`}
+
+            <!-- Mini gráfica de barras verticales -->
+            ${estadosDist.length>=2 ? `
+            <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px">
+              <div style="font-size:9px;color:var(--muted);font-weight:700;margin-bottom:8px;text-transform:uppercase;letter-spacing:.6px">Vista rápida</div>
+              <div class="db-bar-chart">
+                ${estadosDist.map(e=>{
+                  const maxVal = Math.max(...estadosDist.map(x=>x.val));
+                  const h = maxVal>0 ? Math.max(8, Math.round(e.val/maxVal*70)) : 8;
+                  const filtroFn = e.filtro==='vencidas'
+                    ? `navigate('produccion')`
+                    : `navigate('produccion');setTimeout(()=>applyFilter('produccion','ESTADO','${e.filtro}'),600)`;
+                  return `<div title="${e.label}: ${e.val}"
+                    class="db-bar" style="height:${h}px;background:${e.color};opacity:.85"
+                    onclick="${filtroFn}"></div>`;
+                }).join('')}
               </div>
-              <div style="font-family:var(--mono);font-size:13px;font-weight:800;color:var(--accent);flex-shrink:0">${cnt}</div>
-            </div>`).join('')}
-        </div>` : `<div style="color:var(--muted);font-size:12px;text-align:center;padding:20px 0">Sin OPs en proceso</div>`}
-      </div>
-    </div>
+            </div>` : ''}
+          </div>
 
-    <!-- MÓDULOS — accesos rápidos -->
-    <div style="background:var(--card);border:1px solid var(--border);border-radius:18px;padding:16px 12px;margin-bottom:4px;box-shadow:0 2px 10px rgba(30,41,59,.05)">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px">
-        <div style="width:4px;height:16px;background:linear-gradient(to bottom,var(--accent),#60a5fa);border-radius:2px"></div>
-        <div style="font-size:11px;font-weight:800;color:var(--text);text-transform:uppercase;
-          letter-spacing:1px">Acceso Rápido</div>
-      </div>
-      <div class="app-grid">
-        <div class="app-icon" onclick="navigate('cotizaciones')">
-          <div class="app-icon-wrap">
-            <div class="app-icon-box" style="background:linear-gradient(135deg,#1d4ed8,#3b82f6)">📋</div>
-            <span class="app-badge-dot" id="ab-cot" style="display:none"></span>
+          <!-- Top Diseñadores activos -->
+          <div class="db-card">
+            <div class="db-card-title">🎨 Diseñadores Activos</div>
+            ${disTop.length ? `<div style="display:flex;flex-direction:column;gap:2px">
+              ${disTop.map(([dis,cnt],i)=>{
+                const colors = ['linear-gradient(135deg,#2563eb,#60a5fa)','linear-gradient(135deg,#7c3aed,#a78bfa)',
+                  'linear-gradient(135deg,#0891b2,#22d3ee)','linear-gradient(135deg,#10b981,#34d399)','linear-gradient(135deg,#d97706,#fbbf24)'];
+                return `<div class="db-des-row" onclick="navigate('produccion');setTimeout(()=>applyFilter('produccion','DISEÑADOR','${dis}'),600)">
+                  <div class="db-des-av" style="background:${colors[i%colors.length]}">
+                    ${dis.split(' ').map(p=>p[0]).join('').slice(0,2).toUpperCase()}
+                  </div>
+                  <div style="flex:1;min-width:0">
+                    <div style="font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${dis}</div>
+                    <div style="height:3px;background:var(--border);border-radius:2px;margin-top:3px;overflow:hidden">
+                      <div style="height:100%;width:${disTop[0][1]>0?Math.round(cnt/disTop[0][1]*100):0}%;background:${colors[i%colors.length].includes('2563')? '#2563eb':'#7c3aed'};border-radius:2px"></div>
+                    </div>
+                  </div>
+                  <div style="font-family:var(--mono);font-size:16px;font-weight:900;color:var(--accent)">${cnt}</div>
+                </div>`;
+              }).join('')}
+            </div>` : `<div style="color:var(--muted);font-size:12px;text-align:center;padding:20px 0">Sin OPs en proceso</div>`}
+            <!-- Cots en espera / aprobadas -->
+            <div style="margin-top:12px;border-top:1px solid var(--border);padding-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+              <div onclick="navigate('cotizaciones');setTimeout(()=>applyFilter('cotizaciones','ESTADO','EN ESPERA'),600)"
+                style="flex:1;background:#fef3c7;border:1px solid #fde68a;border-radius:8px;padding:8px;cursor:pointer;text-align:center">
+                <div style="font-size:16px;font-weight:900;color:#b45309">${cotsEspera.length}</div>
+                <div style="font-size:9px;color:#92400e;font-weight:700">En Espera</div>
+              </div>
+              <div onclick="navigate('cotizaciones');setTimeout(()=>applyFilter('cotizaciones','ESTADO','APROBADA'),600)"
+                style="flex:1;background:#d1fae5;border:1px solid #6ee7b7;border-radius:8px;padding:8px;cursor:pointer;text-align:center">
+                <div style="font-size:16px;font-weight:900;color:#059669">${cotsAprobadas.length}</div>
+                <div style="font-size:9px;color:#065f46;font-weight:700">Aprobadas</div>
+              </div>
+              <div onclick="navigate('produccion');setTimeout(()=>applyFilter('produccion','ESTADO','TERMINADO'),600)"
+                style="flex:1;background:#ede9fe;border:1px solid #c4b5fd;border-radius:8px;padding:8px;cursor:pointer;text-align:center">
+                <div style="font-size:16px;font-weight:900;color:#7c3aed">${opsTerminadas.length}</div>
+                <div style="font-size:9px;color:#5b21b6;font-weight:700">Terminadas</div>
+              </div>
+            </div>
           </div>
-          <span class="app-icon-label">Cotizaciones</span>
         </div>
-        <div class="app-icon" onclick="navigate('produccion')">
-          <div class="app-icon-wrap">
-            <div class="app-icon-box" style="background:linear-gradient(135deg,#7c3aed,#a78bfa)">🏭</div>
-            <span class="app-badge-dot" id="ab-op" style="display:none"></span>
+
+        <!-- ── MÓDULOS acceso rápido ── -->
+        <div class="db-card">
+          <div class="db-card-title">Acceso Rápido</div>
+          <div class="db-modules">
+            ${[
+              {icon:'📋',label:'Cotizaciones',  color:'linear-gradient(135deg,#1d4ed8,#3b82f6)', fn:"navigate('cotizaciones')"},
+              {icon:'🏭',label:'Producción',    color:'linear-gradient(135deg,#7c3aed,#a78bfa)', fn:"navigate('produccion')"},
+              {icon:'🎨',label:'Diseño',        color:'linear-gradient(135deg,#db2777,#f9a8d4)', fn:"navigate('diseño')"},
+              {icon:'🛒',label:'Compras',       color:'linear-gradient(135deg,#b45309,#f59e0b)', fn:"navigate('compras')"},
+              {icon:'🏢',label:'Clientes',      color:'linear-gradient(135deg,#0891b2,#22d3ee)', fn:"navigate('clientes')"},
+              {icon:'🚚',label:'Remisiones',    color:'linear-gradient(135deg,#047857,#34d399)', fn:"navigate('remisiones')"},
+              {icon:'🤝',label:'Proveedores',   color:'linear-gradient(135deg,#065f46,#6ee7b7)', fn:"navigate('proveedores')"},
+              {icon:'🔩',label:'Ítems',         color:'linear-gradient(135deg,#b45309,#fbbf24)', fn:"navigate('items')"},
+              {icon:'⚙️',label:'Procesos',      color:'linear-gradient(135deg,#374151,#6b7280)', fn:"navigate('procesos')"},
+              {icon:'🧱',label:'Materiales',    color:'linear-gradient(135deg,#9f1239,#fb7185)', fn:"navigate('materiales')"},
+              {icon:'🛠️',label:'Servicios',     color:'linear-gradient(135deg,#065f46,#6ee7b7)', fn:"navigate('servicios')"},
+            ].map(m=>`
+              <div class="db-mod" onclick="${m.fn}">
+                <div class="db-mod-box" style="background:${m.color}">${m.icon}</div>
+                <div class="db-mod-lbl">${m.label}</div>
+              </div>`).join('')}
           </div>
-          <span class="app-icon-label">Control Producción</span>
-        </div>
-        <div class="app-icon" onclick="navigate('clientes')">
-          <div class="app-icon-box" style="background:linear-gradient(135deg,#0891b2,#22d3ee)">🏢</div>
-          <span class="app-icon-label">Clientes</span>
-        </div>
-        <div class="app-icon" onclick="navigate('remisiones')">
-          <div class="app-icon-box" style="background:linear-gradient(135deg,#047857,#34d399)">🚚</div>
-          <span class="app-icon-label">Remisiones</span>
-        </div>
-        <div class="app-icon" onclick="navigate('diseño')">
-          <div class="app-icon-wrap">
-            <div class="app-icon-box" style="background:linear-gradient(135deg,#db2777,#f9a8d4)">🎨</div>
-            <span class="app-badge-dot" id="ab-dis" style="display:none"></span>
-          </div>
-          <span class="app-icon-label">Control Diseño</span>
-        </div>
-        <div class="app-icon" onclick="navigate('compras')">
-          <div class="app-icon-wrap">
-            <div class="app-icon-box" style="background:linear-gradient(135deg,#b45309,#f59e0b)">🛒</div>
-            <span class="app-badge-dot" id="ab-comp" style="display:none"></span>
-          </div>
-          <span class="app-icon-label">Compras / OC</span>
-        </div>
-        <div class="app-icon" onclick="navigate('proveedores')">
-          <div class="app-icon-box" style="background:linear-gradient(135deg,#065f46,#34d399)">🏭</div>
-          <span class="app-icon-label">Proveedores</span>
-        </div>
-        <div class="app-icon" onclick="navigate('items')">
-          <div class="app-icon-box" style="background:linear-gradient(135deg,#b45309,#fbbf24)">🔩</div>
-          <span class="app-icon-label">Ítems</span>
-        </div>
-        <div class="app-icon" onclick="navigate('procesos')">
-          <div class="app-icon-box" style="background:linear-gradient(135deg,#374151,#6b7280)">⚙️</div>
-          <span class="app-icon-label">Procesos / Máquinas</span>
-        </div>
-        <div class="app-icon" onclick="navigate('materiales')">
-          <div class="app-icon-box" style="background:linear-gradient(135deg,#9f1239,#fb7185)">🧱</div>
-          <span class="app-icon-label">Materiales</span>
-        </div>
-        <div class="app-icon" onclick="navigate('servicios')">
-          <div class="app-icon-box" style="background:linear-gradient(135deg,#065f46,#6ee7b7)">🛠️</div>
-          <span class="app-icon-label">Servicios Externos</span>
         </div>
       </div>
     </div>
-
-    <!-- CSS pulse animation para OPs vencidas + animaciones dashboard -->
+        <!-- CSS pulse animation para OPs vencidas + animaciones dashboard -->
     <style>
       @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
       @keyframes fadeSlideUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
@@ -4460,10 +4489,11 @@ async function deleteCot(id){
 // ══════════════════════════════════════════════════════════════
 //   CONTROL PRODUCCIÓN (OPs)
 // ══════════════════════════════════════════════════════════════
-// Rango de carga por módulo: '3m' (default, rápido) | '6m' | '1y' | 'todo'
+// Rango de carga por módulo: '1m' (default, más rápido) | '3m' | '6m' | '1y' | 'todo'
 // Los registros "abiertos" (no en estado cerrado) siempre aparecen, sin importar el rango.
-const RANGO_STATE = { produccion:'3m', cotizaciones:'3m', remisiones:'3m', elementos:'3m' };
+const RANGO_STATE = { produccion:'1m', cotizaciones:'1m', remisiones:'1m', elementos:'1m', compras:'1m' };
 const RANGO_OPCIONES = [
+  { key:'1m',   label:'1 mes'   },
   { key:'3m',   label:'3 meses' },
   { key:'6m',   label:'6 meses' },
   { key:'1y',   label:'1 año'   },
@@ -4495,6 +4525,292 @@ async function cambiarRango(modulo, rango){
   if(modulo === 'cotizaciones') await cotizaciones();
   if(modulo === 'remisiones')   await remisiones();
   if(modulo === 'elementos')    await items();
+  if(modulo === 'compras')      await compras();
+}
+
+
+// ══════════════════════════════════════════════════════════════════
+//  VISTA "LISTO PARA PRODUCCIÓN" — Score ordenado
+//
+//  Criterios de inclusión (la OP debe cumplir TODOS):
+//   ✅ Diseño / Ingeniería y Planeación: marcado TRUE
+//   ✅ Estado NO en TERMINADO / ENTREGADO / CANCELADO
+//   ✅ MP Insumos OK (marcado TRUE) — compras listas
+//
+//  SCORE (0–100) — determina prioridad en producción:
+//   +30  Urgencia (TIPO contiene "UR")
+//   +25  Vencida (DÍAS ENTREGA < 0)
+//   +20  Días Entrega entre 0-5 (muy próxima)
+//   +10  Días Entrega entre 6-15
+//   +10  Alta prioridad (PRIORIDAD = Alta)
+//   +5   %AVANCE > 0 (ya arrancó)
+//   −10  Pausada
+//   Bonus tiempo: MAX(0, 10 − diasEntrega×0.5)  [máx 10 pts para las más urgentes]
+//
+//  Nivel score → color:
+//   ≥ 70 → CRÍTICO (rojo)
+//   ≥ 45 → ALTO    (naranja)
+//   ≥ 25 → MEDIO   (azul)
+//   <  25 → NORMAL  (gris)
+// ══════════════════════════════════════════════════════════════════
+function _calcScore(op){
+  let s = 0;
+  const dias     = Number(op['DÍAS ENTREGA'] ?? 999);
+  const tipo     = String(op.TIPO||'').toUpperCase();
+  const pct      = Number(op['%AVANCE']||0);
+  const prioridad= String(op.PRIORIDAD||'').toLowerCase();
+  const estado   = String(op.ESTADO||'').toUpperCase();
+
+  if(tipo.includes('UR'))       s += 30;          // urgencia
+  if(dias < 0)                  s += 25;           // vencida
+  else if(dias <= 5)            s += 20;           // muy próxima
+  else if(dias <= 15)           s += 10;           // próxima
+  if(prioridad === 'alta')      s += 10;
+  if(pct > 0)                   s += 5;            // ya inició
+  if(estado === 'PAUSADO')      s -= 10;
+  s += Math.max(0, 10 - Math.max(0, dias) * 0.5); // bonus urgencia temporal
+  return Math.round(Math.min(100, Math.max(0, s)));
+}
+
+function _scoreLevel(score){
+  if(score >= 70) return { label:'CRÍTICO', color:'#dc2626', bg:'#fef2f2', border:'#fca5a5' };
+  if(score >= 45) return { label:'ALTO',    color:'#d97706', bg:'#fffbeb', border:'#fde68a' };
+  if(score >= 25) return { label:'MEDIO',   color:'#2563eb', bg:'#eff6ff', border:'#bfdbfe' };
+  return           { label:'NORMAL',  color:'#6b7280', bg:'#f9fafb', border:'#e5e7eb' };
+}
+
+function _renderListaProd(allOps, viewMode='cards'){
+  // 1. Filtrar: diseño OK + MP OK + no terminado/entregado/cancelado
+  const EXCL = ['TERMINADO','ENTREGADO','CANCELADO'];
+  const aptas = allOps.filter(op => {
+    if(EXCL.includes(String(op.ESTADO||'').toUpperCase())) return false;
+    const disenoDone = _qaEtapaDone(op, QA_ETAPAS.find(e=>e.id==='diseno'));
+    const mpDone     = _qaEtapaDone(op, QA_ETAPAS.find(e=>e.id==='mp'));
+    return disenoDone && mpDone;
+  });
+
+  if(!aptas.length) return `
+    <div style="text-align:center;padding:48px 24px;color:var(--muted)">
+      <div style="font-size:48px;margin-bottom:12px">🏗️</div>
+      <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:6px">Sin OPs listas para producción</div>
+      <div style="font-size:12px">Las OPs aparecen aquí cuando tienen Diseño ✓ y MP Insumos ✓</div>
+    </div>`;
+
+  // 2. Calcular score y ordenar
+  const scored = aptas.map(op => ({ op, score: _calcScore(op) }))
+    .sort((a,b) => b.score - a.score);
+
+  // 3. KPIs rápidos
+  const criticas = scored.filter(x => x.score >= 70).length;
+  const altas    = scored.filter(x => x.score >= 45 && x.score < 70).length;
+
+  const kpis = `
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:12px;background:var(--surface);border-bottom:1px solid var(--border)">
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:10px 12px">
+      <div style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px">Listas</div>
+      <div style="font-size:24px;font-weight:900;color:var(--accent);font-family:var(--mono)">${scored.length}</div>
+    </div>
+    <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:12px;padding:10px 12px">
+      <div style="font-size:9px;font-weight:700;color:#dc2626;text-transform:uppercase;letter-spacing:.6px">🔴 Críticas</div>
+      <div style="font-size:24px;font-weight:900;color:#dc2626;font-family:var(--mono)">${criticas}</div>
+    </div>
+    <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:10px 12px">
+      <div style="font-size:9px;font-weight:700;color:#d97706;text-transform:uppercase;letter-spacing:.6px">🟡 Altas</div>
+      <div style="font-size:24px;font-weight:900;color:#d97706;font-family:var(--mono)">${altas}</div>
+    </div>
+    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:10px 12px">
+      <div style="font-size:9px;font-weight:700;color:#16a34a;text-transform:uppercase;letter-spacing:.6px">✅ MP + Diseño</div>
+      <div style="font-size:24px;font-weight:900;color:#16a34a;font-family:var(--mono)">OK</div>
+    </div>
+  </div>`;
+
+  // 4. Vista tabla (alternativa a las cards)
+  if (viewMode === 'table') {
+    const rows = scored.map(({op, score}, idx) => {
+      const lvl = _scoreLevel(score);
+      const pct = qaPct(op['%AVANCE']);
+      const dias = Number(op['DÍAS ENTREGA'] ?? '—');
+      const diasTxt = isNaN(dias) ? '—' : dias < 0
+        ? `<span style="color:#dc2626;font-weight:700">${dias}d ⚠️</span>`
+        : `<span style="color:${dias<=5?'#d97706':dias<=15?'#2563eb':'var(--muted)'};font-weight:600">${dias}d</span>`;
+      const etapaSig = qaEtapaActual(op);
+      const rutas = [op['RUTA MQ1'],op['RUTA MQ2'],op['RUTA MQ3'],op['RUTA MQ4'],op['RUTA MQ5']]
+        .filter(Boolean).join(' → ');
+      const cachedImg = (typeof _imgCache!=='undefined' && _imgCache.has && _imgCache.has(String(op.IDQR))) ? _imgCache.get(String(op.IDQR)) : '';
+      const imgSrcTbl = op.IMAGEN_B64 || cachedImg;
+      const imgCell = imgSrcTbl
+        ? `<img src="${imgSrcTbl}" style="width:36px;height:36px;object-fit:cover;border-radius:5px;border:1px solid var(--border);cursor:pointer;display:block" onclick="event.stopPropagation();_lpImgClick('${op.IDQR}')" title="Ver imagen completa">`
+        : (op.IDQR
+          ? `<img data-src="${op.IDQR}" class="lazy-thumb" src="${_THUMB_PH}" style="width:36px;height:36px;object-fit:cover;border-radius:5px;border:1px solid var(--border);cursor:pointer;display:block" onclick="event.stopPropagation();_lpImgClick('${op.IDQR}')" title="Ver imagen / subir">`
+          : `<div style="width:36px;height:36px;border-radius:5px;background:var(--card2);border:1px dashed var(--border);display:flex;align-items:center;justify-content:center;font-size:15px;cursor:pointer" onclick="event.stopPropagation();qaSubirImagen('${op.IDQR||op.OP}')" title="Subir imagen">📷➕</div>`);
+      return `<tr onclick="detailOP('${op.IDQR||op.OP}')">
+        <td>${qaBar(op.IDQR,'sm')}</td>
+        <td style="width:44px;padding:6px 8px">${imgCell}</td>
+        <td style="text-align:center">
+          <div style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:7px;background:${lvl.color};color:#fff;font-size:11px;font-weight:900">#${idx+1}</div>
+        </td>
+        <td class="row-proc">OP-${op.OP||'—'}<span style="color:var(--muted);font-weight:400;font-size:11px"> · ${op.ITEM||'—'}</span></td>
+        <td style="max-width:150px">${op.CLIENTE||'—'}</td>
+        <td style="max-width:200px">${op.DESCRIPCION||'—'}</td>
+        <td>${op.DISEÑADOR||'—'}</td>
+        <td class="td-num" style="color:${lvl.color};font-weight:900;font-family:var(--mono)">${score}</td>
+        <td><span style="font-size:9px;font-weight:700;color:${lvl.color};text-transform:uppercase;background:${lvl.bg};padding:2px 6px;border-radius:5px;border:1px solid ${lvl.border}">${lvl.label}</span></td>
+        <td class="td-num">
+          <div style="display:flex;align-items:center;gap:6px">
+            <div style="width:50px;height:5px;background:var(--border);border-radius:3px;overflow:hidden">
+              <div style="width:${pct}%;height:100%;background:${pct>=70?'var(--accent)':pct>=40?'var(--gold)':'var(--danger)'}"></div>
+            </div>
+            ${pct}%
+          </div>
+        </td>
+        <td class="td-num">${diasTxt}</td>
+        <td>${fmtDate(op['FECHA PACTADA'])||'—'}</td>
+        <td style="color:var(--gold);font-weight:600">${etapaSig ? `${etapaSig.icon} ${etapaSig.label}` : '✓ Todas OK'}</td>
+        <td style="font-size:10px;color:var(--muted)">${rutas||'—'}</td>
+      </tr>`;
+    }).join('');
+
+    return kpis + `
+    <div class="tbl-wrap">
+      <table class="data-tbl">
+        <thead><tr>
+          <th>Acciones</th>
+          <th style="width:44px"></th>
+          <th style="width:40px">#</th>
+          <th>OP</th>
+          <th>Cliente</th>
+          <th>Descripción</th>
+          <th>Diseñador</th>
+          <th>Score</th>
+          <th>Nivel</th>
+          <th>Avance</th>
+          <th>Días Ent.</th>
+          <th>F. Pactada</th>
+          <th>Próxima Etapa</th>
+          <th>Rutas</th>
+        </tr></thead>
+        <tbody>
+          ${rows || '<tr><td colspan="14" style="text-align:center;padding:20px;color:var(--muted)">Sin resultados</td></tr>'}
+        </tbody>
+      </table>
+    </div>`;
+  }
+
+  // 4. Cards ordenadas por score
+  const cards = scored.map(({op, score}, idx) => {
+    const lvl   = _scoreLevel(score);
+    const pct   = qaPct(op['%AVANCE']);
+    const dias  = Number(op['DÍAS ENTREGA'] ?? '—');
+    const diasTxt = isNaN(dias) ? '—' : dias < 0
+      ? `<span style="color:#dc2626;font-weight:700">${dias}d ⚠️</span>`
+      : `<span style="color:${dias<=5?'#d97706':dias<=15?'#2563eb':'var(--muted)'};font-weight:600">${dias}d</span>`;
+    const imgSrc = op.IMAGEN_B64 || (typeof _imgCache!=='undefined'&&_imgCache.has&&_imgCache.has(String(op.IDQR))
+      ? _imgCache.get(String(op.IDQR)) : '');
+    const etapasOp  = _qaEtapasParaOP(op);
+    const etapaSig  = qaEtapaActual(op);
+    const rutas = [op['RUTA MQ1'],op['RUTA MQ2'],op['RUTA MQ3'],op['RUTA MQ4'],op['RUTA MQ5']]
+      .filter(Boolean).join(' → ');
+
+    // Mini timeline de etapas restantes
+    const miniEtapas = etapasOp.map(et => {
+      const done  = _qaEtapaDone(op, et);
+      const esAct = etapaSig && etapaSig.id === et.id;
+      return `<div title="${et.nombreLargo}" style="
+        width:22px;height:22px;border-radius:50%;font-size:11px;
+        display:flex;align-items:center;justify-content:center;
+        background:${done?'#16a34a':esAct?lvl.color:'var(--border)'};
+        color:${done||esAct?'#fff':'var(--muted)'};
+        border:2px solid ${done?'#16a34a':esAct?lvl.color:'var(--border)'};
+        flex-shrink:0">${done?'✓':et.icon}</div>`;
+    }).join('<div style="width:10px;height:2px;background:var(--border);margin-bottom:10px;flex-shrink:0"></div>');
+
+    return `
+    <div onclick="detailOP('${op.IDQR||op.OP}')" style="
+      background:var(--card);border:1px solid ${lvl.border};border-radius:16px;
+      padding:0;overflow:hidden;cursor:pointer;transition:transform .13s,box-shadow .13s;
+      box-shadow:0 2px 8px rgba(0,0,0,.06)"
+      onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 6px 20px rgba(0,0,0,.12)'"
+      onmouseout="this.style.transform='';this.style.boxShadow='0 2px 8px rgba(0,0,0,.06)'">
+
+      <!-- Header de la card con score -->
+      <div style="background:${lvl.bg};border-bottom:1px solid ${lvl.border};
+        padding:10px 12px;display:flex;align-items:center;gap:8px">
+        <!-- Ranking -->
+        <div style="width:28px;height:28px;border-radius:8px;background:${lvl.color};
+          display:flex;align-items:center;justify-content:center;
+          font-size:12px;font-weight:900;color:#fff;flex-shrink:0">#${idx+1}</div>
+        <!-- Info OP -->
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-weight:800;color:var(--text)">
+            OP-${op.OP||'—'} · Item ${op.ITEM||'—'}
+            ${bTipo(op.TIPO)}
+          </div>
+          <div style="font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${op.CLIENTE||'—'} · ${op.DESCRIPCION||'—'}</div>
+        </div>
+        <!-- Score badge -->
+        <div style="flex-shrink:0;text-align:center">
+          <div style="font-size:20px;font-weight:900;color:${lvl.color};font-family:var(--mono);line-height:1">${score}</div>
+          <div style="font-size:8px;font-weight:700;color:${lvl.color};text-transform:uppercase;letter-spacing:.5px">${lvl.label}</div>
+        </div>
+      </div>
+
+      <!-- Cuerpo -->
+      <div style="padding:10px 12px;display:flex;gap:10px;align-items:flex-start">
+        <!-- Imagen -->
+        ${imgSrc
+          ? `<img src="${imgSrc}" style="width:52px;height:52px;object-fit:cover;border-radius:8px;border:1px solid var(--border);flex-shrink:0;cursor:pointer" onclick="event.stopPropagation();_lpImgClick('${op.IDQR}')" title="Ver imagen completa">`
+          : (op.IDQR
+            ? `<img data-src="${op.IDQR}" class="lazy-thumb" src="${_THUMB_PH}" style="width:52px;height:52px;object-fit:cover;border-radius:8px;border:1px solid var(--border);flex-shrink:0;cursor:pointer" onclick="event.stopPropagation();_lpImgClick('${op.IDQR}')" title="Ver imagen / subir">`
+            : `<div style="width:52px;height:52px;border-radius:8px;background:var(--card2);border:1px dashed var(--border);
+                display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;cursor:pointer" onclick="event.stopPropagation();qaSubirImagen('${op.IDQR||op.OP}')" title="Subir imagen">📷➕</div>`)}
+
+        <!-- Datos principales -->
+        <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">
+          <!-- Fila diseñador + días -->
+          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+            ${op.DISEÑADOR?`<span style="font-size:10px;background:var(--card2);padding:2px 7px;border-radius:6px;font-weight:600">🎨 ${op.DISEÑADOR}</span>`:''}
+            <span style="font-size:10px">⏰ ${diasTxt}</span>
+            <span style="font-size:10px;color:var(--muted)">${fmtDate(op['FECHA PACTADA'])||''}</span>
+          </div>
+          <!-- Avance -->
+          <div style="display:flex;align-items:center;gap:6px">
+            <div style="flex:1;height:5px;background:var(--border);border-radius:3px;overflow:hidden">
+              <div style="width:${pct}%;height:100%;background:${pct>=70?'#16a34a':pct>=40?'#d97706':'#2563eb'};border-radius:3px;transition:width .5s"></div>
+            </div>
+            <span style="font-size:10px;font-family:var(--mono);font-weight:700;color:var(--muted)">${pct}%</span>
+          </div>
+          <!-- Ruta de máquinas -->
+          ${rutas?`<div style="font-size:9.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">🏭 ${rutas}</div>`:''}
+        </div>
+      </div>
+
+      <!-- Etapas pendientes -->
+      <div style="padding:8px 12px 10px;border-top:1px solid var(--border);display:flex;align-items:center;gap:4px;overflow-x:auto">
+        ${miniEtapas}
+        ${etapaSig
+          ? `<div style="margin-left:auto;font-size:10px;font-weight:700;
+              color:${lvl.color};white-space:nowrap;flex-shrink:0;
+              background:${lvl.bg};padding:2px 8px;border-radius:6px;border:1px solid ${lvl.border}">
+              → ${etapaSig.icon} ${etapaSig.label}
+             </div>`
+          : `<div style="margin-left:auto;font-size:10px;font-weight:700;color:#16a34a;
+              background:#f0fdf4;padding:2px 8px;border-radius:6px;border:1px solid #bbf7d0">
+              ✓ Todas las etapas OK
+             </div>`}
+      </div>
+
+      <!-- Acciones rápidas -->
+      <div onclick="event.stopPropagation()" style="padding:6px 10px 8px;border-top:1px solid var(--border);
+        background:var(--card2);display:flex;gap:6px">
+        ${qaBar(op.IDQR,'sm')}
+      </div>
+    </div>`;
+  }).join('');
+
+  return kpis + `
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:10px;padding:12px">
+    ${cards}
+  </div>`;
 }
 
 async function produccion(){
@@ -4527,7 +4843,22 @@ async function produccion(){
     if(!all.length){setContent(empty('Sin órdenes de producción'));return;}
 
     const sorted = sortData('produccion', data);
-    const isTable = getView('produccion') === 'table';
+    const _viewProd = getView('produccion');
+    const isTable = _viewProd === 'table';
+    const isListaProd = _viewProd === 'lista-prod';
+
+    if (isListaProd) {
+      const lpSubBtns = `<div style="display:flex;align-items:center;gap:8px;padding:8px 12px 4px;border-bottom:1px solid var(--border);background:var(--surface)">
+        <div class="view-toggle" style="display:flex;gap:3px">
+          <button class="vt-btn ${_LISTA_PROD_SUBVIEW==='cards'?'active':''}" onclick="_toggleListaProdSubView()" title="Vista tarjetas" style="width:34px;height:34px;font-size:16px">☰</button>
+          <button class="vt-btn ${_LISTA_PROD_SUBVIEW==='table'?'active':''}" onclick="_toggleListaProdSubView()" title="Vista tabla" style="width:34px;height:34px;font-size:16px">⊞</button>
+        </div>
+      </div>`;
+      setContent(moduleBanner('🏗️','Listo para Producción','OPs con Diseño ✓ · sin terminar · compras OK — ordenadas por Score','',
+        'linear-gradient(135deg,#065f46,#059669)')+fb + viewToggleBtns('produccion') + lpSubBtns + _renderListaProd(data, _LISTA_PROD_SUBVIEW));
+      _initLazyThumbs();
+      return;
+    }
 
     if (isTable) {
       setContent(moduleBanner('🏭','Control Producción','Seguimiento de órdenes de producción',rangoSelector('produccion'),'linear-gradient(135deg,#7c3aed,#a78bfa)')+fb + viewToggleBtns('produccion') + `
@@ -6181,7 +6512,7 @@ async function _qaFmtSave(imprimir=false){
 function _qaFmtBuildPDFHtml(op, qa){
   const h        = qa.header||{};
   const editable = !!qa.editable;
-  const numPiezas= qa.numPiezas || QA_FMT_MAX_PZ;
+  const numPiezas= Math.min(Math.max(parseInt(qa.numPiezas)||10, 1), 10);
   const r        = qa.resultado||{};
   const mq       = h.mq||[];
 
@@ -6196,242 +6527,252 @@ function _qaFmtBuildPDFHtml(op, qa){
   }
   function esc(v){ return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
-  /* ── QR: URL de api.qrserver con el IDQR ── */
   const qrUrl = op.IDQR
     ? `https://api.qrserver.com/v1/create-qr-code/?size=90x90&data=${encodeURIComponent(API_ARCH+'?idqr='+String(op.IDQR))}&format=png`
     : '';
-
-  /* ── Imagen de la OP ── */
   const imgSrc = op.IMAGEN_B64
-    || (typeof _imgCache!=='undefined' && _imgCache && _imgCache.has && _imgCache.has(String(op.IDQR))
+    || (typeof _imgCache!=='undefined'&&_imgCache&&_imgCache.has&&_imgCache.has(String(op.IDQR))
         ? _imgCache.get(String(op.IDQR)) : '');
-
-  /* ── Logo ── */
   const LOGO = typeof LOGO_B64_PNG !== 'undefined' ? LOGO_B64_PNG : '';
 
   const css = `
-    @page{ size:letter landscape; margin:4mm }
-    html,body{ margin:0; padding:0; width:100%; background:#fff }
-    body{ padding:2px; font-family:Arial,Helvetica,sans-serif; font-size:6.5px; color:#000 }
-    table{ border-collapse:collapse; width:100%; table-layout:fixed }
-    td,th{ border:1px solid #000; overflow:hidden; vertical-align:middle }
+    @page{ size:letter landscape; margin:5mm }
+    html,body{ margin:0;padding:0;background:#fff;width:100% }
+    body{ padding:0; font-family:Arial,Helvetica,sans-serif; font-size:7px; color:#000 }
+    *{ box-sizing:border-box }
+    table{ border-collapse:collapse; width:100% }
+    td,th{ border:1px solid #000; overflow:hidden; padding:0 }
 
-    /* Cabecera: labels fondo gris, texto negro */
-    .lb{ background:#e0e0e0; font-weight:700; font-size:5.5px; padding:1px 2px; white-space:nowrap }
-    .vl{ padding:1px 2px; font-size:6.5px }
-    .vl-b{ padding:1px 2px; font-size:7px; font-weight:700 }
+    /* Cabecera */
+    .lbl{ font-size:5.5px; font-weight:700; color:#333; display:block; padding:1px 2px 0 2px; line-height:1.1 }
+    .val{ font-size:7.5px; font-weight:700; display:block; padding:0px 2px 1px 2px }
+    .val-lg{ font-size:9px; font-weight:900; display:block; padding:0px 2px 1px 2px; text-align:center }
+    .val-sm{ font-size:6.5px; display:block; padding:0px 2px 1px 2px }
+    .cell-pad{ padding:1px 2px }
 
-    /* Encabezado tabla KC */
-    .kch{ background:#ddeeff; font-weight:700; text-align:center; font-size:6px; padding:1.5px 1px; border:1px solid #000 }
+    /* MQ grid */
+    .mq-lbl{ font-size:5.5px; font-weight:700; color:#333; padding:0 2px }
+    .mq-val{ font-size:6px; font-weight:700; padding:0 2px }
 
-    /* Nombre KC: grande, fondo azul claro */
-    .kcn{ background:#ddeeff; font-weight:900; text-align:center; font-size:8px; padding:0; border:1px solid #000 }
-
-    /* Columna Dato: label spec (Medida nominal / Tolerancia / Instrumento) */
-    .kcd{ font-size:6px; padding:1px 2px; background:#f5f5f5; text-align:right; border:1px solid #000 }
-
-    /* Columna Proceso: Medida / Firma / Liberación */
-    .kcp{ font-size:6px; padding:1px 2px; background:#f5f5f5; border:1px solid #000 }
-
-    /* Valor spec KC (Medida, Tolerancia, Instrumento) */
-    .kcv{ font-size:6.5px; padding:1px 3px; border:1px solid #000 }
-
-    /* Celda de pieza */
-    .pzc{ font-size:6.5px; padding:1px; text-align:center; border:1px solid #000 }
+    /* KC tabla */
+    .t-hdr{ font-size:7px; font-weight:700; text-align:center; padding:3px 1px; background:#fff }
+    .kc-nombre{ font-size:11px; font-weight:900; text-align:center; vertical-align:middle }
+    .kc-dato-val{ font-size:9px; font-weight:900; padding:1px 3px; vertical-align:middle }
+    .kc-spec{ font-size:6px; padding:1px 2px; vertical-align:middle }
+    .kc-spec b{ font-weight:700; color:#444 }
+    .kc-proc{ font-size:6.5px; padding:1px 3px; vertical-align:middle }
+    .kc-pz{ font-size:6.5px; padding:1px; text-align:center; vertical-align:middle }
 
     /* Resultado */
-    .rlb{ background:#e0e0e0; font-weight:700; font-size:6px; padding:1px 3px; border:1px solid #000 }
-    .rvl{ font-size:7px; font-weight:700; padding:2px 4px; border:1px solid #000 }
+    .res-bold{ font-size:8px; font-weight:900; padding:4px 8px; vertical-align:middle }
+    .res-lbl{ font-size:6px; font-weight:700; padding:1px 4px; background:#f0f0f0 }
 
     [contenteditable]:hover{ background:#fffbcc }
     [contenteditable]:focus{ background:#fff2b8; outline:1px solid #f59e0b }
   `;
 
-  /* ── MQ defaults (nombres típicos) ── */
-  const MQ_DEF = ['FRESADORA','','','CENTRO MECANIZADO','','','RECTIFICADORA','',''];
+  /* ══════════════════════════════════════════════════
+     CABECERA — tabla de 4 filas con colgroup preciso
+     
+     Columnas (izq → der):
+     [QR 55px] [IMG 78px] [COMERCIAL→CLIENTE zona central] [MQ zona 3x3] [DESC 95px] [LOGO 72px]
+     
+     Zona central: COMERCIAL | COT | OP | CLIENTE (filas 1-3)
+                   DISEÑADOR | ITEM | CANT | MATERIAL
+                   FECHA | TIPO | REV | TRATAMIENTO
+     
+     MQ zona: 3 filas x 3 máquinas (MQ1-3, MQ4-6, MQ7-9)
+  ══════════════════════════════════════════════════ */
 
-  /* ══════════════════════════════════════════════
-     CABECERA — estructura de 4 filas
-     Col 0:  QR (rowspan 4, 52px)
-     Col 1:  Imagen (rowspan 4, 76px)
-     Cols 2-N: datos generales
-     Última col: DESCRIPCION (rowspan 3) + LOGO (rowspan 4)
-  ══════════════════════════════════════════════ */
+  // MQ: tabla 3x3 interna
+  const mqTable = `
+    <table style="width:100%;height:100%;border-collapse:collapse">
+      ${[0,1,2].map(row=>`
+      <tr>
+        ${[0,1,2].map(col=>{
+          const i = row*3+col;
+          return `<td style="border:1px solid #000;padding:1px 2px;width:33.33%">
+            <span style="font-size:5px;font-weight:700;color:#555;display:block;line-height:1">MQ${i+1}</span>
+            <span style="font-size:6px;font-weight:700;display:block;line-height:1.2;word-break:break-word;white-space:normal"${ce('header.mq.'+i)}>${esc(mq[i]||'')}</span>
+          </td>`;
+        }).join('')}
+      </tr>`).join('')}
+    </table>`;
+
   const head = `
-  <table style="margin-bottom:2px">
+  <table style="margin-bottom:0;width:100%;table-layout:fixed">
     <colgroup>
-      <col style="width:52px">
-      <col style="width:76px">
-      <col style="width:48px"><col style="width:52px">
-      <col style="width:26px"><col style="width:34px">
-      <col style="width:22px"><col style="width:34px">
-      <col style="width:44px"><col>
-      <col style="width:110px">
-      <col style="width:70px">
+      <col style="width:55px"><!-- QR -->
+      <col style="width:78px"><!-- IMG -->
+      <col style="width:55px"><!-- COMERCIAL lbl -->
+      <col style="width:52px"><!-- COMERCIAL val -->
+      <col style="width:26px"><!-- COT lbl -->
+      <col style="width:38px"><!-- COT val -->
+      <col style="width:22px"><!-- OP lbl -->
+      <col><!-- OP val / CLIENTE val — flex -->
+      <col style="width:170px"><!-- MQ 3x3 -->
+      <col style="width:88px"><!-- DESC -->
+      <col style="width:74px"><!-- LOGO -->
     </colgroup>
 
-    <tr style="height:18px">
-      <td rowspan="4" style="text-align:center;padding:1px;vertical-align:middle">
+    <!-- FILA 1 -->
+    <tr style="height:20px">
+      <td rowspan="4" style="vertical-align:middle;text-align:center;padding:2px;border:1px solid #000">
         ${qrUrl
-          ? `<img src="${qrUrl}" style="width:50px;height:50px;display:block;margin:0 auto">`
-          : `<div class="lb" style="font-size:6px;padding:4px 2px;text-align:center">CODIGO<br>QR.</div>`}
+          ? `<img src="${qrUrl}" style="width:51px;height:51px;display:block;margin:0 auto"><div style="font-size:4.5px;color:#666;margin-top:1px">CODIGO QR.</div>`
+          : `<span style="font-size:5.5px;font-weight:700;color:#555">CODIGO QR.</span>`}
       </td>
-      <td rowspan="4" style="text-align:center;padding:1px;vertical-align:middle">
+      <td rowspan="4" style="vertical-align:middle;text-align:center;padding:2px;border:1px solid #000">
         ${imgSrc
-          ? `<img src="${imgSrc}" style="width:72px;height:72px;object-fit:contain;display:block;margin:0 auto">`
-          : `<div style="font-size:6px;color:#aaa;text-align:center">Vista<br>Isométrica</div>`}
+          ? `<img src="${imgSrc}" style="width:74px;height:74px;object-fit:contain;display:block;margin:0 auto">`
+          : `<span class="lbl" style="display:block;text-align:center">IMAGEN.</span><div style="font-size:6px;color:#aaa;text-align:center;margin-top:2px">Vista<br>Isométrica</div>`}
       </td>
-      <td class="lb">COMERCIAL.</td>
-      <td class="vl-b"${ce('header.comercial')}>${esc(h.comercial||'')}</td>
-      <td class="lb">COT.</td>
-      <td class="vl"${ce('header.cot')}>${esc(h.cot||'')}</td>
-      <td class="lb">OP.</td>
-      <td class="vl"${ce('header.opNum')}>${esc(h.opNum||h.op||'')}</td>
-      <td class="lb">CLIENTE.</td>
-      <td class="vl-b"${ce('header.cliente')}>${esc(h.cliente||'')}</td>
-      <td rowspan="3" style="text-align:center;padding:4px 2px;background:#f0f0f0;vertical-align:middle">
-        <div style="font-size:5px;font-weight:700;color:#777;letter-spacing:.5px;text-transform:uppercase">DESCRIPCIÓN.</div>
-        <div style="font-size:10px;font-weight:900;color:#111;margin-top:3px;line-height:1.2">FORMATO<br>PLANO<br>2026</div>
+      <td style="border:1px solid #000">
+        <span class="lbl">COMERCIAL.</span><span class="val"${ce('header.comercial')}>${esc(h.comercial||'')}</span>
       </td>
-      <td rowspan="4" style="text-align:center;padding:1px;vertical-align:middle;background:#ddeeff">
-        ${LOGO ? `<img src="${LOGO}" alt="GRUPOWEDM" style="height:60px;max-width:66px;object-fit:contain">` : '<b style="font-size:8px">GRUPO WEDM</b>'}
+      <td colspan="5" style="border:1px solid #000">
+        <span class="lbl" style="display:inline">COT.</span>
+        <span class="val" style="display:inline;margin-right:8px"${ce('header.cot')}>${esc(h.cot||'')}</span>
+        <span class="lbl" style="display:inline">OP.</span>
+        <span class="val" style="display:inline;margin-right:8px"${ce('header.opNum')}>${esc(h.opNum||h.op||'')}</span>
+        <span class="lbl" style="display:inline">CLIENTE.</span>
+        <span class="val"${ce('header.cliente')}>${esc(h.cliente||'')}</span>
       </td>
-    </tr>
-
-    <tr style="height:15px">
-      <td class="lb">DISEÑADOR.</td>
-      <td class="vl"${ce('header.disenador')}>${esc(h.disenador||'')}</td>
-      <td class="lb">ÍTEM.</td>
-      <td class="vl-b" style="text-align:center"${ce('header.item')}>${esc(h.item||'')}</td>
-      <td class="lb">CANT.</td>
-      <td class="vl-b" style="text-align:center"${ce('header.cant')}>${esc(h.cant||'')}</td>
-      <td class="lb">MATERIAL.</td>
-      <td class="vl"${ce('header.material')}>${esc(h.material||'')}</td>
-    </tr>
-
-    <tr style="height:15px">
-      <td class="lb">FECHA ENTREGA.</td>
-      <td class="vl"${ce('header.fechaEntrega')}>${esc(h.fechaEntrega||'')}</td>
-      <td class="lb">TIPO.</td>
-      <td class="vl-b" style="text-align:center"${ce('header.tipo')}>${esc(h.tipo||'')}</td>
-      <td class="lb">REV.</td>
-      <td class="vl-b" style="text-align:center"${ce('header.rev')}>${esc(h.rev||'')}</td>
-      <td class="lb">TRATAMIENTO.</td>
-      <td class="vl"${ce('header.tratamiento')}>${esc(h.tratamiento||'')}</td>
-    </tr>
-
-    <!-- Fila MQ: 9 máquinas en una fila, ocupa todo el ancho menos QR, IMG y LOGO -->
-    <tr style="height:13px">
-      <td colspan="8" style="padding:0">
-        <table style="border:0;border-collapse:collapse;width:100%;height:13px">
-          <tr>
-            ${Array.from({length:9},(_,i)=>`
-              <td class="lb" style="border:1px solid #000;padding:1px 2px;width:${i<3?'28px':'auto'}">MQ${i+1}</td>
-              <td style="border:1px solid #000;font-size:6px;padding:1px 2px"${ce('header.mq.'+i)}>${esc(mq[i]||MQ_DEF[i]||'')}</td>
-            `).join('')}
-          </tr>
+      <td rowspan="3" style="border:1px solid #000;padding:1px;vertical-align:middle">
+        <table style="width:100%;height:100%;border-collapse:collapse">
+          ${[0,1,2].map(row=>`<tr>${[0,1,2].map(col=>{const i=row*3+col;return `<td style="border:1px solid #000;padding:1px 2px;width:33.33%"><span style="font-size:5px;font-weight:700;color:#555;display:block;line-height:1">MQ${i+1}</span><span style="font-size:6px;font-weight:700;display:block;line-height:1.2;white-space:normal;word-break:break-word"${ce('header.mq.'+i)}>${esc(mq[i]||'')}</span></td>`;}).join('')}</tr>`).join('')}
         </table>
       </td>
-      <td colspan="1" style="padding:0;border:1px solid #000"></td>
+      <td rowspan="3" style="border:1px solid #000;vertical-align:middle;text-align:center;padding:4px 2px;background:#fafafa">
+        <div style="font-size:5.5px;font-weight:700;color:#777;letter-spacing:.4px">DESCRIPCIÓN.</div>
+        <div style="font-size:10.5px;font-weight:900;color:#111;line-height:1.25;margin-top:3px">FORMATO<br>PLANO<br>2026</div>
+      </td>
+      <td rowspan="4" style="border:1px solid #000;vertical-align:middle;text-align:center;padding:2px">
+        ${LOGO ? `<img src="${LOGO}" alt="GRUPOWEDM" style="height:58px;max-width:70px;object-fit:contain">` : '<b style="font-size:8px">GRUPO WEDM</b>'}
+      </td>
+    </tr>
+
+    <!-- FILA 2 -->
+    <tr style="height:18px">
+      <td style="border:1px solid #000">
+        <span class="lbl">DISEÑADOR.</span><span class="val-sm"${ce('header.disenador')}>${esc(h.disenador||'')}</span>
+      </td>
+      <td colspan="5" style="border:1px solid #000">
+        <span class="lbl" style="display:inline">ITEM.</span>
+        <span class="val" style="display:inline;font-size:9px;margin-right:10px"${ce('header.item')}>${esc(h.item||'')}</span>
+        <span class="lbl" style="display:inline">CANT.</span>
+        <span class="val" style="display:inline;font-size:9px;margin-right:10px"${ce('header.cant')}>${esc(h.cant||'')}</span>
+        <span class="lbl" style="display:inline">MATERIAL.</span>
+        <span class="val-sm"${ce('header.material')}>${esc(h.material||'')}</span>
+      </td>
+    </tr>
+
+    <!-- FILA 3 -->
+    <tr style="height:18px">
+      <td style="border:1px solid #000">
+        <span class="lbl">FECHA ENTREGA.</span><span class="val-sm"${ce('header.fechaEntrega')}>${esc(h.fechaEntrega||'')}</span>
+      </td>
+      <td colspan="5" style="border:1px solid #000">
+        <span class="lbl" style="display:inline">TIPO.</span>
+        <span class="val" style="display:inline;font-size:9px;margin-right:10px"${ce('header.tipo')}>${esc(h.tipo||'')}</span>
+        <span class="lbl" style="display:inline">REV.</span>
+        <span class="val" style="display:inline;font-size:9px;margin-right:10px"${ce('header.rev')}>${esc(h.rev||'')}</span>
+        <span class="lbl" style="display:inline">TRATAMIENTO.</span>
+        <span class="val-sm"${ce('header.tratamiento')}>${esc(h.tratamiento||'')}</span>
+      </td>
+    </tr>
+
+    <!-- FILA 4: sin contenido extra (MQ ya ocupa rowspan=3, logo rowspan=4) -->
+    <tr style="height:1px">
+      <td colspan="6" style="border:1px solid #000;padding:0"></td>
     </tr>
   </table>`;
 
-  /* ══════════════════════════════════════════════
-     TABLA KC
-     Columnas: Medida | Dato | Proceso | Pieza1..N
-     - "Medida" = nombre KC (KC1..KC10), rowspan 3
-     - "Dato"   = spec label (Medida nominal / Tolerancia / Instrumento) en cada sub-fila
-     - "Proceso"= spec valor en sub-fila 1; Medida/Firma/Liberación en col "Proceso"
-     
-     Estructura exacta del formato papel (imagen 2):
-       KC1  | 112      | Medida     | □ | □ | …
-            | +/-0.05  | Firma      | □ | □ | …
-            | Micrómetro | Liberación| □ | □ | …
-  ══════════════════════════════════════════════ */
+  /* ══════════════════════════════════════════════════
+     TABLA KC — igual que el PDF
+     Col 1: Medida (nombre KC, rowspan 3)
+     Col 2: Dato  (sub1: valor medida grande; sub2: "Tolerancia" + val; sub3: "Instrumento" + val)
+     Col 3: Proceso (Medida / Firma / Liberación)
+     Col 4..13: Pieza 1..10
+  ══════════════════════════════════════════════════ */
+  const pzW = Math.max(34, Math.floor((710-38-60-52)/numPiezas));
 
-  // Ancho de columnas de pieza: distribuir espacio restante
-  // Medida=38, Dato=55, Proceso=52 → fijo 145px; resto para piezas
-  const pzW = Math.max(35, Math.floor((680 - 145) / numPiezas));
-
-  const pzH = Array.from({length:numPiezas},(_,p)=>`<th class="kch" style="width:${pzW}px">Pieza ${p+1}</th>`).join('');
+  const pzH = Array.from({length:numPiezas},(_,p)=>
+    `<th class="t-hdr" style="width:${pzW}px">Pieza ${p+1}</th>`).join('');
 
   const kcRows = (qa.kc||[]).map((k,i)=>{
-    const pCell = (j,key)=>{
-      const pz  = (k.piezas||[])[j]||{};
-      const val = esc(pz[key]||'');
-      if(editable) return `<td class="pzc" contenteditable="true" data-qapath="kc.${i}.piezas.${j}.${key}" oninput="parent._qaFmtPreviewInput(this)" style="outline:none">${val}</td>`;
-      return `<td class="pzc">${val}</td>`;
+    const pz = (j,key)=>{
+      const v = esc(((k.piezas||[])[j]||{})[key]||'');
+      if(editable) return `<td class="kc-pz" contenteditable="true" data-qapath="kc.${i}.piezas.${j}.${key}" oninput="parent._qaFmtPreviewInput(this)" style="outline:none">${v}</td>`;
+      return `<td class="kc-pz">${v}</td>`;
     };
-    const dato  = Array.from({length:numPiezas},(_,j)=>pCell(j,'dato')).join('');
-    const firma = Array.from({length:numPiezas},(_,j)=>pCell(j,'firma')).join('');
-    const lib   = Array.from({length:numPiezas},(_,j)=>pCell(j,'liberacion')).join('');
-
+    const r1 = Array.from({length:numPiezas},(_,j)=>pz(j,'dato')).join('');
+    const r2 = Array.from({length:numPiezas},(_,j)=>pz(j,'firma')).join('');
+    const r3 = Array.from({length:numPiezas},(_,j)=>pz(j,'liberacion')).join('');
     return `
-    <tr style="height:11px">
-      <td rowspan="3" class="kcn"${ce('kc.'+i+'.nombre')}>${esc(k.nombre||'KC'+(i+1))}</td>
-      <td class="kcd">Medida nominal</td>
-      <td class="kcv"${ce('kc.'+i+'.medida')}>${esc(k.medida||'')}</td>
-      <td class="kcp">Medida</td>
-      ${dato}
+    <tr>
+      <td rowspan="3" class="kc-nombre"${ce('kc.'+i+'.nombre')}>${esc(k.nombre||'KC'+(i+1))}</td>
+      <td class="kc-dato-val"${ce('kc.'+i+'.medida')}>${esc(k.medida||'')}</td>
+      <td class="kc-proc">Medida</td>
+      ${r1}
     </tr>
-    <tr style="height:9px">
-      <td class="kcd">Tolerancia</td>
-      <td class="kcv"${ce('kc.'+i+'.tolerancia')}>${esc(k.tolerancia||'')}</td>
-      <td class="kcp">Firma</td>
-      ${firma}
+    <tr>
+      <td class="kc-spec"><b>Tolerancia</b>&nbsp;<span${ce('kc.'+i+'.tolerancia')}>${esc(k.tolerancia||'')}</span></td>
+      <td class="kc-proc">Firma</td>
+      ${r2}
     </tr>
-    <tr style="height:9px">
-      <td class="kcd">Instrumento</td>
-      <td class="kcv"${ce('kc.'+i+'.instrumento')}>${esc(k.instrumento||'')}</td>
-      <td class="kcp">Liberación</td>
-      ${lib}
+    <tr>
+      <td class="kc-spec"><b>Instrumento</b>&nbsp;<span${ce('kc.'+i+'.instrumento')}>${esc(k.instrumento||'')}</span></td>
+      <td class="kc-proc">Liberación</td>
+      ${r3}
     </tr>`;
   }).join('');
 
   const kcTable = `
-  <table style="margin-bottom:2px">
+  <table style="table-layout:fixed">
     <colgroup>
       <col style="width:38px">
       <col style="width:60px">
       <col style="width:52px">
-      <col style="width:48px">
       ${Array.from({length:numPiezas},()=>`<col style="width:${pzW}px">`).join('')}
     </colgroup>
     <thead>
-      <tr style="height:13px">
-        <th class="kch">Medida</th>
-        <th class="kch">Dato</th>
-        <th class="kch">Proceso</th>
-        <th class="kch">Proceso</th>
+      <tr>
+        <th class="t-hdr">Medida</th>
+        <th class="t-hdr">Dato</th>
+        <th class="t-hdr">Proceso</th>
         ${pzH}
       </tr>
     </thead>
     <tbody>${kcRows}</tbody>
   </table>`;
 
-  /* ── RESULTADO ── */
+  /* ══════════════════════════════════════════════════
+     RESULTADO
+  ══════════════════════════════════════════════════ */
   const resultHTML = `
-  <table>
+  <table style="margin-top:0;table-layout:fixed">
     <colgroup>
-      <col style="width:65px"><col style="width:8px">
-      <col style="width:65px">
-      <col style="width:60px"><col>
-      <col style="width:75px"><col style="width:100px">
+      <col style="width:80px"><col style="width:10px"><col style="width:90px">
+      <col><col style="width:100px">
     </colgroup>
-    <tr style="height:14px">
-      <td class="rvl">${chk('resultado.conforme',   r.conforme,   'CONFORME')}</td>
-      <td style="border:0"></td>
-      <td class="rvl">${chk('resultado.reproceso',  r.reproceso,  'REPROCESO')}</td>
-      <td class="rlb">OBSERVACIONES:</td>
-      <td${ce('observaciones')} style="padding:1px 3px;font-size:6.5px">${esc(qa.observaciones||'')}</td>
-      <td class="rlb" style="text-align:center">FIRMA INSPECTOR</td>
-      <td${ce('firmaInspector')} style="padding:1px 3px;font-size:6.5px">${esc(qa.firmaInspector||'')}</td>
+    <tr style="height:20px">
+      <td class="res-bold">${chk('resultado.conforme',r.conforme,'CONFORME')}</td>
+      <td style="border:0;padding:0"></td>
+      <td class="res-bold">${chk('resultado.reproceso',r.reproceso,'REPROCESO')}</td>
+      <td rowspan="2" style="vertical-align:top;padding:2px 4px">
+        <span class="res-lbl">OBSERVACIONES:</span>
+        <div${ce('observaciones')} style="min-height:18px;font-size:7px;padding:1px"></div>
+      </td>
+      <td rowspan="2" style="vertical-align:bottom;text-align:center;padding:2px 4px">
+        <span class="res-lbl" style="display:block;margin-bottom:14px">FIRMA INSPECTOR</span>
+        <div${ce('firmaInspector')} style="border-top:1px solid #000;padding-top:2px;font-size:7px"></div>
+      </td>
     </tr>
-    <tr style="height:14px">
-      <td class="rvl">${chk('resultado.noConforme',r.noConforme,'NO CONFORME')}</td>
-      <td style="border:0"></td>
-      <td class="rvl">${chk('resultado.derogado',  r.derogado,  'DEROGADO')}</td>
-      <td colspan="4" style="border:1px solid #000"></td>
+    <tr style="height:20px">
+      <td class="res-bold">${chk('resultado.noConforme',r.noConforme,'NO CONFORME')}</td>
+      <td style="border:0;padding:0"></td>
+      <td class="res-bold">${chk('resultado.derogado',r.derogado,'DEROGADO')}</td>
     </tr>
   </table>`;
 
@@ -6450,7 +6791,7 @@ function _qaFmtBuildPDFHtml(op, qa){
 async function qaVerComprasOP(opId) {
   const op = qaFindOP(opId);
   if(!op){ toast('OP no encontrada','error'); return; }
-  try { _comprasData = await POST('getCompras',{}); } catch(e) { _comprasData = _comprasData||[]; }
+  try { _comprasData = await POST('getCompras',{rango:'todo'}); } catch(e) { _comprasData = _comprasData||[]; }
   const pedidos = (_comprasData||[]).filter(c=>{
     const cIdqr = String(c.IDQR||'').replace(/\.0+$/,'').trim();
     const cNoc  = String(c.N_OC||'');
@@ -6880,6 +7221,53 @@ async function detailOP(id){
       })()}
     </div>
     <div class="dp-section">
+      <h4>📋 Formato QA — Kanban</h4>
+      ${(() => {
+        const safeId = String(op.IDQR||op.OP||'').replace(/'/g,"\'");
+        const tieneQA = op.QA_JSON && op.QA_JSON !== '{}' && op.QA_JSON !== '';
+        let qaInfo = '';
+        if(tieneQA){
+          try{
+            const qd = JSON.parse(op.QA_JSON||'{}');
+            const kcsConDatos = (qd.kc||[]).filter(k=>k.medida||k.tolerancia||k.instrumento).length;
+            const res = qd.resultado||{};
+            const resLabel = res.conforme?'✅ CONFORME':res.noConforme?'❌ NO CONFORME':res.reproceso?'🔁 REPROCESO':res.derogado?'⚠️ DEROGADO':'Sin resultado';
+            qaInfo = `${kcsConDatos} KC definida${kcsConDatos!==1?'s':''} · ${resLabel}`;
+          }catch(e){}
+        }
+        if(tieneQA && qaInfo) {
+          return `
+          <div style="background:var(--card2);border:1px solid var(--border);border-radius:10px;overflow:hidden">
+            <div style="padding:12px 14px;display:flex;align-items:center;gap:10px">
+              <div style="flex:1;min-width:0">
+                <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:3px">Formato guardado</div>
+                <div style="font-size:11px;color:var(--muted)">${qaInfo}</div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:5px;flex-shrink:0">
+                <button class="btn btn-primary btn-sm" onclick="(async()=>{
+                  const st=window._QAFMT;
+                  const op2=(DB.produccion||[]).find(x=>String(x.IDQR)==='${safeId}')||(DB.produccion||[]).find(x=>String(x.OP)==='${safeId}');
+                  if(!op2){toast('OP no encontrada','error');return;}
+                  let qd2={};try{qd2=JSON.parse(op2.QA_JSON||'{}')}catch(e){}
+                  const html=_qaFmtBuildPDFHtml(op2,{...qd2,editable:false});
+                  _abrirDocParaImprimir(html,'FORMATO_QA_OP-'+op2.OP+'_Item'+(op2.ITEM||1)+'.pdf');
+                })()">🖨️ Imprimir</button>
+                <button class="btn btn-ghost btn-sm" onclick="qaFormatoQA('${safeId}')">✏️ Editar</button>
+              </div>
+            </div>
+          </div>`;
+        } else {
+          return `
+          <div style="border:2px dashed var(--border);border-radius:10px;padding:18px;text-align:center;cursor:pointer;background:var(--card2)"
+               onclick="qaFormatoQA('${safeId}')">
+            <div style="font-size:26px;margin-bottom:6px;opacity:.4">📋</div>
+            <div style="font-size:13px;font-weight:600;color:var(--muted)">Sin formato QA configurado</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px">Clic para definir características clave e inspección</div>
+          </div>`;
+        }
+      })()}
+    </div>
+    <div class="dp-section">
       <h4>Estado de Producción</h4>
       ${dr('Estado',bEst(op.ESTADO))}
       ${dr('Avance',pct+'% '+prog(pct))} ${dr('Días Entrega',diasTag(op['DÍAS ENTREGA']))}
@@ -6928,7 +7316,7 @@ async function detailOP(id){
   if(dpBody) {
     dpBody.insertAdjacentHTML('beforeend', dpUploadSection(id));
     // Recargar compras en background y actualizar sección
-    POST('getCompras',{}).then(d=>{
+    POST('getCompras',{rango:'todo'}).then(d=>{
       _comprasData = d;
       cacheSet('compras', d);
       const dpBody2 = document.getElementById('dp-body');
@@ -8948,10 +9336,30 @@ const _SORT = {}; // { col, dir } por módulo
 function getView(mod) { return _VIEW[mod] || 'table'; }
 
 function toggleView(mod) {
-  _VIEW[mod] = getView(mod) === 'table' ? 'cards' : 'table';
+  // Si está en lista-prod vuelve a tabla; si está en tabla va a cards; si está en cards va a tabla
+  const curr = getView(mod);
+  _VIEW[mod] = curr === 'lista-prod' ? 'table' : curr === 'table' ? 'cards' : 'table';
   const mods = { cotizaciones, produccion, clientes, remisiones, materiales, servicios, procesos, items,
                  'diseño': () => renderDiseno(_disTab), compras };
   if (mods[mod]) mods[mod]();
+}
+function _setViewListaProd(){
+  _VIEW['produccion'] = 'lista-prod';
+  produccion();
+}
+let _LISTA_PROD_SUBVIEW = 'cards'; // 'cards' | 'table' — solo aplica dentro de lista-prod
+function _toggleListaProdSubView(){
+  _LISTA_PROD_SUBVIEW = _LISTA_PROD_SUBVIEW === 'table' ? 'cards' : 'table';
+  produccion();
+}
+// Clic en la miniatura de "Listo para Producción": si hay imagen la abre en grande,
+// si no hay, abre directamente el modal de subir imagen para esa OP.
+function _lpImgClick(idqr){
+  if(!idqr) return;
+  const op = (DB.produccion||[]).find(o=>String(o.IDQR)===String(idqr));
+  const url = (op && op.IMAGEN_B64) || (typeof _imgCache!=='undefined' && _imgCache.has && _imgCache.has(String(idqr)) ? _imgCache.get(String(idqr)) : '');
+  if(url) window.open(url,'_blank');
+  else qaSubirImagen(idqr);
 }
 
 function sortTable(mod, col) {
@@ -8996,12 +9404,42 @@ function thSort(mod, col, label) {
 
 function viewToggleBtns(mod) {
   const v = getView(mod);
-  return `<div style="display:flex;align-items:center;gap:8px;padding:8px 12px 4px;border-bottom:1px solid var(--border);background:var(--surface)">
-    <div class="view-toggle" style="display:flex;gap:3px">
+  const isProduccion = mod === 'produccion';
+
+  // Chips de filtro rápido por estado — solo para producción
+  const estadoActivo = (_F['produccion'] || {})['ESTADO'] || '';
+  const quickChips = isProduccion ? `
+    <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-left:6px">
+      ${[
+        { label:'En Proceso',        val:'EN PROCESO',        emoji:'🔵' },
+        { label:'Terminado',         val:'TERMINADO',         emoji:'✅' },
+        { label:'Pend. MP',          val:'PENDIENTE MP',      emoji:'📦' },
+        { label:'Pend. Diseño',      val:'PENDIENTE DISEÑO',  emoji:'🎨' },
+        { label:'Pend. Despacho',    val:'PENDIENTE DESPACHO',emoji:'🚚' },
+        { label:'T. Externo',        val:'TRABAJO EXTERNO',   emoji:'🏭' },
+      ].map(c => {
+        const active = estadoActivo === c.val;
+        return `<button onclick="applyFilter('produccion','ESTADO','${active ? 'TODOS' : c.val}')"
+          style="
+            display:flex;align-items:center;gap:4px;
+            padding:4px 10px;border-radius:20px;border:1.5px solid ${active ? 'var(--accent)' : 'var(--border)'};
+            background:${active ? 'rgba(37,99,235,.1)' : 'var(--surface)'};
+            color:${active ? 'var(--accent)' : 'var(--muted)'};
+            font-size:11px;font-weight:${active ? '700' : '600'};
+            cursor:pointer;white-space:nowrap;
+            transition:all .15s;-webkit-tap-highlight-color:transparent;
+          ">${c.emoji} ${c.label}</button>`;
+      }).join('')}
+    </div>` : '';
+
+  return `<div style="display:flex;align-items:center;gap:4px;padding:8px 12px 4px;border-bottom:1px solid var(--border);background:var(--surface);flex-wrap:wrap">
+    <div class="view-toggle" style="display:flex;gap:3px;flex-shrink:0">
       <button class="vt-btn ${v==='table'?'active':''}" onclick="toggleView('${mod}')" title="Vista tabla" style="width:34px;height:34px;font-size:16px">⊞</button>
       <button class="vt-btn ${v==='cards'?'active':''}" onclick="toggleView('${mod}')" title="Vista tarjetas" style="width:34px;height:34px;font-size:16px">☰</button>
+      ${isProduccion ? `<button class="vt-btn ${v==='lista-prod'?'active':''}" onclick="_setViewListaProd()" title="Listo para producción" style="width:34px;height:34px;font-size:15px">🏗️</button>` : ''}
     </div>
-    <span class="filter-count" id="filter-count-${mod}" style="font-size:11px;color:var(--muted);margin-left:2px"></span>
+    ${quickChips}
+    <span class="filter-count" id="filter-count-${mod}" style="font-size:11px;color:var(--muted);margin-left:auto"></span>
   </div>`;
 }
 
@@ -10578,7 +11016,6 @@ function renderDiseno(tab) {
   });
 
   setContent(`
-  ${quickNavBar('diseño')}
   <!-- TABS -->
   <div style="display:flex;border-bottom:1px solid var(--border);margin:-14px -14px 16px;background:var(--surface)">
     <div class="wiz-tab ${tab===0?'active':''}" style="font-size:13px;padding:12px 18px" onclick="renderDiseno(0)">
@@ -13571,14 +14008,14 @@ async function compras() {
       const cached = cacheGet('compras');
       if(cached) { _comprasData = cached; _renderCompras(); }
       // Siempre revalidar en background
-      POST('getCompras', {}).then(d => {
+      POST('getCompras', {rango:RANGO_STATE.compras}).then(d => {
         _comprasData = d;
         cacheSet('compras', d);
         _renderCompras();
       }).catch(()=>{});
       if(cached) return;
       // Sin caché — esperar respuesta
-      _comprasData = await POST('getCompras', {});
+      _comprasData = await POST('getCompras', {rango:RANGO_STATE.compras});
       cacheSet('compras', _comprasData);
     }
     _renderCompras();
@@ -13772,7 +14209,7 @@ function _renderCompras() {
   }
 
   setContent(
-    moduleBanner('🛒','Compras / OC','Órdenes de compra y pedidos de material','','linear-gradient(135deg,#b45309,#f59e0b)') +
+    moduleBanner('🛒','Compras / OC','Órdenes de compra y pedidos de material',rangoSelector('compras'),'linear-gradient(135deg,#b45309,#f59e0b)') +
     `<div style="display:flex;gap:8px;margin-bottom:14px">
       <button class="btn btn-primary" style="flex:1" onclick="_nuevaOCLibre()">➕ Nueva OC</button>
       <button class="btn btn-ghost" onclick="_reloadCompras()">🔄</button>
@@ -13792,6 +14229,7 @@ function _comprasFiltrarEstado(estado) {
 
 async function _reloadCompras() {
   _comprasData = null;
+  DB.compras = null;
   await compras();
 }
 
@@ -13801,7 +14239,7 @@ async function _verDetalleOC(noc) {
   // Si no está en caché, refrescar datos antes de fallar
   if(!c) {
     try {
-      _comprasData = await POST_SILENT('getCompras',{});
+      _comprasData = await POST_SILENT('getCompras',{rango:'todo'});
       cacheSet('compras', _comprasData);
       c = (_comprasData||[]).find(x=>x.N_OC===noc);
     } catch(e){}
@@ -14725,7 +15163,7 @@ async function _guardarCostoReal(noc, totalCotizado) {
 
   // 2) Persistir en background (sin bloquear UI)
   POST_SILENT('updateCompra',{ N_OC:noc, COSTO_REAL:costoReal, DIFERENCIA:diferencia })
-    .then(()=> POST_SILENT('getCompras',{}).then(d=>{ _comprasData=d; cacheSet('compras',d); }))
+    .then(()=> POST_SILENT('getCompras',{rango:RANGO_STATE.compras}).then(d=>{ _comprasData=d; cacheSet('compras',d); }))
     .catch(e=> toast('Error al guardar: '+e.message,'error'));
 }
 
@@ -14830,7 +15268,7 @@ async function _guardarPrecioRealItem(noc, idElem, cant, precioCot) {
 
   // 2) Persistir en background
   POST_SILENT('updatePrecioRealElem', { ID_ELEM:idElem, N_OC:noc, PRECIO_UNIT:precioReal })
-    .then(()=> POST_SILENT('getCompras',{}).then(d=>{ _comprasData=d; cacheSet('compras',d); }))
+    .then(()=> POST_SILENT('getCompras',{rango:RANGO_STATE.compras}).then(d=>{ _comprasData=d; cacheSet('compras',d); }))
     .catch(e=> toast('Error al guardar: '+e.message,'error'));
 }
 
@@ -15111,11 +15549,11 @@ const MODS_POR_ROL = {
 
 // ── MÓDULOS EN BOTTOM NAV POR ROL ──────────────────────────────
 const BOTTOM_NAV_POR_ROL = {
-  admin:      ['dashboard','cotizaciones','diseño','compras','produccion','clientes'],
+  admin:      ['dashboard','cotizaciones','clientes','remisiones','diseño','produccion','compras','proveedores','items','procesos','materiales','servicios'],
   comercial:  ['dashboard','cotizaciones','clientes','remisiones','produccion'],
-  planeacion: ['dashboard','produccion','compras','cotizaciones'],
-  diseno:     ['dashboard','diseño','cotizaciones'],
-  produccion: ['dashboard','produccion'],
+  planeacion: ['dashboard','produccion','compras','cotizaciones','items'],
+  diseno:     ['dashboard','diseño','cotizaciones','items'],
+  produccion: ['dashboard','produccion','items'],
   lectura:    ['dashboard','cotizaciones','produccion'],
 };
 
@@ -15275,25 +15713,11 @@ function _aplicarRolNav() {
     el.style.display = modsPermitidos.includes(m) ? '' : 'none';
   });
 
-  // Bottom nav: reemplazar con los del rol
-  const bn = document.getElementById('bottom-nav');
-  const iconos = {
-    dashboard:'📊', cotizaciones:'📋', diseño:'🎨', compras:'🛒',
-    produccion:'🏭', clientes:'🏢', remisiones:'🚚', proveedores:'🏭',
-    items:'🔩', materiales:'🧱', servicios:'🛠️', procesos:'⚙️'
-  };
-  const labels = {
-    dashboard:'Dashboard', cotizaciones:'Cotizac.', diseño:'Diseño',
-    compras:'Compras', produccion:'Produc.', clientes:'Clientes',
-    remisiones:'Remis.', proveedores:'Proveed.', items:'Items',
-    materiales:'Mater.', servicios:'Servicios', procesos:'Procesos'
-  };
-  bn.innerHTML = bnPermitidos.map((m,i) => `
-    <div class="bn-item${i===0?' active':''}" data-m="${m}" onclick="nav('${m}')">
-      <div class="bn-icon">${iconos[m]||'📌'}</div>
-      ${labels[m]||m}
-    </div>
-  `).join('');
+  // Bottom nav: mostrar/ocultar según rol (sin reemplazar el HTML)
+  document.querySelectorAll('.bn-item[data-m]').forEach(el => {
+    const m = el.dataset.m;
+    el.style.display = bnPermitidos.includes(m) ? '' : 'none';
+  });
 
   // FAB: aplicar acciones del rol
   const rolActual = _SESSION.rol;
