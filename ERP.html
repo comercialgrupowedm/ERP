@@ -4581,12 +4581,15 @@ function _scoreLevel(score){
 
 function _renderListaProd(allOps, viewMode='cards'){
   // 1. Filtrar: diseño OK + MP OK + no terminado/entregado/cancelado
+  //    + %AVANCE aún no está full (100%) — si ya está full, la OP pasa a
+  //    Pendiente Despacho y no debe seguir apareciendo como "lista para producción".
   const EXCL = ['TERMINADO','ENTREGADO','CANCELADO'];
   const aptas = allOps.filter(op => {
     if(EXCL.includes(String(op.ESTADO||'').toUpperCase())) return false;
     const disenoDone = _qaEtapaDone(op, QA_ETAPAS.find(e=>e.id==='diseno'));
     const mpDone     = _qaEtapaDone(op, QA_ETAPAS.find(e=>e.id==='mp'));
-    return disenoDone && mpDone;
+    const avanceFull = qaPct(op['%AVANCE']||0) >= 100;
+    return disenoDone && mpDone && !avanceFull;
   });
 
   if(!aptas.length) return `
