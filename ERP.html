@@ -14307,23 +14307,28 @@ let _comprasFiltEstado = '';
 let _comprasFiltSearch = '';
 
 async function compras() {
-  setContent(`<div class="empty"><div class="empty-icon">🛒</div><p>Cargando compras…</p></div>`);
   try {
-    // Usar caché si está disponible, igual que los demás módulos
-    if(!_comprasData) {
-      const cached = cacheGet('compras');
-      if(cached) { _comprasData = cached; _renderCompras(); }
-      // Siempre revalidar en background
-      POST('getCompras', {rango:RANGO_STATE.compras}).then(d => {
-        _comprasData = d;
-        cacheSet('compras', d);
-        _renderCompras();
-      }).catch(()=>{});
-      if(cached) return;
-      // Sin caché — esperar respuesta
-      _comprasData = await POST('getCompras', {rango:RANGO_STATE.compras});
-      cacheSet('compras', _comprasData);
+    // Si ya hay datos en memoria o en caché, renderizar de una — sin pantalla de "Cargando…"
+    if(_comprasData) { _renderCompras(); return; }
+    const cached = cacheGet('compras');
+    if(cached) {
+      _comprasData = cached;
+      _renderCompras();
+      // Revalidar en background SOLO si el caché ya tiene más de 8 min
+      // (antes: siempre, en cada visita al módulo → doble carga y lentitud)
+      if(cacheAge('compras') > 8*60*1000){
+        POST('getCompras', {rango:RANGO_STATE.compras}).then(d => {
+          _comprasData = d;
+          cacheSet('compras', d);
+          _renderCompras();
+        }).catch(()=>{});
+      }
+      return;
     }
+    // Sin datos ni caché — recién ahí mostramos el loader y esperamos al servidor
+    setContent(`<div class="empty"><div class="empty-icon">🛒</div><p>Cargando compras…</p></div>`);
+    _comprasData = await POST('getCompras', {rango:RANGO_STATE.compras});
+    cacheSet('compras', _comprasData);
     _renderCompras();
   } catch(e) { setContent(`<div class="empty"><div class="empty-icon">⚠️</div><p>${e.message}</p></div>`); }
 }
