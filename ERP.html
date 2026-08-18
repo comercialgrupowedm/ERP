@@ -2293,8 +2293,8 @@ async function dashboard(){
           GET(action).then(data => { DB[key] = data; }).catch(()=>{})
         )).then(()=>{
           GET('kpis').then(k => { cacheSet('__kpis__', k); updateBadges(); }).catch(()=>{});
-          // Precargar compras en background para que estén disponibles en el detalle de OP
-          POST('getCompras',{rango:RANGO_STATE.compras}).then(d=>{ _comprasData=d; cacheSet('compras',d); }).catch(()=>{});
+          // Precargar compras en background para que estén disponibles en el detalle de OP (SILENT: sin overlay)
+          POST_SILENT('getCompras',{rango:RANGO_STATE.compras}).then(d=>{ _comprasData=d; cacheSet('compras',d); }).catch(()=>{});
         }).catch(()=>{});
       }, 800); // pequeño delay para no competir con el render
     }
@@ -6794,7 +6794,22 @@ function _qaFmtBuildPDFHtml(op, qa){
 async function qaVerComprasOP(opId) {
   const op = qaFindOP(opId);
   if(!op){ toast('OP no encontrada','error'); return; }
-  try { _comprasData = await POST('getCompras',{rango:'todo'}); } catch(e) { _comprasData = _comprasData||[]; }
+
+  // 1) Usar caché en memoria o localStorage al instante — sin overlay bloqueante
+  if(!_comprasData){
+    const cached = cacheGet('compras') || cacheGetStale('compras');
+    if(cached) _comprasData = cached;
+  }
+
+  if(_comprasData){
+    // Ya tenemos datos → refrescar en segundo plano sin bloquear ni recargar la vista
+    POST_SILENT('getCompras',{rango:'todo'}).then(d=>{ _comprasData=d; cacheSet('compras',d); }).catch(()=>{});
+  } else {
+    // 2) No hay nada en caché todavía (primera vez) → una sola carga silenciosa (sin overlay)
+    try { _comprasData = await POST_SILENT('getCompras',{rango:'todo'}); cacheSet('compras',_comprasData); }
+    catch(e){ _comprasData = _comprasData||[]; toast('No se pudo cargar compras','error'); }
+  }
+
   const pedidos = (_comprasData||[]).filter(c=>{
     const cIdqr = String(c.IDQR||'').replace(/\.0+$/,'').trim();
     const cNoc  = String(c.N_OC||'');
@@ -7318,8 +7333,8 @@ async function detailOP(id){
   const dpBody = document.getElementById('dp-body');
   if(dpBody) {
     dpBody.insertAdjacentHTML('beforeend', dpUploadSection(id));
-    // Recargar compras en background y actualizar sección
-    POST('getCompras',{rango:'todo'}).then(d=>{
+    // Recargar compras en background y actualizar sección (SILENT: sin overlay bloqueante)
+    POST_SILENT('getCompras',{rango:'todo'}).then(d=>{
       _comprasData = d;
       cacheSet('compras', d);
       const dpBody2 = document.getElementById('dp-body');
@@ -14317,7 +14332,7 @@ async function compras() {
       // Revalidar en background SOLO si el caché ya tiene más de 8 min
       // (antes: siempre, en cada visita al módulo → doble carga y lentitud)
       if(cacheAge('compras') > 8*60*1000){
-        POST('getCompras', {rango:RANGO_STATE.compras}).then(d => {
+        POST_SILENT('getCompras', {rango:RANGO_STATE.compras}).then(d => {
           _comprasData = d;
           cacheSet('compras', d);
           _renderCompras();
@@ -14325,9 +14340,9 @@ async function compras() {
       }
       return;
     }
-    // Sin datos ni caché — recién ahí mostramos el loader y esperamos al servidor
+    // Sin datos ni caché — recién ahí mostramos el loader (inline, sin overlay bloqueante) y esperamos al servidor
     setContent(`<div class="empty"><div class="empty-icon">🛒</div><p>Cargando compras…</p></div>`);
-    _comprasData = await POST('getCompras', {rango:RANGO_STATE.compras});
+    _comprasData = await POST_SILENT('getCompras', {rango:RANGO_STATE.compras});
     cacheSet('compras', _comprasData);
     _renderCompras();
   } catch(e) { setContent(`<div class="empty"><div class="empty-icon">⚠️</div><p>${e.message}</p></div>`); }
@@ -15155,9 +15170,14 @@ async function proveedores() {
   try {
     if(!_proveedoresData){
       const cached = cacheGet('proveedores');
-      if(cached) { _proveedoresData = cached; }
-      POST('getProveedores',{}).then(d=>{ _proveedoresData=d; cacheSet('proveedores',d); _renderProveedores(); }).catch(()=>{});
-      if(!_proveedoresData) _proveedoresData = await POST('getProveedores',{});
+      if(cached){
+        _proveedoresData = cached;
+        // Refrescar en background sin bloquear ni duplicar la petición
+        POST_SILENT('getProveedores',{}).then(d=>{ _proveedoresData=d; cacheSet('proveedores',d); _renderProveedores(); }).catch(()=>{});
+      } else {
+        _proveedoresData = await POST_SILENT('getProveedores',{});
+        cacheSet('proveedores', _proveedoresData);
+      }
     }
     _renderProveedores();
   } catch(e){ setContent(`<div class="empty"><div class="empty-icon">⚠️</div><p>${e.message}</p></div>`); }
@@ -15374,7 +15394,11 @@ async function _deleteProveedor(id) {
 // ══════════════════════════════════════════════════════════════════════════
 async function _asignarProveedorOC(noc) {
   if(!_proveedoresData){
-    try { _proveedoresData = await POST('getProveedores',{}); } catch(e){ _proveedoresData=[]; }
+    const cached = cacheGet('proveedores');
+    if(cached) _proveedoresData = cached;
+    else{
+      try { _proveedoresData = await POST_SILENT('getProveedores',{}); cacheSet('proveedores',_proveedoresData); } catch(e){ _proveedoresData=[]; }
+    }
   }
   if(!_proveedoresData.length){
     toast('No hay proveedores registrados. Crea uno primero.','warn');
