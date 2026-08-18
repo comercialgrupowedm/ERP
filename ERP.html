@@ -692,6 +692,24 @@ td.mono{font-family:var(--mono);font-size:11px}
   .cot-action-ic{width:46px;height:46px;font-size:19px}
 }
 
+/* ══ BULK ACTION BAR (acciones masivas módulo Diseño) ════════════ */
+.bulk-btn{
+  display:inline-flex;align-items:center;gap:5px;
+  border-radius:9px;padding:5px 11px;cursor:pointer;
+  font-family:var(--sans);font-size:11.5px;font-weight:700;
+  white-space:nowrap;transition:filter .12s,transform .1s;
+  -webkit-tap-highlight-color:transparent;
+}
+.bulk-btn:hover{filter:brightness(1.12)}
+.bulk-btn:active{transform:scale(.95)}
+.bulk-btn-icon{font-size:14px;line-height:1}
+.bulk-btn-lbl{line-height:1}
+@media(max-width:500px){
+  .bulk-btn-lbl{display:none}
+  .bulk-btn{padding:6px 8px}
+  .bulk-btn-icon{font-size:16px}
+}
+
 /* ══ ITEMS TABLE EN DETALLE COT ══════════════════════════════════ */
 .it-row-actions{display:flex;gap:4px;opacity:0;transition:opacity .12s}
 tr:hover .it-row-actions{opacity:1}
@@ -2051,6 +2069,8 @@ function bEst(e){
   const m={'APROBADA':'verde','EN ESPERA':'naranja','EN PROCESO':'azul',
     'RECHAZADA':'rojo','FACTURADA':'gris','ANULADA':'rojo',
     'TERMINADO':'verde','ENTREGADO':'azul','PENDIENTE MP':'naranja',
+    'PENDIENTE DISEÑO':'warn','PENDIENTE MP Y DISEÑO':'warn',
+    'PENDIENTE DESPACHO':'azul','EN PROCESO':'azul',
     'BORRADOR':'gris','ENVIADA':'azul','RECIBIDA':'verde','PAUSADO':'gris','CANCELADO':'rojo'};
   return `<span class="badge ${m[e]||'gris'}">${e||'—'}</span>`;
 }
@@ -4599,9 +4619,14 @@ function _renderListaProd(allOps, viewMode='cards'){
       <div style="font-size:12px">Las OPs aparecen aquí cuando tienen Diseño ✓ y MP Insumos ✓</div>
     </div>`;
 
-  // 2. Calcular score y ordenar
-  const scored = aptas.map(op => ({ op, score: _calcScore(op) }))
-    .sort((a,b) => b.score - a.score);
+  // 2. Score: se usa la columna SCORE de CONTROL PRODUCCIÓN (col. AK en la
+  //    hoja) tal cual viene del backend; solo si esa columna no trae un
+  //    número válido se recurre al cálculo local _calcScore() como respaldo.
+  const scored = aptas.map(op => {
+    const sheetScore = Number(op.SCORE);
+    const score = Number.isFinite(sheetScore) ? sheetScore : _calcScore(op);
+    return { op, score };
+  }).sort((a,b) => b.score - a.score);
 
   // 3. KPIs rápidos
   const criticas = scored.filter(x => x.score >= 70).length;
@@ -5033,6 +5058,12 @@ function _qaNormKey(k){
     .replace(/[\n\r]+/g,' ')
     .trim().toUpperCase()
     .replace(/\s+/g,' ');
+}
+// Resuelve el nombre real de columna en un objeto op dada una lista de candidatos
+// (mismo criterio que los _realKey locales usados en las funciones QA).
+function _qaKeyFor(op, candidates){
+  const wanted = candidates.map(_qaNormKey);
+  return Object.keys(op).find(rk => wanted.includes(_qaNormKey(rk))) || candidates[0];
 }
 function _qaTruthy(v){
   if(v===true || v===1) return true;
@@ -9524,7 +9555,7 @@ function diseñadorCot(cotId){
   if(!its.length){ toast('Esta cotización no tiene ítems para asignar diseñador','error'); return; }
   const disActual = its.find(x=>x.DISEÑADOR)?.DISEÑADOR || '';
   const opciones = DISEÑADORES.map(d=>`<option ${disActual===d?'selected':''}>${d}</option>`).join('');
-  openModal('\u{1F464} Asignar Diseñador \u2014 COT-'+cotId,
+  openModal('\u{1F464} Asignar Diseñador — COT-'+cotId,
     '<div class="form-grid col1">' +
     '<div class="field"><label>Diseñador</label>' +
     '<select id="dis-sel-cot"><option value="">-- Seleccionar --</option>' + opciones + '</select></div>' +
@@ -9557,7 +9588,7 @@ async function guardarDiseñadorTodos(cotId) {
         if(idx>=0) DB.items[idx] = {...DB.items[idx], DISEÑADOR:dis, FECHA_INICIO_OP:hoy, MP_INSUMOS:'N'};
       });
     }
-    toast('\u2705 Diseñador "'+dis+'" asignado a '+its.length+' ítem(s)');
+    toast('✅ Diseñador "'+dis+'" asignado a '+its.length+' ítem(s)');
     closeModal();
     detailCot(cotId);
     // Recargar del servidor en background para mantener consistencia
@@ -11155,8 +11186,232 @@ async function revertirPreciosProcesos(){
   }catch(e){ toast(e.message,'error'); }
 }
 
-var _disTab = 0; // tab activa en Control Diseño (0=Pendiente Diseño, 1=Control Items)
-let _ctrlDisFilter = null;  // diseñador activo como filtro en tab "Control Items"
+var _disTab = 0; // tab activa en Control Diseño (0=Pendiente Diseño, 1=Control Items MP+Dis, 2=Pendiente MP/Compras)
+let _ctrlDisFilter  = null; // diseñador activo como filtro en tab 1
+let _ctrlMPFilter   = null; // diseñador activo como filtro en tab 2
+
+// ── Selección múltiple de items en tab "Control Items" (para acciones masivas) ──
+let _ctrlSel = new Set(); // guarda IDQR de los items marcados
+
+function _ctrlToggleSel(idqr, checked){
+  if(checked) _ctrlSel.add(String(idqr)); else _ctrlSel.delete(String(idqr));
+  const all = document.getElementById('ctrl-sel-all');
+  if(all) all.checked = document.querySelectorAll('.ctrl-item-chk:not(:checked)').length===0
+    && document.querySelectorAll('.ctrl-item-chk').length>0;
+  _ctrlUpdateBar();
+}
+function _ctrlToggleAll(checked){
+  document.querySelectorAll('.ctrl-item-chk').forEach(cb=>{
+    cb.checked = checked;
+    if(checked) _ctrlSel.add(cb.value); else _ctrlSel.delete(cb.value);
+  });
+  _ctrlUpdateBar();
+}
+function _ctrlLimpiarSel(){
+  _ctrlSel.clear();
+  document.querySelectorAll('.ctrl-item-chk').forEach(cb=>cb.checked=false);
+  const all = document.getElementById('ctrl-sel-all');
+  if(all) all.checked = false;
+  _ctrlUpdateBar();
+}
+function _ctrlUpdateBar(){
+  const bar = document.getElementById('ctrl-sel-bar');
+  if(!bar) return;
+  const n = _ctrlSel.size;
+  bar.style.display = n ? 'flex' : 'none';
+  // Actualiza el número dentro de la barra sin re-render completo
+  const cnt = bar.querySelector('.ctrl-sel-count');
+  if(cnt) cnt.textContent = String(n);
+  // Actualiza los títulos de los botones con el conteo actual
+  bar.querySelectorAll('.bulk-btn[data-etapa]').forEach(btn => {
+    const et = QA_ETAPAS.find(e => e.id === btn.dataset.etapa);
+    if(et) btn.title = `Marcar '${et.nombreLargo}' en los ${n} seleccionados`;
+  });
+}
+// ── Colores por etapa para la barra de acciones masivas ─────────────
+const _ETAPA_COLORS = {
+  diseno:    { bg:'rgba(37,99,235,.12)',   border:'rgba(37,99,235,.4)',   color:'#1d4ed8' },
+  mp:        { bg:'rgba(245,158,11,.12)',  border:'rgba(245,158,11,.4)',  color:'#b45309' },
+  servicio:  { bg:'rgba(16,185,129,.12)', border:'rgba(16,185,129,.4)', color:'#059669' },
+  entrega:   { bg:'rgba(139,92,246,.12)', border:'rgba(139,92,246,.4)', color:'#7c3aed' },
+  calidad:   { bg:'rgba(2,132,199,.12)',  border:'rgba(2,132,199,.4)',  color:'#0369a1' },
+  liberacion:{ bg:'rgba(220,38,38,.12)',  border:'rgba(220,38,38,.4)',  color:'#dc2626' },
+};
+
+function _ctrlBarraAcciones(){
+  const n = _ctrlSel.size;
+  const botones = QA_ETAPAS.map(et => {
+    const c = _ETAPA_COLORS[et.id] || {};
+    return `<button class="bulk-btn" data-etapa="${et.id}"
+      style="background:${c.bg||'var(--card2)'};border:1.5px solid ${c.border||'var(--border)'};color:${c.color||'var(--text)'}"
+      onclick="_ctrlConfirmarMasivo('${et.id}',true)"
+      title="Marcar '${et.nombreLargo}' en los ${n} seleccionados">
+      <span class="bulk-btn-icon">${et.icon}</span>
+      <span class="bulk-btn-lbl">${et.label}</span>
+    </button>`;
+  }).join('');
+
+  return `
+  <div id="ctrl-sel-bar" style="display:${n?'flex':'none'};position:sticky;bottom:72px;left:0;right:0;z-index:50;
+    align-items:center;gap:6px;flex-wrap:wrap;
+    background:linear-gradient(135deg,#0f2443 0%,#1e3a8a 100%);
+    border:1.5px solid rgba(99,148,255,.35);
+    border-radius:14px;padding:10px 14px;margin-top:12px;
+    box-shadow:0 8px 28px rgba(0,0,0,.45),0 0 0 1px rgba(255,255,255,.05)">
+
+    <!-- Contador -->
+    <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+      <span style="background:rgba(255,255,255,.15);border-radius:20px;padding:3px 10px;
+        font-size:12px;font-weight:800;color:#fff;white-space:nowrap">
+        ☑ <span class="ctrl-sel-count">${n}</span> item${n===1?'':'s'}
+      </span>
+      <span style="width:1px;height:22px;background:rgba(255,255,255,.15);flex-shrink:0"></span>
+    </div>
+
+    <!-- Botones de etapas -->
+    <div style="display:flex;gap:6px;flex-wrap:wrap;flex:1;align-items:center">
+      ${botones}
+      <span style="width:1px;height:22px;background:rgba(255,255,255,.15);flex-shrink:0;margin:0 2px"></span>
+      <button class="bulk-btn" style="background:rgba(220,38,38,.15);border:1.5px solid rgba(220,38,38,.5);color:#fca5a5"
+        onclick="_ctrlDesmarcarMenu()" title="Retroceder etapa en los seleccionados">
+        <span class="bulk-btn-icon">↩️</span>
+        <span class="bulk-btn-lbl">Retroceder</span>
+      </button>
+    </div>
+
+    <!-- Limpiar -->
+    <button onclick="_ctrlLimpiarSel()" style="margin-left:auto;background:rgba(255,255,255,.08);
+      border:1px solid rgba(255,255,255,.15);color:rgba(255,255,255,.7);
+      border-radius:8px;padding:4px 10px;font-size:11px;cursor:pointer;white-space:nowrap;flex-shrink:0">
+      ✕ Limpiar
+    </button>
+  </div>`;
+}
+
+// ── Confirmación antes de aplicar masivamente ────────────────────────
+function _ctrlConfirmarMasivo(etapaId, marcar){
+  if(!_ctrlSel.size){ toast('Selecciona al menos un item','warn'); return; }
+  const et = QA_ETAPAS.find(e=>e.id===etapaId);
+  if(!et){ toast('Etapa no encontrada','error'); return; }
+  const n = _ctrlSel.size;
+  const c = _ETAPA_COLORS[etapaId] || {};
+  openModal(`${et.icon} Acción masiva — ${et.nombreLargo}`, `
+    <div style="text-align:center;padding:8px 0 18px">
+      <div style="font-size:40px;margin-bottom:12px">${et.icon}</div>
+      <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:8px">
+        ¿Marcar <span style="color:${c.color||'var(--accent)'}">${et.nombreLargo}</span>?
+      </div>
+      <div style="font-size:13px;color:var(--muted)">
+        Se actualizarán <b>${n} item${n===1?'':'s'}</b> con la fecha de hoy.
+      </div>
+    </div>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+     <button class="btn btn-primary" style="background:${c.color||'var(--accent)'};border-color:${c.color||'var(--accent)'}"
+       onclick="closeModal();_ctrlAplicarMasivo('${etapaId}',true)">
+       ✅ Confirmar (${n})
+     </button>`
+  );
+}
+
+// Menú rápido para "desmarcar" (dejar pendiente) una etapa en los items seleccionados
+function _ctrlDesmarcarMenu(){
+  const opts = QA_ETAPAS.map(et=>`<option value="${et.id}">${et.icon} ${et.nombreLargo}</option>`).join('');
+  openModal('↩️ Retroceder etapa en los seleccionados', `
+    <div style="background:rgba(220,38,38,.06);border:1px solid rgba(220,38,38,.2);
+      border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:var(--danger)">
+      ⚠️ Se borrará el check y la fecha de la etapa seleccionada en los <b>${_ctrlSel.size} item(s)</b> marcados.
+    </div>
+    <div class="form-grid col1">
+      <div class="field">
+        <label>Etapa a retroceder</label>
+        <select id="ctrl-retro-etapa">${opts}</select>
+      </div>
+    </div>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+     <button class="btn btn-primary" style="background:var(--danger);border-color:var(--danger)"
+       onclick="_ctrlConfirmarRetroceder()">↩️ Retroceder</button>`
+  );
+}
+function _ctrlConfirmarRetroceder(){
+  const etapaId = document.getElementById('ctrl-retro-etapa')?.value;
+  closeModal();
+  if(etapaId) _ctrlAplicarMasivo(etapaId, false);
+}
+
+// ── Aplica en bloque una etapa QA con feedback en tiempo real ────────
+// etapaId: 'diseno'|'mp'|'servicio'|'entrega'|'calidad'|'liberacion'
+// marcar:  true = marca (TRUE + fecha hoy),  false = retrocede (FALSE, borra fecha)
+async function _ctrlAplicarMasivo(etapaId, marcar){
+  if(!_ctrlSel.size){ toast('Selecciona al menos un item','warn'); return; }
+  const et = QA_ETAPAS.find(e=>e.id===etapaId);
+  if(!et){ toast('Etapa no encontrada','error'); return; }
+
+  const idqrs = [..._ctrlSel];
+  const total  = idqrs.length;
+  const hoy    = new Date().toISOString().slice(0,10);
+
+  toast(`⏳ Aplicando ${et.nombreLargo} a ${total} item${total===1?'':'s'}...`, 'info');
+
+  // 1. Construir payloads + mutación optimista en memoria
+  const trabajos = [];
+  for(const idqr of idqrs){
+    const op = qaFindOP(idqr);
+    if(!op){ console.warn('bulk: IDQR no en DB:', idqr); continue; }
+    const kDone  = _qaKeyFor(op, et.doneKeys);
+    const kFecha = et.dateKeys.length ? _qaKeyFor(op, et.dateKeys) : null;
+    if(!kDone){ console.warn('bulk: columna no hallada', idqr, et.doneKeys); continue; }
+    // Mutación optimista inmediata en memoria
+    op[kDone] = marcar ? 'TRUE' : 'FALSE';
+    if(kFecha) op[kFecha] = marcar ? hoy : '';
+    // Payload individual para el batch
+    const payload = { IDQR: op.IDQR };
+    payload[kDone] = marcar ? 'TRUE' : 'FALSE';
+    if(kFecha) payload[kFecha] = marcar ? hoy : '';
+    trabajos.push(payload);
+  }
+
+  if(!trabajos.length){
+    toast('⚠️ No se encontraron items en DB local — recarga primero', 'warn');
+    return;
+  }
+
+  // 2. Re-render local inmediato (sin esperar al servidor)
+  _ctrlSel.clear();
+  if(MOD==='diseño') renderDiseno(_disTab);
+
+  // 3. Enviar UN SOLO POST batch al GAS (evita el throttling de 20 requests paralelos)
+  // El backend procesa todos los IDQRs en un loop interno — mucho más rápido y confiable.
+  let ok = 0, fail = 0;
+  try {
+    const res = await POST_SILENT('bulkUpdateOP', { rows: trabajos });
+    // El backend retorna { ok: N, fail: N, errors: [] }
+    ok   = res?.ok   ?? trabajos.length;
+    fail = res?.fail ?? 0;
+    if(res?.errors?.length){
+      console.warn('Bulk errors del servidor:', res.errors);
+    }
+  } catch(e) {
+    // Si el backend no tiene bulkUpdateOP aún, caer a serial con lotes de 5
+    console.warn('bulkUpdateOP no disponible, usando serial por lotes:', e.message);
+    const LOTE = 5;
+    for(let i = 0; i < trabajos.length; i += LOTE){
+      const lote = trabajos.slice(i, i + LOTE);
+      await Promise.allSettled(
+        lote.map(p => POST_SILENT('updateOP', p).then(()=>ok++).catch(()=>fail++))
+      );
+    }
+  }
+
+  // 4. Toast de resultado
+  if(fail === 0){
+    toast(`✅ ${et.nombreLargo} — ${ok} item${ok===1?'':'s'} guardado${ok===1?'':'s'}`, 'success');
+  } else {
+    toast(`⚠️ ${et.nombreLargo}: ${ok} OK · ${fail} con error`, 'warn');
+  }
+
+  // 5. Sync real después de que terminó todo
+  _syncBackground(['produccion'], 1200);
+}
 // ── Filtros / búsqueda de Tab 1 Control Items ─────────────────
 let _disSearch  = '';    // texto libre
 let _disFiltDis = '';    // filtro diseñador (select)
@@ -11336,18 +11591,27 @@ function renderDiseno(tab) {
     hrsDis[d]=(hrsDis[d]||0)+Number(op['HORAS TOTAL']||0);
   });
 
+  // Conteos para badges de tabs
+  const pendMPDis  = opsActivas.filter(op => op.ESTADO === 'PENDIENTE MP Y DISEÑO' || op.ESTADO === 'PENDIENTE DISEÑO');
+  const pendMPSolo = opsActivas.filter(op => op.ESTADO === 'PENDIENTE MP');
+
   setContent(`
   <!-- TABS -->
-  <div style="display:flex;border-bottom:1px solid var(--border);margin:-14px -14px 16px;background:var(--surface)">
-    <div class="wiz-tab ${tab===0?'active':''}" style="font-size:13px;padding:12px 18px" onclick="renderDiseno(0)">
+  <div style="display:flex;border-bottom:1px solid var(--border);margin:-14px -14px 16px;background:var(--surface);overflow-x:auto">
+    <div class="wiz-tab ${tab===0?'active':''}" style="font-size:13px;padding:12px 16px;white-space:nowrap" onclick="renderDiseno(0)">
       🎨 Pendiente Diseño ${sinDis.length?`<span class="nav-badge" style="background:var(--warn)">${sinDis.length}</span>`:''}
     </div>
-    <div class="wiz-tab ${tab===1?'active':''}" style="font-size:13px;padding:12px 18px" onclick="renderDiseno(1)">
-      📋 Control Items ${urgentes.length?`<span class="nav-badge" style="background:var(--danger)">${urgentes.length}</span>`:''}
+    <div class="wiz-tab ${tab===1?'active':''}" style="font-size:13px;padding:12px 16px;white-space:nowrap" onclick="renderDiseno(1)">
+      📐 Control Items ${pendMPDis.length?`<span class="nav-badge" style="background:var(--accent)">${pendMPDis.length}</span>`:''}
+    </div>
+    <div class="wiz-tab ${tab===2?'active':''}" style="font-size:13px;padding:12px 16px;white-space:nowrap" onclick="renderDiseno(2)">
+      🧱 Pendiente MP ${pendMPSolo.length?`<span class="nav-badge" style="background:var(--warn);color:#fff">${pendMPSolo.length}</span>`:''}
     </div>
   </div>
 
-  ${tab===0 ? renderTabPendienteDis(disActivos, sinDis, torta, disNames, hrsDis, urgentes, opsActivas) : renderTabControlItems(ops)}
+  ${tab===0 ? renderTabPendienteDis(disActivos, sinDis, torta, disNames, hrsDis, urgentes, opsActivas)
+  : tab===1  ? renderTabControlItems(ops)
+  :            renderTabPendienteMP(ops)}
   `);
 }
 
@@ -11463,9 +11727,9 @@ function renderTabControlItems(ops) {
     op.ESTADO !== 'FACTURADO' && op.ESTADO !== 'CANCELADO'
   );
 
-  // ── Condición de la torta: Pendiente MP y Diseño / Pendiente MP ──
+  // ── Tab 1: todos con diseño pendiente — PENDIENTE MP Y DISEÑO + PENDIENTE DISEÑO ──
   const pendMP = opsActivas.filter(op =>
-    op.ESTADO === 'PENDIENTE MP Y DISEÑO' || op.ESTADO === 'PENDIENTE MP'
+    op.ESTADO === 'PENDIENTE MP Y DISEÑO' || op.ESTADO === 'PENDIENTE DISEÑO'
   );
   const porDisOP = {};
   pendMP.forEach(op => {
@@ -11482,7 +11746,7 @@ function renderTabControlItems(ops) {
   const donutPanel = pendMP.length ? `
   <div class="tbl-wrap" style="margin-bottom:16px;padding:18px">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;flex-wrap:wrap;gap:8px">
-      <div style="font-size:13px;font-weight:700">📊 Items por Diseñador — Pendiente MP y Diseño</div>
+      <div style="font-size:13px;font-weight:700">📐 Items por Diseñador — Pendiente Diseño (todos)</div>
       ${_ctrlDisFilter?`<span class="badge azul" style="cursor:pointer" onclick="filtrarControlDis('${safe(_ctrlDisFilter)}')">
         Filtro: ${_ctrlDisFilter} ✕</span>`:''}
     </div>
@@ -11511,10 +11775,11 @@ function renderTabControlItems(ops) {
     </div>
   </div>` : '';
 
-  // ── Pool base: todos activos con diseñador (o filtrado por donut) ──
+  // ── Pool base: pendMP (filtrado por diseñador si hay filtro activo) ──
+  // SIEMPRE solo muestra "Pendiente MP y Diseño" + "Pendiente MP"
   const poolBase = _ctrlDisFilter
     ? pendMP.filter(op => (op.DISEÑADOR||'Sin asignar') === _ctrlDisFilter)
-    : opsActivas.filter(op => op.DISEÑADOR);
+    : pendMP;
 
   // ── Opciones dinámicas para selects ──
   const diseñadoresPool = [...new Set(poolBase.map(op=>op.DISEÑADOR||'Sin asignar'))].sort();
@@ -11587,7 +11852,7 @@ function renderTabControlItems(ops) {
     const msg = `<div class="empty"><div class="empty-icon">🔍</div>
       <p>Sin items que coincidan con los filtros</p>
       <button class="btn btn-ghost" style="margin-top:8px" onclick="_disLimpiarFiltros()">Limpiar filtros</button></div>`;
-    return donutPanel + filterBar + viewBar + msg;
+    return donutPanel + filterBar + viewBar + `<div id="dis-result-body">` + msg + `</div>`;
   }
 
   // ══════════════════════════════════════════════════
@@ -11602,6 +11867,9 @@ function renderTabControlItems(ops) {
       const imgUrl  = op.IMAGEN_B64 || (_imgCache.has(op.IDQR) ? _imgCache.get(op.IDQR) : '');
       const thumb   = _thumbHtml(op.IDQR, op.IMAGEN_B64, 36);
       return `<tr style="${rowStyle};cursor:pointer" onclick="mostrarItemsOP('${safe(op.OP)}')">
+        <td style="padding:4px 6px;width:26px" onclick="event.stopPropagation()">
+          <input type="checkbox" class="ctrl-item-chk" value="${String(op.IDQR).replace(/"/g,'&quot;')}"
+            ${_ctrlSel.has(String(op.IDQR))?'checked':''} onchange="_ctrlToggleSel('${String(op.IDQR).replace(/'/g,"\\'")}',this.checked)"></td>
         <td style="padding:4px 6px;width:44px">${thumb}</td>
         <td style="font-size:11px;color:var(--muted);white-space:nowrap">OP-${op.OP||'—'}</td>
         <td style="font-size:11px;color:var(--muted)">Item ${op.ITEM||'—'}</td>
@@ -11621,6 +11889,7 @@ function renderTabControlItems(ops) {
     <div class="tbl-wrap" style="overflow-x:auto">
       <table class="tbl" style="min-width:700px">
         <thead><tr>
+          <th style="width:26px"><input type="checkbox" id="ctrl-sel-all" onchange="_ctrlToggleAll(this.checked)"></th>
           <th style="width:44px"></th>
           <th>OP</th><th>Item</th><th>Descripción</th><th>Cliente</th>
           <th>Diseñador</th><th>Estado</th><th>Tipo</th>
@@ -11632,7 +11901,7 @@ function renderTabControlItems(ops) {
 
     // activar lazy thumbs en la tabla
     requestAnimationFrame(()=>_initLazyThumbs());
-    return donutPanel + filterBar + viewBar + tablaHtml;
+    return donutPanel + filterBar + viewBar + `<div id="dis-result-body">` + tablaHtml + _ctrlBarraAcciones() + `</div>`;
   }
 
   // ══════════════════════════════════════════════════
@@ -11676,7 +11945,215 @@ function renderTabControlItems(ops) {
     </div>`;
   }).join('');
 
-  return donutPanel + filterBar + viewBar + todoHtml + gruposHtml;
+  return donutPanel + filterBar + viewBar + `<div id="dis-result-body">` +
+    (_ctrlSel.size?'':`<div style="font-size:11px;color:var(--muted);margin-bottom:8px">💡 Cambia a vista tabla (⊞) para seleccionar varios items y aplicarles acciones en bloque.</div>`) +
+    todoHtml + gruposHtml + _ctrlBarraAcciones() + `</div>`;
+}
+
+// ── TAB 2: PENDIENTE MP / COMPRAS ────────────────────────────────
+// Muestra únicamente los ítems con estado "PENDIENTE MP" (diseño ya listo, falta material)
+function renderTabPendienteMP(ops) {
+  const safe = s => String(s).replace(/'/g,"\'");
+
+  const opsActivas = ops.filter(op =>
+    op.ESTADO !== 'TERMINADO' && op.ESTADO !== 'ENTREGADO' &&
+    op.ESTADO !== 'FACTURADO' && op.ESTADO !== 'CANCELADO'
+  );
+
+  // Solo PENDIENTE MP (diseño OK, compras pendientes)
+  const pendMPSolo = opsActivas.filter(op => op.ESTADO === 'PENDIENTE MP');
+
+  // Agrupar por diseñador para donut
+  const porDisMP = {};
+  pendMPSolo.forEach(op => {
+    const d = op.DISEÑADOR || 'Sin asignar';
+    porDisMP[d] = (porDisMP[d]||0) + 1;
+  });
+  const disNamesMP = Object.keys(porDisMP).sort((a,b)=>porDisMP[b]-porDisMP[a]);
+  const dataDonut  = disNamesMP.map(d=>({
+    label: d, value: porDisMP[d],
+    color: d==='Sin asignar' ? '#5b6472' : disColor(d, disNamesMP)
+  }));
+  const topDis = disNamesMP[0];
+
+  const donutPanel = pendMPSolo.length ? `
+  <div class="tbl-wrap" style="margin-bottom:16px;padding:18px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;flex-wrap:wrap;gap:8px">
+      <div style="font-size:13px;font-weight:700">🧱 Items por Diseñador — Pendiente MP / Compras</div>
+      ${_ctrlMPFilter?`<span class="badge azul" style="cursor:pointer" onclick="filtrarControlMP('${safe(_ctrlMPFilter)}')">
+        Filtro: ${_ctrlMPFilter} ✕</span>`:''}
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:16px">
+      ${pendMPSolo.length} item(s) · ${disNamesMP.length} diseñador(es) · Diseño ✓ — MP pendiente
+      ${topDis?` · Mayor carga: <b style="color:${dataDonut[0].color}">${topDis}</b> (${porDisMP[topDis]})`:''}
+    </div>
+    <div style="display:flex;gap:26px;align-items:center;flex-wrap:wrap">
+      ${pieDonutInteractive(dataDonut, 200, _ctrlMPFilter, 'filtrarControlMP')}
+      <div style="flex:1;min-width:220px;display:flex;flex-direction:column;gap:8px">
+        ${disNamesMP.map(d=>{
+          const v = porDisMP[d], pct = (v/pendMPSolo.length*100).toFixed(0);
+          const color  = d==='Sin asignar' ? '#5b6472' : disColor(d, disNamesMP);
+          const active = _ctrlMPFilter===d;
+          return `<div onclick="filtrarControlMP('${safe(d)}')" style="cursor:pointer;border-left:4px solid ${color};
+            background:var(--card2);border-radius:8px;padding:8px 10px;${active?`outline:2px solid ${color};`:''}">
+            <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;font-weight:700">
+              <span style="color:${color}">${d}</span>
+              <span style="color:var(--muted);font-weight:400">${v} item(s) · ${pct}%</span>
+            </div>
+            <div style="height:5px;border-radius:3px;background:rgba(255,255,255,.08);margin-top:6px;overflow:hidden">
+              <div style="height:100%;width:${pct}%;background:${color}"></div>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+  </div>` : `<div class="empty"><div class="empty-icon">✅</div><p>Sin items pendientes de MP — todo en orden</p></div>`;
+
+  if(!pendMPSolo.length) return donutPanel;
+
+  // Pool base filtrado por diseñador si hay filtro activo
+  const poolBase = _ctrlMPFilter
+    ? pendMPSolo.filter(op => (op.DISEÑADOR||'Sin asignar') === _ctrlMPFilter)
+    : pendMPSolo;
+
+  // Filtro de búsqueda (reutiliza _disSearch)
+  let lista = poolBase;
+  if(_disSearch.trim()){
+    const q = _disSearch.trim().toLowerCase();
+    lista = lista.filter(op =>
+      String(op.OP||'').toLowerCase().includes(q)          ||
+      String(op.DESCRIPCION||'').toLowerCase().includes(q) ||
+      String(op.CLIENTE||'').toLowerCase().includes(q)     ||
+      String(op.DISEÑADOR||'').toLowerCase().includes(q)
+    );
+  }
+
+  const diseñadoresPool = [...new Set(poolBase.map(op=>op.DISEÑADOR||'Sin asignar'))].sort();
+
+  const filterBar = `
+  <div class="filter-bar" style="margin-bottom:10px">
+    <div class="filter-bar-top">
+      <div class="filter-search-wrap">
+        <input type="text" id="dis-mp-search"
+          placeholder="Buscar OP, descripción, cliente…"
+          value="${_disSearch.replace(/"/g,'&quot;')}" autocomplete="off"
+          oninput="_disBuscarMP(this.value)">
+      </div>
+      <select onchange="_ctrlMPFilter=this.value||null;renderDiseno(2)"
+        style="height:34px;border:1.5px solid var(--border);border-radius:9px;padding:0 8px;font-size:12px;background:var(--surface)">
+        <option value="">Diseñador</option>
+        ${diseñadoresPool.map(d=>`<option ${_ctrlMPFilter===d?'selected':''}>${d}</option>`).join('')}
+      </select>
+      <span style="font-size:11px;color:var(--muted);white-space:nowrap">${lista.length} / ${poolBase.length}</span>
+    </div>
+  </div>`;
+
+  // Vista tabla
+  const disNamesAll = [...new Set((DB.produccion||[]).map(op=>op.DISEÑADOR||'Sin asignar'))].sort();
+  const filas = lista.map(op => {
+    const dias    = Number(op['DÍAS ENTREGA']);
+    const urgente = !isNaN(dias) && dias < 5;
+    const rowStyle = urgente ? 'background:rgba(220,50,50,.06)' : '';
+    const thumb   = _thumbHtml(op.IDQR, op.IMAGEN_B64, 36);
+    return `<tr style="${rowStyle};cursor:pointer" onclick="mostrarItemsOP('${safe(op.OP)}')">
+      <td style="padding:4px 6px;width:26px" onclick="event.stopPropagation()">
+        <input type="checkbox" class="ctrl-item-chk" value="${String(op.IDQR).replace(/"/g,'&quot;')}"
+          ${_ctrlSel.has(String(op.IDQR))?'checked':''} onchange="_ctrlToggleSel('${String(op.IDQR).replace(/'/g,"\'")}',this.checked)"></td>
+      <td style="padding:4px 6px;width:44px">${thumb}</td>
+      <td style="font-size:11px;color:var(--muted);white-space:nowrap">OP-${op.OP||'—'}</td>
+      <td style="font-size:11px;color:var(--muted)">Item ${op.ITEM||'—'}</td>
+      <td style="font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${op.DESCRIPCION||'—'}</td>
+      <td style="font-size:11px;white-space:nowrap">${op.CLIENTE||'—'}</td>
+      <td style="font-size:11px;white-space:nowrap">
+        <span style="color:${disColor(op.DISEÑADOR||'Sin asignar',disNamesAll)};font-weight:600">
+          ${op.DISEÑADOR||'Sin asignar'}</span></td>
+      <td style="font-size:11px;text-align:center">${diasTag(op['DÍAS ENTREGA'])}</td>
+    </tr>`;
+  }).join('');
+
+  const tabla = lista.length ? `
+  <div class="tbl-wrap" style="overflow-x:auto">
+    <table class="tbl" style="min-width:600px">
+      <thead><tr>
+        <th style="width:26px"><input type="checkbox" id="ctrl-mp-all"
+          onchange="document.querySelectorAll('.ctrl-item-chk').forEach(c=>{c.checked=this.checked;_ctrlToggleSel(c.value,this.checked)})"></th>
+        <th style="width:44px"></th>
+        <th>OP</th><th>Item</th><th>Descripción</th><th>Cliente</th>
+        <th>Diseñador</th><th style="text-align:center">Días</th>
+      </tr></thead>
+      <tbody>${filas}</tbody>
+    </table>
+  </div>` : `<div class="empty"><div class="empty-icon">🔍</div><p>Sin resultados</p></div>`;
+
+  requestAnimationFrame(()=>_initLazyThumbs());
+  return donutPanel + filterBar + `<div id="dis-mp-body">` + tabla + _ctrlBarraAcciones() + `</div>`;
+}
+
+// Filtrar tab 2 por diseñador (donut/leyenda)
+function filtrarControlMP(dis) {
+  _ctrlMPFilter = (_ctrlMPFilter === dis) ? null : dis;
+  renderDiseno(2);
+}
+
+// Búsqueda en tab 2 (patch parcial de #dis-mp-body)
+let _disMPBuscarTimer = null;
+function _disBuscarMP(val) {
+  _disSearch = val;
+  clearTimeout(_disMPBuscarTimer);
+  _disMPBuscarTimer = setTimeout(() => {
+    const body = document.getElementById('dis-mp-body');
+    if(!body){ renderDiseno(2); return; }
+
+    const ops = DB.produccion || [];
+    const opsActivas = ops.filter(op =>
+      op.ESTADO !== 'TERMINADO' && op.ESTADO !== 'ENTREGADO' &&
+      op.ESTADO !== 'FACTURADO' && op.ESTADO !== 'CANCELADO'
+    );
+    const pendMPSolo = opsActivas.filter(op => op.ESTADO === 'PENDIENTE MP');
+    const poolBase = _ctrlMPFilter
+      ? pendMPSolo.filter(op => (op.DISEÑADOR||'Sin asignar') === _ctrlMPFilter)
+      : pendMPSolo;
+
+    let lista = poolBase;
+    if(val.trim()){
+      const q = val.trim().toLowerCase();
+      lista = lista.filter(op =>
+        String(op.OP||'').toLowerCase().includes(q)          ||
+        String(op.DESCRIPCION||'').toLowerCase().includes(q) ||
+        String(op.CLIENTE||'').toLowerCase().includes(q)     ||
+        String(op.DISEÑADOR||'').toLowerCase().includes(q)
+      );
+    }
+
+    const disNamesAll = [...new Set((DB.produccion||[]).map(op=>op.DISEÑADOR||'Sin asignar'))].sort();
+    const safe = s => String(s).replace(/'/g,"\'");
+    const filas = lista.map(op => {
+      const urgente = Number(op['DÍAS ENTREGA']) < 5;
+      const thumb   = _thumbHtml(op.IDQR, op.IMAGEN_B64, 36);
+      return `<tr style="${urgente?'background:rgba(220,50,50,.06)':''};cursor:pointer" onclick="mostrarItemsOP('${safe(op.OP)}')">
+        <td style="padding:4px 6px;width:26px" onclick="event.stopPropagation()">
+          <input type="checkbox" class="ctrl-item-chk" value="${String(op.IDQR).replace(/"/g,'&quot;')}"
+            ${_ctrlSel.has(String(op.IDQR))?'checked':''} onchange="_ctrlToggleSel('${String(op.IDQR).replace(/'/g,"\'")}',this.checked)"></td>
+        <td style="padding:4px 6px;width:44px">${thumb}</td>
+        <td style="font-size:11px;color:var(--muted);white-space:nowrap">OP-${op.OP||'—'}</td>
+        <td style="font-size:11px;color:var(--muted)">Item ${op.ITEM||'—'}</td>
+        <td style="font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${op.DESCRIPCION||'—'}</td>
+        <td style="font-size:11px;white-space:nowrap">${op.CLIENTE||'—'}</td>
+        <td style="font-size:11px;font-weight:600;color:${disColor(op.DISEÑADOR||'Sin asignar',disNamesAll)}">${op.DISEÑADOR||'Sin asignar'}</td>
+        <td style="font-size:11px;text-align:center">${diasTag(op['DÍAS ENTREGA'])}</td>
+      </tr>`;
+    }).join('');
+
+    const tabla = lista.length
+      ? `<div class="tbl-wrap" style="overflow-x:auto"><table class="tbl" style="min-width:600px">
+           <thead><tr><th style="width:26px"></th><th style="width:44px"></th>
+             <th>OP</th><th>Item</th><th>Descripción</th><th>Cliente</th><th>Diseñador</th><th style="text-align:center">Días</th>
+           </tr></thead><tbody>${filas}</tbody></table></div>`
+      : `<div class="empty"><div class="empty-icon">🔍</div><p>Sin resultados</p></div>`;
+
+    body.innerHTML = tabla + _ctrlBarraAcciones();
+    requestAnimationFrame(()=>_initLazyThumbs());
+  }, 180);
 }
 
 // ── Filtrar la lista de "Control Items" por diseñador (click en la torta o la leyenda) ──
@@ -11688,8 +12165,160 @@ function filtrarControlDis(dis) {
 // ── Helpers búsqueda y filtros de Control Items (Tab 1) ──────────────────
 let _disBuscarTimer = null;
 function _disBuscar(val) {
+  _disSearch = val; // actualizar estado inmediatamente
   clearTimeout(_disBuscarTimer);
-  _disBuscarTimer = setTimeout(() => { _disSearch = val; renderDiseno(1); }, 220);
+
+  // Actualización parcial: solo #dis-result-body, sin tocar el input
+  _disBuscarTimer = setTimeout(() => {
+    const body = document.getElementById('dis-result-body');
+    if(!body){
+      // Si no existe el contenedor (p.ej. primera carga), render completo
+      renderDiseno(1);
+      return;
+    }
+
+    // Recalcular la lista filtrada con el valor actual
+    const ops = DB.produccion || [];
+    const opsActivas = ops.filter(op =>
+      op.ESTADO !== 'TERMINADO' && op.ESTADO !== 'ENTREGADO' &&
+      op.ESTADO !== 'FACTURADO' && op.ESTADO !== 'CANCELADO'
+    );
+    // Tab 1: PENDIENTE MP Y DISEÑO + PENDIENTE DISEÑO; Tab 2 tiene su propio render
+    const pendMP = opsActivas.filter(op =>
+      op.ESTADO === 'PENDIENTE MP Y DISEÑO' || op.ESTADO === 'PENDIENTE DISEÑO'
+    );
+    const poolBase = _ctrlDisFilter
+      ? pendMP.filter(op => (op.DISEÑADOR||'Sin asignar') === _ctrlDisFilter)
+      : pendMP;
+
+    let lista = poolBase;
+    if(_disSearch.trim()){
+      const q = _disSearch.trim().toLowerCase();
+      lista = lista.filter(op =>
+        String(op.OP||'').toLowerCase().includes(q)          ||
+        String(op.DESCRIPCION||'').toLowerCase().includes(q) ||
+        String(op.CLIENTE||'').toLowerCase().includes(q)     ||
+        String(op.DISEÑADOR||'').toLowerCase().includes(q)   ||
+        String(op.ESTADO||'').toLowerCase().includes(q)      ||
+        String(op.TIPO||'').toLowerCase().includes(q)
+      );
+    }
+    if(_disFiltDis)  lista = lista.filter(op=>(op.DISEÑADOR||'Sin asignar')===_disFiltDis);
+    if(_disFiltEst)  lista = lista.filter(op=>(op.ESTADO||'')===_disFiltEst);
+    if(_disFiltTipo) lista = lista.filter(op=>String(op.TIPO||'').includes(_disFiltTipo));
+
+    // Actualizar contador en filterBar sin tocarla
+    const cntEl = document.querySelector('.filter-bar .filter-bar-top span[style*="muted"]');
+    if(cntEl) cntEl.textContent = `${lista.length} / ${poolBase.length}`;
+
+    // Actualizar contador en viewBar sin tocarla
+    const vbSpan = document.querySelector('[style*="dis-result"] ~ * span, .view-toggle ~ span');
+    // — fallback: buscar el span de conteo de viewBar por contenido
+    document.querySelectorAll('span').forEach(s => {
+      if(s.textContent.match(/^\d+ item\(s\) · \d+ OP/)) {
+        s.textContent = `${lista.length} item(s) · ${[...new Set(lista.map(x=>x.OP))].length} OP(s)`;
+      }
+    });
+
+    // Renderizar solo el contenido de resultados
+    const v = getView('diseño');
+    const safe = s => String(s).replace(/'/g,"\\'");
+
+    let html = '';
+    if(!lista.length){
+      html = `<div class="empty"><div class="empty-icon">🔍</div>
+        <p>Sin items que coincidan con los filtros</p>
+        <button class="btn btn-ghost" style="margin-top:8px" onclick="_disLimpiarFiltros()">Limpiar filtros</button></div>`;
+    } else if(v === 'table'){
+      const _ph = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='36' height='36'%3E%3Crect width='36' height='36' fill='%23eef1f5' rx='5'/%3E%3Ctext x='50%25' y='55%25' dominant-baseline='middle' text-anchor='middle' font-size='16'%3E📷%3C/text%3E%3C/svg%3E";
+      const disNamesAll = [...new Set((DB.produccion||[]).map(op=>op.DISEÑADOR||'Sin asignar'))].sort();
+      const filas = lista.map(op=>{
+        const dias    = Number(op['DÍAS ENTREGA']);
+        const urgente = !isNaN(dias) && dias < 5;
+        const rowStyle = urgente ? 'background:rgba(220,50,50,.06)' : '';
+        const thumb   = _thumbHtml(op.IDQR, op.IMAGEN_B64, 36);
+        return `<tr style="${rowStyle};cursor:pointer" onclick="mostrarItemsOP('${safe(op.OP)}')">
+          <td style="padding:4px 6px;width:26px" onclick="event.stopPropagation()">
+            <input type="checkbox" class="ctrl-item-chk" value="${String(op.IDQR).replace(/"/g,'&quot;')}"
+              ${_ctrlSel.has(String(op.IDQR))?'checked':''} onchange="_ctrlToggleSel('${String(op.IDQR).replace(/'/g,"\\'")}',this.checked)"></td>
+          <td style="padding:4px 6px;width:44px">${thumb}</td>
+          <td style="font-size:11px;color:var(--muted);white-space:nowrap">OP-${op.OP||'—'}</td>
+          <td style="font-size:11px;color:var(--muted)">Item ${op.ITEM||'—'}</td>
+          <td style="font-size:12px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${op.DESCRIPCION||'—'}</td>
+          <td style="font-size:11px;white-space:nowrap">${op.CLIENTE||'—'}</td>
+          <td style="font-size:11px;white-space:nowrap">
+            <span style="color:${disColor(op.DISEÑADOR||'Sin asignar',disNamesAll)};font-weight:600">
+              ${op.DISEÑADOR||'Sin asignar'}</span></td>
+          <td style="font-size:11px">${bEst(op.ESTADO)}</td>
+          <td style="font-size:11px;white-space:nowrap">${op.TIPO?bTipo(op.TIPO):''}</td>
+          <td style="font-size:11px;text-align:center">${diasTag(op['DÍAS ENTREGA'])}</td>
+          <td style="font-size:11px;text-align:right;color:var(--muted)">${op['HORAS TOTAL']?`${op['HORAS TOTAL']}h`:''}</td>
+        </tr>`;
+      }).join('');
+      html = `<div class="tbl-wrap" style="overflow-x:auto">
+        <table class="tbl" style="min-width:700px">
+          <thead><tr>
+            <th style="width:26px"><input type="checkbox" id="ctrl-sel-all" onchange="_ctrlToggleAll(this.checked)"></th>
+            <th style="width:44px"></th>
+            <th>OP</th><th>Item</th><th>Descripción</th><th>Cliente</th>
+            <th>Diseñador</th><th>Estado</th><th>Tipo</th>
+            <th style="text-align:center">Días</th><th style="text-align:right">Hrs</th>
+          </tr></thead>
+          <tbody>${filas}</tbody>
+        </table>
+      </div>`;
+    } else {
+      // Cards
+      const porOP = {};
+      lista.forEach(op => {
+        const key = `OP-${op.OP||'—'}`;
+        if(!porOP[key]) porOP[key] = { opNum: op.OP, cliente: op.CLIENTE||'—', items: [] };
+        porOP[key].items.push(op);
+      });
+      const grupos = Object.entries(porOP).sort((a,b)=>String(b[0]).localeCompare(String(a[0])));
+      const todoHtml = `<div class="list-card" onclick="mostrarTodosItemsProd()" style="border:2px solid var(--accent);margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div class="lc-title">Todo${_ctrlDisFilter?' · '+_ctrlDisFilter:''}${_disSearch?' (búsqueda)':''}</div>
+            <div class="lc-sub">${lista.length} items en ${grupos.length} OPs</div>
+          </div>
+          <span style="color:var(--muted);font-size:20px">›</span>
+        </div>
+      </div>`;
+      const gruposHtml = grupos.map(([key,g])=>{
+        const urgentesN = g.items.filter(op=>Number(op['DÍAS ENTREGA'])<5 || String(op.TIPO||'').includes('UR')).length;
+        const disStr    = [...new Set(g.items.map(x=>x.DISEÑADOR||'?'))].join(', ');
+        return `<div class="list-card" onclick="mostrarItemsOP('${g.opNum}')">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+            <div>
+              <div class="lc-id">${key}</div>
+              <div class="lc-title">${g.cliente}</div>
+              <div style="font-size:11px;color:var(--muted);margin:2px 0">✏️ ${disStr}</div>
+              <div class="lc-meta">
+                <span class="badge gris">${g.items.length} item(s)</span>
+                ${urgentesN?`<span class="badge rojo">🚨 ${urgentesN} urgente(s)</span>`:'<span class="badge verde">✅ Al día</span>'}
+              </div>
+            </div>
+            <span style="color:var(--muted);font-size:20px;flex-shrink:0">›</span>
+          </div>
+        </div>`;
+      }).join('');
+      html = (_ctrlSel.size?'':
+        `<div style="font-size:11px;color:var(--muted);margin-bottom:8px">💡 Cambia a vista tabla (⊞) para seleccionar varios items y aplicarles acciones en bloque.</div>`)
+        + todoHtml + gruposHtml;
+    }
+
+    body.innerHTML = html + _ctrlBarraAcciones();
+    if(v === 'table') requestAnimationFrame(()=>_initLazyThumbs());
+
+    // Mantener foco en el input de búsqueda
+    const inp = document.getElementById('dis-search-input');
+    if(inp && document.activeElement !== inp){
+      // Solo restaurar cursor si el usuario estaba escribiendo
+      const len = inp.value.length;
+      inp.setSelectionRange(len, len);
+    }
+  }, 180);
 }
 function _disToggleFiltros() {
   const panel = document.getElementById('dis-fbs');
@@ -11697,7 +12326,7 @@ function _disToggleFiltros() {
 }
 function _disLimpiarFiltros() {
   _disSearch = ''; _disFiltDis = ''; _disFiltEst = ''; _disFiltTipo = '';
-  renderDiseno(1);
+  renderDiseno(1); // render completo para resetear selects
 }
 
 // ── Mostrar items de una OP en el detail panel (fuente: DB.produccion) ──
@@ -11737,7 +12366,7 @@ function renderItemsDisenoPanel(titulo, items) {
     const dias    = Number(op['DÍAS ENTREGA']);
     const urgente = !isNaN(dias) && dias < 5;
     const mpDone  = (op['MP\nINSUMOS']||op['MP INSUMOS'])==='TRUE';
-    const borderColor = urgente ? 'var(--danger)' : (op.ESTADO==='PENDIENTE MP Y DISEÑO' ? 'var(--warn)' : 'var(--info)');
+    const borderColor = urgente ? 'var(--danger)' : (op.ESTADO==='PENDIENTE MP Y DISEÑO'||op.ESTADO==='PENDIENTE DISEÑO' ? 'var(--warn)' : 'var(--info)');
     const idqr = safe(op.IDQR||'');
 
     // ── Imagen ──────────────────────────────────────────────────────
@@ -15423,8 +16052,8 @@ async function _asignarProveedorOC(noc) {
 }
 
 async function _confirmarProveedorOC(noc, provId) {
-  const prov = (_proveedoresData||[]).find(p=>p.ID_PROVEEDOR===provId);
-  if(!prov) return;
+  const prov = (_proveedoresData||[]).find(p=>String(p.ID_PROVEEDOR)===String(provId));
+  if(!prov){ toast('No se encontró el proveedor seleccionado','error'); return; }
   try {
     await POST('updateCompra',{
       N_OC: noc,
