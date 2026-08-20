@@ -1221,7 +1221,7 @@ kbd{
 .login-logo img{width:120px}
 .login-logo h2{margin:8px 0 2px;font-size:20px;font-weight:800;color:var(--text)}
 .login-logo p{font-size:12px;color:var(--muted)}
-.login-card{width:100%;max-width:360px;background:var(--card);border-radius:16px;padding:24px;box-shadow:0 4px 24px rgba(0,0,0,.15)}
+.login-card{width:100%;max-width:460px;background:var(--card);border-radius:16px;padding:24px 20px;box-shadow:0 4px 24px rgba(0,0,0,.15)}
 .login-step{display:none}.login-step.active{display:block}
 .user-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px}
 .user-btn{
@@ -1335,8 +1335,18 @@ kbd{
   <div class="login-card">
     <!-- PASO 1: Seleccionar usuario -->
     <div class="login-step active" id="ls-1">
-      <div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:4px">¿Quién eres?</div>
+      <div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:12px;text-align:center;letter-spacing:.5px">¿Quién eres?</div>
       <div class="user-grid" id="user-grid"></div>
+      <button onclick="_loginSync()" id="login-sync-btn" style="
+        margin-top:16px;width:100%;padding:9px;border:1.5px solid var(--border);
+        border-radius:10px;background:transparent;color:var(--muted);
+        font-size:12px;font-weight:600;cursor:pointer;display:flex;
+        align-items:center;justify-content:center;gap:6px;transition:all .2s
+      " onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'"
+        onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">
+        <span id="login-sync-icon">🔄</span> Sincronizar datos
+      </button>
+      <div id="login-sync-msg" style="font-size:11px;color:var(--muted);text-align:center;margin-top:6px;min-height:16px"></div>
     </div>
     <!-- PASO 2: Ingresar PIN -->
     <div class="login-step" id="ls-2">
@@ -8205,7 +8215,7 @@ const svcOpts = (DB.servicios || []).map(s => {
         <div class="field"><label>Nº Item ★</label>
           <input type="number" id="i2" value="${sugItem}"></div>
         <div class="field"><label>Unidades ★</label>
-          <input type="number" id="i3" value="${it.CANT||1}" oninput="recalcItem()"></div>
+          <input type="number" id="i3" value="${it.UNIDADES||it.CANT||1}" oninput="recalcItem()"></div>
         <div class="field span2"><label>Descripción Item</label>
           <div id="i4" class="rich-desc" style="min-height:180px" contenteditable="true" data-placeholder="Descripción de la pieza — puedes pegar una captura de pantalla (Ctrl+V)" onpaste="richPaste(event,'i4')">${i4HtmlInicial}</div>
           <div class="rich-desc-hint">✎ Editor tipo Word: puedes escribir y pegar imágenes (Ctrl+V) en el mismo texto</div>
@@ -8213,7 +8223,7 @@ const svcOpts = (DB.servicios || []).map(s => {
         <div class="field span2"><label>Costo Flete (costo total) <span style="color:var(--warn);font-size:10px;font-weight:700">×1.3 al sumar</span></label>
           <div class="money-row">
             <span class="money-sign">$</span>
-            <input type="number" id="iflete" value="${it.COSTO_FLETE||''}" placeholder="0" oninput="recalcItem()">
+            <input type="number" id="iflete" value="${it.COSTO_FLETE||it['COSTO FLETE (Costo total)']||''}" placeholder="0" oninput="recalcItem()">
           </div>
         </div>
       </div>
@@ -8306,7 +8316,7 @@ const svcOpts = (DB.servicios || []).map(s => {
             ${fmt(it['PRECIO SIN IVA']||it['PRECIO UNITARIO']||0)}</div>
         </div>
         <div class="field"><label>Sobremargen %</label>
-          <input type="number" id="imargen" value="${it.SOBREMARGEN||''}" placeholder="0" step="0.01" oninput="onMargenInput()"></div>
+          <input type="number" id="imargen" value="${it.SOBREMARGEN||it['MARGEN (%)']||''}" placeholder="0" step="0.01" oninput="onMargenInput()"></div>
         <div class="field"></div>
         <div class="field span2">
           <label>Precio Unitario ★</label>
@@ -8334,7 +8344,19 @@ const svcOpts = (DB.servicios || []).map(s => {
   const _cotTipo = String(_cotTipoInfo?.TIPO||'').toUpperCase();
   document.getElementById('modal-body').dataset.cotTipo = _cotTipo;
 
-  setTimeout(()=>{ recalcItem(); _checkMargenUrgencia(true); renderDescImages(); },100);
+  setTimeout(()=>{
+    // Si el item ya tenía precio unitario guardado, marcarlo como manual
+    // para que recalcItem() no lo sobreescriba con el cálculo desde costos
+    const _ipunit = document.getElementById('ipunit');
+    const _precioGuardado = Number(it['PRECIO UNITARIO']||it['PRECIO SIN IVA']||0);
+    if(_ipunit && _precioGuardado > 0 && !isNew){
+      _ipunit._manual = true;
+      _ipunit.value = _precioGuardado;
+    }
+    recalcItem();
+    _checkMargenUrgencia(true);
+    renderDescImages();
+  },100);
 }
 
 // Genera el footer del wizard de Item: Cancelar + Anterior (si aplica) + Siguiente
@@ -16910,8 +16932,38 @@ function _logout() {
   document.getElementById('ls-2').classList.remove('active');
   document.getElementById('ls-1').classList.add('active');
   _pinValue = '';
+  _updatePinDisplay();
+  document.getElementById('login-error').textContent = '';
+  _renderLoginUsuarios(); // FIX v5.7: repoblar la grilla de usuarios al cerrar sesión
   document.getElementById('login-screen').classList.remove('hidden');
   document.getElementById('content').innerHTML = '';
+}
+
+// ── Sincronizar desde pantalla de login ─────────────────────────
+async function _loginSync() {
+  const btn  = document.getElementById('login-sync-btn');
+  const icon = document.getElementById('login-sync-icon');
+  const msg  = document.getElementById('login-sync-msg');
+  if (!btn) return;
+  btn.disabled = true;
+  if (icon) icon.textContent = '⏳';
+  if (msg)  msg.textContent  = 'Conectando con el servidor...';
+  try {
+    // Forzar recarga completa del DB (igual que el botón refresh de la app)
+    const res = await fetch(GAS_URL + '?action=kpis&_t=' + Date.now());
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    if (icon) icon.textContent = '✅';
+    if (msg)  msg.textContent  = 'Conexión OK — datos actualizados';
+  } catch(e) {
+    if (icon) icon.textContent = '❌';
+    if (msg)  msg.textContent  = 'Sin conexión: ' + e.message;
+  } finally {
+    btn.disabled = false;
+    setTimeout(() => {
+      if (icon) icon.textContent = '🔄';
+      if (msg)  msg.textContent  = '';
+    }, 3000);
+  }
 }
 
 // ── Arranque: verificar sesión guardada ─────────────────────────
