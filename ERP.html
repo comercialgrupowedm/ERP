@@ -478,28 +478,29 @@ td.mono{font-family:var(--mono);font-size:11px}
 }
 /* ── Toast de tarea en curso ── */
 #prog-toast{
-  position:fixed;bottom:20px;right:20px;z-index:9998;
+  position:fixed;bottom:24px;right:20px;z-index:9998;
   background:var(--card);border:1px solid var(--border);
-  border-radius:12px;padding:12px 16px;
-  box-shadow:0 4px 20px rgba(0,0,0,.12);
+  border-radius:14px;padding:12px 16px 10px;
+  box-shadow:0 6px 24px rgba(0,0,0,.15);
   display:none;align-items:center;gap:10px;
-  min-width:240px;max-width:320px;
+  min-width:260px;max-width:340px;
+  flex-direction:column;
   animation:slideUp .2s ease;
 }
 #prog-toast.show{display:flex;}
+#prog-toast-row{display:flex;align-items:center;gap:10px;width:100%;}
 #prog-toast-icon{font-size:20px;flex-shrink:0;}
 #prog-toast-info{flex:1;min-width:0;}
-#prog-toast-label{font-size:12px;font-weight:600;color:var(--text);}
-#prog-toast-sub{font-size:11px;color:var(--muted);margin-top:2px;}
+#prog-toast-label{font-size:12px;font-weight:700;color:var(--text);}
+#prog-toast-sub{font-size:11px;color:var(--muted);margin-top:1px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 #prog-toast-pct{font-size:12px;font-weight:700;color:var(--accent);flex-shrink:0;}
+#prog-toast-minibar{width:100%;height:3px;background:var(--border);border-radius:2px;overflow:hidden;}
+#prog-toast-minibar-fill{height:100%;width:0%;background:var(--accent);
+  border-radius:2px;transition:width .35s ease;}
 
 /* ═══ OVERLAY DE ACCIÓN EN CURSO ══════════════════════════════ */
-.busy-ov{
-  position:fixed;inset:0;z-index:5000;display:none;
-  align-items:center;justify-content:center;
-  background:rgba(15,23,42,.32);backdrop-filter:blur(1px);
-}
-.busy-ov.show{display:flex}
+.busy-ov{display:none !important;}
 .busy-card{
   background:var(--card);border:1px solid var(--border);border-radius:16px;
   padding:22px 30px;display:flex;flex-direction:column;align-items:center;gap:12px;
@@ -1408,12 +1409,15 @@ kbd{
 
 <!-- ── Toast de tarea en curso ── -->
 <div id="prog-toast">
-  <div id="prog-toast-icon">⏳</div>
-  <div id="prog-toast-info">
-    <div id="prog-toast-label">Procesando…</div>
-    <div id="prog-toast-sub"></div>
+  <div id="prog-toast-row">
+    <div id="prog-toast-icon">⏳</div>
+    <div id="prog-toast-info">
+      <div id="prog-toast-label">Procesando…</div>
+      <div id="prog-toast-sub"></div>
+    </div>
+    <div id="prog-toast-pct">0%</div>
   </div>
-  <div id="prog-toast-pct">0%</div>
+  <div id="prog-toast-minibar"><div id="prog-toast-minibar-fill"></div></div>
 </div>
 
 <!-- ══ OVERLAY DE ACCIÓN EN CURSO (guardando / actualizando / eliminando) ══ -->
@@ -1594,18 +1598,38 @@ function busyLabelFor(action){
   if(/^delete/i.test(action)) return 'Eliminando…';
   return 'Guardando…';
 }
+// Mapa de acción → ícono para el toast de progreso
+const _BUSY_ICON = {
+  create:'💾', update:'✏️', delete:'🗑️', get:'🔄', upload:'📤',
+  save:'💾', generar:'📄', bulk:'⚡', sync:'🔄',
+};
+function _busyIcon(text='') {
+  const t = text.toLowerCase();
+  if(t.includes('elimin') || t.includes('delet')) return '🗑️';
+  if(t.includes('subien') || t.includes('upload')) return '📤';
+  if(t.includes('creand') || t.includes('crean') || t.includes('creat')) return '💾';
+  if(t.includes('actuali') || t.includes('update') || t.includes('guardan')) return '✏️';
+  if(t.includes('sincron') || t.includes('cargand')) return '🔄';
+  if(t.includes('generan') || t.includes('pdf')) return '📄';
+  return '⚙️';
+}
+
+let _busyProg = null;
 function showBusy(text){
   _busyCount++;
-  const ov=document.getElementById('busy-ov');
-  const t=document.getElementById('busy-text');
-  if(t) t.textContent=text||'Guardando…';
-  if(ov) ov.classList.add('show');
+  // Usar _progress toast en lugar de overlay central
+  _busyProg = _progress({
+    icon: _busyIcon(text),
+    label: text || 'Guardando…',
+    steps: [text || 'Procesando…', 'Completado']
+  });
+  _busyProg.pct(30); // mostrar actividad inmediata
 }
 function hideBusy(){
-  _busyCount=Math.max(0,_busyCount-1);
-  if(_busyCount===0){
-    const ov=document.getElementById('busy-ov');
-    if(ov) ov.classList.remove('show');
+  _busyCount = Math.max(0, _busyCount - 1);
+  if(_busyCount === 0 && _busyProg) {
+    _busyProg.done('');
+    _busyProg = null;
   }
 }
 
@@ -1988,6 +2012,7 @@ function _progress({ icon='⏳', label='Procesando…', steps=[], color=null }={
   const tSub   = document.getElementById('prog-toast-sub');
   const tPct   = document.getElementById('prog-toast-pct');
 
+  const mini = document.getElementById('prog-toast-minibar-fill');
   if(!bar) return { step:()=>{}, pct:()=>{}, done:()=>{}, fail:()=>{} };
 
   // Reset
@@ -1996,52 +2021,60 @@ function _progress({ icon='⏳', label='Procesando…', steps=[], color=null }={
   bar.style.width = '0%';
   if(color) bar.style.background = color;
   else bar.style.background = 'var(--accent)';
-  setTimeout(() => bar.style.transition = 'width .35s ease', 30);
+  if(mini){ mini.style.background = color||'var(--accent)'; mini.style.width = '0%'; }
+  setTimeout(() => { bar.style.transition = 'width .35s ease'; }, 30);
 
   tIcon.textContent  = icon;
   tLabel.textContent = label;
   tSub.textContent   = steps[0] || '';
-  tPct.textContent   = '0%';
+  tPct.textContent   = '';
   tPct.style.color   = 'var(--accent)';
   toast.classList.add('show');
   _prog.active = true;
 
   const total = steps.length || 4;
 
+  const _setPct = (p) => {
+    bar.style.width = p + '%';
+    if(mini) mini.style.width = p + '%';
+    tPct.textContent = p + '%';
+  };
+
   const api = {
     step(i) {
-      const pct = Math.round(((i + 1) / total) * 90); // max 90% hasta done()
-      bar.style.width = pct + '%';
-      tPct.textContent = pct + '%';
+      const pct = Math.round(((i + 1) / total) * 90);
+      _setPct(pct);
       if(steps[i]) tSub.textContent = steps[i];
     },
-    pct(p) {
-      bar.style.width = p + '%';
-      tPct.textContent = p + '%';
-    },
+    pct(p) { _setPct(p); },
     done(msg='') {
-      bar.style.width = '100%';
-      tPct.textContent = '100%';
+      _setPct(100);
       tPct.style.color = '#16a34a';
-      tSub.textContent = msg || '✅ Completado';
+      tSub.textContent = msg || '✅ Listo';
       _prog._t = setTimeout(() => {
         toast.classList.remove('show');
         setTimeout(() => {
           bar.style.transition = 'none';
           bar.style.width = '0%';
+          if(mini) mini.style.width = '0%';
           _prog.active = false;
         }, 400);
-      }, 1600);
+      }, 1400);
     },
     fail(msg='Error') {
+      if(mini) mini.style.background = 'var(--danger)';
       bar.style.background = 'var(--danger)';
-      bar.style.width = '100%';
+      _setPct(100);
       tPct.textContent = '!';
       tPct.style.color = 'var(--danger)';
       tSub.textContent = '❌ ' + msg;
       _prog._t = setTimeout(() => {
         toast.classList.remove('show');
-        setTimeout(() => { bar.style.width = '0%'; _prog.active = false; }, 400);
+        setTimeout(() => {
+          bar.style.width = '0%';
+          if(mini) mini.style.width = '0%';
+          _prog.active = false;
+        }, 400);
       }, 3000);
     }
   };
@@ -4036,15 +4069,43 @@ async function ejecutarCrearOP(cotId, soloItemId){
   const anio      = new Date(fi).getFullYear();
   const diasEntrega = leadDias;
 
-  try{
+  // Cerrar modal y mostrar feedback inmediato — la creación va en background
+  const nItems = itsFaltantes.length;
+  toast(`⏳ Creando OP-${numOP} con ${nItems} ítem(s)…`);
+  closeModal();
+
+  // Mutación optimista: agregar las OPs al DB local para que aparezcan de inmediato
+  for(const it of itsFaltantes){
+    const _rutaFnOpt = (n) => it['PROCESO '+n]||it['RUTA MQ'+n]||it['RUTA_MQ'+n]||'';
+    DB.produccion = DB.produccion||[];
+    DB.produccion.push({
+      OP: numOP, COT: cotId, ITEM: it.ITEM||it.ITEM_NUM||1,
+      CLIENTE: c.Empresa||c.EMPRESA||'',
+      DESCRIPCION: it['DESCRIPCION ITEM']||it.DESCRIPCION||'',
+      ESTADO: 'PENDIENTE MP', IDQR: '',
+      'RUTA MQ1':_rutaFnOpt(1),'RUTA MQ2':_rutaFnOpt(2),
+      CANT: it.UNIDADES||it.CANT||1,
+    });
+  }
+  if(DB.cotizaciones){
+    const ic=DB.cotizaciones.findIndex(x=>String(x.COTIZACION)===String(cotId));
+    if(ic>=0) DB.cotizaciones[ic]={...DB.cotizaciones[ic], ESTADO:'EN PROCESO'};
+  }
+  // Re-renderizar inmediatamente con los datos optimistas
+  detailCot(cotId);
+
+  // Enviar al GAS en background (sin bloquear)
+  (async () => {
+    try{
     for(const it of itsFaltantes){
       // Construir rutas desde item
-      const rutas = [it.RUTA_MQ1,it.RUTA_MQ2,it.RUTA_MQ3,it.RUTA_MQ4,it.RUTA_MQ5].filter(Boolean);
-
-      // Calcular MAQUINA ACTUAL desde rutas y porcentajes (lógica AppSheet)
-      const rutasItem = [it['RUTA MQ1']||it.RUTA_MQ1||'',it['RUTA MQ2']||it.RUTA_MQ2||'',
-        it['RUTA MQ3']||it.RUTA_MQ3||'',it['RUTA MQ4']||it.RUTA_MQ4||'',
-        it['RUTA MQ5']||it.RUTA_MQ5||''].filter(Boolean);
+      // Construir rutas MQ1-MQ10 desde los 10 procesos del ítem
+      // Prioridad: PROCESO N (nombre real del proceso guardado en saveItem)
+      // Fallback: RUTA MQN (campo heredado del Sheet antiguo)
+      const _rutaFn = (n) =>
+        it['PROCESO '+n] || it['RUTA MQ'+n] || it['RUTA_MQ'+n] || '';
+      const rutas = [1,2,3,4,5,6,7,8,9,10].map(_rutaFn).filter(Boolean);
+      const rutasItem = rutas; // misma fuente, ya filtrada
 
       // ── Horas presupuestadas por máquina: se toman de los 10 procesos del
       // ítem (PROCESO N + TIEMPO PRO N (horas), que ya viene multiplicado por
@@ -4098,12 +4159,12 @@ async function ejecutarCrearOP(cotId, soloItemId){
         // ── Rutas de maquinado ─────────────────────────────
         'IMAGEN_ESTADO':     '',
         'CANTIDAD DE MQ':    rutasItem.length||0,
-        'RUTA MQ1':  it['PROCESO 1']||it['RUTA MQ1']||it.RUTA_MQ1||'',
-        'RUTA MQ2':  it['PROCESO 2']||it['RUTA MQ2']||it.RUTA_MQ2||'',
-        'RUTA MQ3':  it['RUTA MQ3']||'', 'RUTA MQ4': it['RUTA MQ4']||'',
-        'RUTA MQ5':  it['RUTA MQ5']||'', 'RUTA MQ6': it['RUTA MQ6']||'',
-        'RUTA MQ7':  it['RUTA MQ7']||'', 'RUTA MQ8': it['RUTA MQ8']||'',
-        'RUTA MQ9':  it['RUTA MQ9']||'', 'RUTA MQ10':it['RUTA MQ10']||'',
+        // Rutas MQ1-MQ10 desde los procesos del ítem (usa _rutaFn definida arriba)
+        'RUTA MQ1': _rutaFn(1), 'RUTA MQ2': _rutaFn(2),
+        'RUTA MQ3': _rutaFn(3), 'RUTA MQ4': _rutaFn(4),
+        'RUTA MQ5': _rutaFn(5), 'RUTA MQ6': _rutaFn(6),
+        'RUTA MQ7': _rutaFn(7), 'RUTA MQ8': _rutaFn(8),
+        'RUTA MQ9': _rutaFn(9), 'RUTA MQ10':_rutaFn(10),
         // ── Estado ─────────────────────────────────────────
         PRIORIDAD:           prioridad,
         ESTADO:              'PENDIENTE MP',
@@ -4149,7 +4210,7 @@ async function ejecutarCrearOP(cotId, soloItemId){
         ID:                  '',
         'HORAS RESTANTES NUMERO': 0,
         'HORAS EN NUMERO':   0,
-        'Proceso actual':    it['PROCESO 1']||it['RUTA MQ1']||it.RUTA_MQ1||'',
+        'Proceso actual':    _rutaFn(1)||'',
         REGISTRO_FOTOGRAFICO: it.IMAGEN_URL||it['IMAGEN_URL']||'',
         IMAGEN_B64:  it.IMAGEN_URL||it['IMAGEN_URL']||'',   // heredar imagen del item a la OP
         PLANO_URL:   it.PLANO_URL||it['PLANO_URL']||'',     // heredar plano del item a la OP
@@ -4168,12 +4229,12 @@ async function ejecutarCrearOP(cotId, soloItemId){
       });
     }
     // Actualizar COT → EN PROCESO
-    await POST('updateCotizacion',{...c, ESTADO:'EN PROCESO'});
+    POST_BG('updateCotizacion',{...c, ESTADO:'EN PROCESO'});
 
-    toast(`✅ OP-${numOP} — ${itsFaltantes.length} fila(s) creada(s) en Producción`);
-    closeModal();
-    _autoSync(['produccion','items','cotizaciones'], () => { detailCot(cotId); cotizaciones(); });
-  }catch(e){ toast(e.message,'error'); }
+    toast(`✅ OP-${numOP} — ${nItems} ítem(s) creados en Producción`);
+    _autoSync(['produccion','items','cotizaciones'], () => { detailCot(cotId); });
+    }catch(e){ toast(`⚠️ Error creando OP: ${e.message}`,'error'); }
+  })(); // fin async IIFE background
 }
 
 function getWeekNumber(d){
