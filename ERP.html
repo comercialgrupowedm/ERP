@@ -2450,7 +2450,7 @@ async function dashboard(){
             if(key === 'compras') _comprasData = data;
           }).catch(e2=>{
             console.warn(`${action} falló:`, e2.message);
-            if(!DB[key]) DB[key] = [];
+            if(!DB[key] && key !== 'items') DB[key] = []; // items: no poner [] vacío, mejor undefined para forzar recarga
           });
         }));
       }
@@ -3028,7 +3028,7 @@ async function detailCot(id){
     : tieneOP ? `<button class="btn btn-ghost btn-sm" onclick="detailOP('${ops[0].IDQR||ops[0].OP}')" style="color:var(--accent)">OP-${ops[0].OP} ↗</button>` : '';
 
   // Si no hay items en caché, cargarlos ahora (síncronamente para mostrarlos)
-  if(!DB.items) {
+  if(!DB.items || !DB.items.length) {
     try { DB.items = await GET('getItems','',{rango:RANGO_STATE.elementos||'1m'}); cacheSet('items',DB.items); } catch(e) {}
   }
   const its = (DB.items||[]).filter(x=>String(x.COTIZACION)===String(id)||String(x.ID_PEDIDO)===String(id));
@@ -3347,7 +3347,7 @@ async function detailCot(id){
     if(docsPanel) docsPanel.innerHTML = dpUploadSectionCot(id);
 
     // Si no había items en caché, cargar y actualizar el tab
-    if(!DB.items){
+    if(!DB.items || !DB.items.length){
       try {
         GET('getItems','',{rango:RANGO_STATE.elementos||'1m'}).then(d=>{if(d){DB.items=d;cacheSet('items',d);}}).catch(()=>{});
         const itsNuevos = DB.items.filter(x=>String(x.COTIZACION)===String(id)||String(x.ID_PEDIDO)===String(id));
@@ -3726,7 +3726,7 @@ function fallbackCopy(txt,cb){
 async function duplicarCot(id){
   const c=(DB.cotizaciones||[]).find(x=>String(x.COTIZACION)===String(id)||String(x.ID_PEDIDO)===String(id));
   if(!c){ toast('Cotización no encontrada','error'); return; }
-  if(!DB.items) DB.items = await GET('getItems', '', {rango:RANGO_STATE.elementos||'1m'});
+  if(!DB.items || !DB.items.length) DB.items = await GET('getItems', '', {rango:RANGO_STATE.elementos||'1m'});
   const its=DB.items.filter(x=>String(x.COTIZACION)===String(id)||String(x.ID_PEDIDO)===String(id));
 
   // Calcular nuevo ID: max actual + 1
@@ -3885,7 +3885,7 @@ function leadTimeDias(v){
 
 
 async function modalCrearOP(cotId, soloItemId){
-  if(!DB.items)     DB.items     = await GET('getItems', '', {rango:RANGO_STATE.elementos||'1m'});
+  if(!DB.items || !DB.items.length)     DB.items     = await GET('getItems', '', {rango:RANGO_STATE.elementos||'1m'});
   if(!DB.produccion)DB.produccion = await GET('getControlProduccion', '', {rango:RANGO_STATE.produccion||'1m'});
   const c=(DB.cotizaciones||[]).find(x=>String(x.COTIZACION)===String(cotId));
   if(!c){ toast('Cotización no encontrada','error'); return; }
@@ -7918,7 +7918,7 @@ async function deleteOP(id){
 async function items(){
   loading();
   try{
-    if(!DB.items) DB.items = await GET('getItems', '', {rango:RANGO_STATE.elementos||'1m'});
+    if(!DB.items || !DB.items.length) DB.items = await GET('getItems', '', {rango:RANGO_STATE.elementos||'1m'});
     if(!DB.cotizaciones) await load('cotizaciones','getCotizaciones');
     if(!DB.produccion)   await load('produccion','getControlProduccion');
     updateBadges();
@@ -10120,7 +10120,7 @@ async function recalcularTotalesCot(cotId){
 }
 
 async function recalcularTotalesCotUI(cotId){
-  if(!DB.items) DB.items = await GET('getItems', '', {rango:RANGO_STATE.elementos||'1m'});
+  if(!DB.items || !DB.items.length) DB.items = await GET('getItems', '', {rango:RANGO_STATE.elementos||'1m'});
   const its=(DB.items||[]).filter(x=>String(x.COTIZACION)===String(cotId)||String(x.ID_PEDIDO)===String(cotId));
   if(!its.length){ toast('Esta cotización no tiene ítems para sumar','error'); return; }
   await recalcularTotalesCot(cotId);
@@ -10409,7 +10409,7 @@ async function saveItem(exist, cotId){
   } catch(e) { console.warn('_itSubirArchivosPendientes:', e); }
 
   // Mutación optimista en DB local
-  if(!DB.items) DB.items=[];
+  if(!DB.items || !DB.items.length) DB.items=[];
   if(exist){
     const ix=DB.items.findIndex(x=>String(x.ID_ITEM)===String(exist));
     if(ix>=0) DB.items[ix]={...DB.items[ix],...data};
@@ -10435,7 +10435,7 @@ async function saveItem(exist, cotId){
   try{
     // bloque try para el resto del flujo
     // Actualizar DB.items localmente (sin recargar todo del servidor)
-    if(!DB.items) DB.items=[];
+    if(!DB.items || !DB.items.length) DB.items=[];
     if(exist){
       const idx=DB.items.findIndex(x=>String(x.ID_ITEM)===String(exist));
       if(idx>=0) DB.items[idx]={...DB.items[idx],...data};
@@ -12178,7 +12178,7 @@ function pieDonutInteractive(data, size, activeLabel, onClickFn){
 async function controlDiseno() {
   loading();
   try {
-    if(!DB.items)      await load('items','getItems');
+    if(!DB.items || !DB.items.length)      await load('items','getItems');
     if(!DB.produccion) await load('produccion','getControlProduccion');
     if(!DB.cotizaciones) await load('cotizaciones','getCotizaciones');
     renderDiseno(_disTab);
@@ -13141,7 +13141,7 @@ async function _disPedirMP(idqr, opNum) {
   const op = (DB.produccion||[]).find(x=>String(x.IDQR)===String(idqr));
   if(!op){ toast('OP no encontrada','error'); return; }
 
-  if(!DB.items)     { try { await load('items','getItems'); } catch(e){} }
+  if(!DB.items || !DB.items.length)     { try { await load('items','getItems'); } catch(e){} }
   if(!DB.materiales){ try { await load('materiales','getMateriales'); } catch(e){} }
   if(!DB.servicios) { try { await load('servicios','getServicios'); } catch(e){} }
 
@@ -15011,7 +15011,7 @@ function docCSS() {
 async function generarPDFCotizacion(cotId) {
   // Cargar datos si no están en cache
   if(!DB.cotizaciones) await load('cotizaciones','getCotizaciones');
-  if(!DB.items)        await load('items','getItems');
+  if(!DB.items || !DB.items.length)        await load('items','getItems');
   if(!DB.clientes)     await load('clientes','getClientes');
 
   const c    = (DB.cotizaciones||[]).find(x=>String(x.COTIZACION)===String(cotId));
