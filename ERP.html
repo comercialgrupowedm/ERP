@@ -1320,6 +1320,7 @@ kbd{
     <div class="nav-section">Recursos</div>
     <div class="nav-item" data-m="materiales"><span class="nav-icon">🧱</span>Materiales</div>
     <div class="nav-item" data-m="servicios"><span class="nav-icon">🛠️</span>Servicios Externos</div>
+    <div class="nav-item" data-m="admin" style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px"><span class="nav-icon">🔐</span>Admin Usuarios</div>
   </div>
 </nav>
 
@@ -1547,7 +1548,7 @@ const TITLES = {
   remisiones:'Remisiones', produccion:'Control Producción',
   'diseño':'Control Diseño', items:'Items / Elementos',
   procesos:'Procesos / Máquinas', materiales:'Materiales', servicios:'Servicios Externos',
-  compras:'Compras / OC', proveedores:'Proveedores'
+  compras:'Compras / OC', proveedores:'Proveedores', admin:'🔐 Admin Usuarios'
 };
 const FAB_ACTIONS = {
   cotizaciones:()=>formCot({}),
@@ -1824,7 +1825,7 @@ function nav(m){
     }
   }
 
-  const mods={dashboard,cotizaciones,clientes,remisiones,produccion,items,procesos,materiales,servicios,'diseño':controlDiseno,compras,proveedores};
+  const mods={dashboard,cotizaciones,clientes,remisiones,produccion,items,procesos,materiales,servicios,'diseño':controlDiseno,compras,proveedores,admin:adminUsuarios};
   if(mods[m]) mods[m]();
 }
 
@@ -4072,6 +4073,9 @@ async function ejecutarCrearOP(cotId, soloItemId){
         'HORAS EN NUMERO':   0,
         'Proceso actual':    it['PROCESO 1']||it['RUTA MQ1']||it.RUTA_MQ1||'',
         REGISTRO_FOTOGRAFICO: it.IMAGEN_URL||it['IMAGEN_URL']||'',
+        IMAGEN_B64:  it.IMAGEN_URL||it['IMAGEN_URL']||'',   // heredar imagen del item a la OP
+        PLANO_URL:   it.PLANO_URL||it['PLANO_URL']||'',     // heredar plano del item a la OP
+        PLANO_NOMBRE:it.PLANO_NOMBRE||it['PLANO_NOMBRE']||'',
       };
 
       await POST('createOP', opRow);
@@ -8207,6 +8211,7 @@ const svcOpts = (DB.servicios || []).map(s => {
       <div class="wiz-tab" onclick="wizItemTab(2)">🛠 Servicios</div>
       <div class="wiz-tab" onclick="wizItemTab(3)">⚙️ Procesos</div>
       <div class="wiz-tab" onclick="wizItemTab(4)">💰 Precios</div>
+      <div class="wiz-tab" onclick="wizItemTab(5)">📎 Archivos</div>
     </div>
 
     <!-- PASO 0: DATOS DEL ITEM -->
@@ -8332,6 +8337,85 @@ const svcOpts = (DB.servicios || []).map(s => {
           <input type="hidden" id="i5" value="${it['PRECIO SIN IVA']||it['PRECIO UNITARIO']||0}">
         </div>
       </div>
+    </div>
+
+    <!-- PASO 5: ARCHIVOS — Imagen de referencia + Plano -->
+    <div class="wiz-step" id="wiz-item-5" style="display:none">
+
+      <!-- IMAGEN DE REFERENCIA -->
+      <div style="margin-bottom:18px">
+        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">
+          📷 Imagen de referencia
+        </div>
+        <div id="it-img-preview" style="margin-bottom:10px;${(it.IMAGEN_URL||it['IMAGEN_URL'])?'':'display:none'}">
+          <img src="${it.IMAGEN_URL||it['IMAGEN_URL']||''}" id="it-img-thumb"
+            style="max-width:100%;max-height:180px;border-radius:10px;border:1px solid var(--border);object-fit:contain;cursor:pointer"
+            onclick="window.open(this.src,'_blank')">
+          <div style="font-size:11px;color:var(--muted);margin-top:4px" id="it-img-name">${it.IMAGEN_NOMBRE||''}</div>
+        </div>
+        <div id="it-img-drop" style="
+          border:2px dashed var(--border);border-radius:12px;padding:20px 14px;
+          text-align:center;cursor:pointer;transition:border-color .15s,background .15s;
+          background:var(--card2)"
+          onclick="document.getElementById('it-img-input').click()"
+          ondragover="event.preventDefault();this.style.borderColor='var(--accent)';this.style.background='rgba(37,99,235,.05)'"
+          ondragleave="this.style.borderColor='';this.style.background='var(--card2)'"
+          ondrop="event.preventDefault();this.style.borderColor='';this.style.background='var(--card2)';_itHandleDrop(event,'imagen')">
+          <div style="font-size:26px;margin-bottom:4px">🖼️</div>
+          <div style="font-size:13px;font-weight:600;color:var(--text)">Haz clic, arrastra o pega (Ctrl+V)</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:3px">PNG, JPG, WEBP — se sube a imgbb</div>
+          <input type="file" id="it-img-input" accept="image/*"
+            style="position:absolute;opacity:0;width:0;height:0"
+            onchange="_itSetFile(this.files[0],'imagen')">
+        </div>
+        <div id="it-img-status" style="font-size:11px;color:var(--muted);text-align:center;margin-top:6px;min-height:14px"></div>
+        <input type="hidden" id="it-img-url"  value="${it.IMAGEN_URL||it['IMAGEN_URL']||''}">
+        <input type="hidden" id="it-img-nom"  value="${it.IMAGEN_NOMBRE||''}">
+      </div>
+
+      <div style="height:1px;background:var(--border);margin:4px 0 18px"></div>
+
+      <!-- PLANO / ARCHIVO -->
+      <div>
+        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">
+          📐 Plano / Archivo técnico
+        </div>
+        <div id="it-plan-preview" style="margin-bottom:10px;${(it.PLANO_URL||it['PLANO_URL'])?'':'display:none'}">
+          <div style="display:flex;align-items:center;gap:10px;background:var(--card2);border-radius:10px;padding:10px 14px">
+            <div style="font-size:26px">${_archIcon ? _archIcon(it.PLANO_NOMBRE||'') : '📄'}</div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" id="it-plan-name">${it.PLANO_NOMBRE||'Archivo'}</div>
+              <div style="font-size:11px;color:var(--muted)">Archivo adjunto</div>
+            </div>
+            <a id="it-plan-link" href="${it.PLANO_URL||'#'}" target="_blank"
+              style="padding:5px 12px;border:1px solid var(--border);border-radius:7px;font-size:12px;color:var(--accent);text-decoration:none">
+              ⬇️ Abrir
+            </a>
+          </div>
+        </div>
+        <div id="it-plan-drop" style="
+          border:2px dashed var(--border);border-radius:12px;padding:20px 14px;
+          text-align:center;cursor:pointer;transition:border-color .15s,background .15s;
+          background:var(--card2)"
+          onclick="document.getElementById('it-plan-input').click()"
+          ondragover="event.preventDefault();this.style.borderColor='var(--accent)';this.style.background='rgba(37,99,235,.05)'"
+          ondragleave="this.style.borderColor='';this.style.background='var(--card2)'"
+          ondrop="event.preventDefault();this.style.borderColor='';this.style.background='var(--card2)';_itHandleDrop(event,'plano')">
+          <div style="font-size:26px;margin-bottom:4px">📄</div>
+          <div style="font-size:13px;font-weight:600;color:var(--text)">Haz clic o arrastra el plano</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:3px">PDF · DWG · DXF · STEP · SolidWorks · ZIP · cualquier tipo</div>
+          <input type="file" id="it-plan-input" accept="*/*"
+            style="position:absolute;opacity:0;width:0;height:0"
+            onchange="_itSetFile(this.files[0],'plano')">
+        </div>
+        <div id="it-plan-status" style="font-size:11px;color:var(--muted);text-align:center;margin-top:6px;min-height:14px"></div>
+        <input type="hidden" id="it-plan-url" value="${it.PLANO_URL||it['PLANO_URL']||''}">
+        <input type="hidden" id="it-plan-nom" value="${it.PLANO_NOMBRE||''}">
+      </div>
+
+      <div style="margin-top:14px;padding:10px;background:var(--card2);border-radius:8px;font-size:11px;color:var(--muted)">
+        💡 La imagen y el plano del ítem se heredan automáticamente a la Orden de Producción y a la Hoja de Ruta.
+      </div>
     </div>`,
     itemFooterHtml(0, it, isNew));
 
@@ -8353,6 +8437,9 @@ const svcOpts = (DB.servicios || []).map(s => {
       _ipunit._manual = true;
       _ipunit.value = _precioGuardado;
     }
+    // Limpiar archivos pendientes al abrir un modal nuevo
+    window._itPendingImg  = null;
+    window._itPendingPlan = null;
     recalcItem();
     _checkMargenUrgencia(true);
     renderDescImages();
@@ -8361,7 +8448,7 @@ const svcOpts = (DB.servicios || []).map(s => {
 
 // Genera el footer del wizard de Item: Cancelar + Anterior (si aplica) + Siguiente
 // o, solo en el último paso, el botón de Guardar/Actualizar.
-const ITEM_WIZ_LAST_STEP=4;
+const ITEM_WIZ_LAST_STEP=5;
 function itemFooterHtml(idx, it, isNew){
   let html=`<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>`;
   if(idx>0) html+=`<button class="btn btn-ghost" onclick="wizItemTab(${idx-1})">← Anterior</button>`;
@@ -8384,6 +8471,8 @@ function wizItemTab(idx){
   document.getElementById('modal-foot').innerHTML=itemFooterHtml(idx, it, isNew);
   // FIX urgencia: al entrar a la pestaña Precios (idx=4), verificar/mostrar aviso
   if(idx===4) setTimeout(()=>_checkMargenUrgencia(true),80);
+  // FIX archivos: al entrar a la pestaña Archivos (idx=5), registrar paste handler
+  if(idx===5) _itRegistrarPaste();
   // Enfocar el primer campo del nuevo paso (llenado más fluido)
   setTimeout(()=>{
     const step=document.getElementById('wiz-item-'+idx);
@@ -9170,6 +9259,138 @@ function recalcItem(){
   if(pxItem) pxItem.textContent=fmt(px*cant);
 
   const i5=document.getElementById('i5'); if(i5) i5.value=presupUnit;
+}
+
+
+// ══════════════════════════════════════════════════════════════
+//  ARCHIVOS DEL ITEM (pestaña 📎 — paso 5)
+//  Imagen → imgbb  |  Plano → Google Drive via GAS
+// ══════════════════════════════════════════════════════════════
+
+// Archivos pendientes de subir (se suben cuando el usuario guarda el item)
+window._itPendingImg  = null; // File objeto imagen
+window._itPendingPlan = null; // File objeto plano
+
+function _itHandleDrop(event, kind) {
+  const file = event.dataTransfer?.files?.[0];
+  if (file) _itSetFile(file, kind);
+}
+
+function _itSetFile(file, kind) {
+  if (!file) return;
+  if (kind === 'imagen') {
+    window._itPendingImg = file;
+    // Preview inmediato
+    const url = URL.createObjectURL(file);
+    const thumb = document.getElementById('it-img-thumb');
+    const prev  = document.getElementById('it-img-preview');
+    const nom   = document.getElementById('it-img-name');
+    const stat  = document.getElementById('it-img-status');
+    if (thumb) { thumb.src = url; }
+    if (prev)  { prev.style.display = ''; }
+    if (nom)   { nom.textContent = file.name; }
+    if (stat)  { stat.textContent = `📎 ${file.name} (${(file.size/1024).toFixed(1)} KB) — se subirá al guardar`; }
+    document.getElementById('it-img-drop').style.borderColor = 'var(--accent)';
+  } else {
+    window._itPendingPlan = file;
+    const prev = document.getElementById('it-plan-preview');
+    const nom  = document.getElementById('it-plan-name');
+    const stat = document.getElementById('it-plan-status');
+    if (prev) { prev.style.display = ''; }
+    if (nom)  { nom.textContent = file.name; }
+    if (stat) { stat.textContent = `📎 ${file.name} (${(file.size/1024).toFixed(1)} KB) — se subirá al guardar`; }
+    document.getElementById('it-plan-drop').style.borderColor = 'var(--accent)';
+  }
+  toast(`✓ ${kind === 'imagen' ? 'Imagen' : 'Plano'} listo — se sube al guardar el ítem`, 'ok');
+}
+
+// Registrar Ctrl+V para pegar imagen cuando el tab 5 está activo
+function _itRegistrarPaste() {
+  // Limpiar handler anterior si existe
+  if (window._itPasteHandler) {
+    document.removeEventListener('paste', window._itPasteHandler);
+  }
+  window._itPasteHandler = async (e) => {
+    const items = (e.clipboardData || e.originalEvent?.clipboardData)?.items;
+    if (!items) return;
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (file) _itSetFile(file, 'imagen');
+        break;
+      }
+    }
+  };
+  document.addEventListener('paste', window._itPasteHandler);
+}
+
+// Limpiar paste handler al cerrar el modal
+const _origCloseModal = window.closeModal;
+window.closeModal = function(e) {
+  if (window._itPasteHandler) {
+    document.removeEventListener('paste', window._itPasteHandler);
+    window._itPasteHandler = null;
+  }
+  window._itPendingImg  = null;
+  window._itPendingPlan = null;
+  if (_origCloseModal) _origCloseModal(e);
+};
+
+// Subir archivos pendientes del item antes de guardar
+// Retorna { imgUrl, imgNom, planUrl, planNom } con los valores finales
+async function _itSubirArchivosPendientes(cotId) {
+  // Usar IDQR del item si existe, si no usar cotId como referencia de carpeta
+  const mbData = document.getElementById('modal-body')?.dataset;
+  const refId  = mbData?.itemExist || cotId || 'item_' + Date.now();
+
+  let imgUrl  = document.getElementById('it-img-url')?.value  || '';
+  let imgNom  = document.getElementById('it-img-nom')?.value  || '';
+  let planUrl = document.getElementById('it-plan-url')?.value || '';
+  let planNom = document.getElementById('it-plan-nom')?.value || '';
+
+  // ── Subir imagen si hay una nueva ──
+  if (window._itPendingImg) {
+    try {
+      const stat = document.getElementById('it-img-status');
+      if (stat) stat.textContent = '⏳ Subiendo imagen...';
+      const { url } = await uploadToImgbb(window._itPendingImg);
+      imgUrl = url;
+      imgNom = window._itPendingImg.name;
+      if (stat) stat.textContent = '✅ Imagen subida';
+      window._itPendingImg = null;
+    } catch(e) {
+      toast('⚠️ No se pudo subir la imagen: ' + e.message, 'error');
+    }
+  }
+
+  // ── Subir plano si hay uno nuevo ──
+  if (window._itPendingPlan) {
+    try {
+      const stat = document.getElementById('it-plan-status');
+      if (stat) stat.textContent = '⏳ Subiendo plano a Drive...';
+      const base64 = await new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload  = () => res(r.result.split(',')[1]);
+        r.onerror = () => rej(new Error('Error leyendo el archivo'));
+        r.readAsDataURL(window._itPendingPlan);
+      });
+      const result = await POST_ARCH('uploadFile', {
+        base64,
+        mimeType: window._itPendingPlan.type || 'application/octet-stream',
+        fileName: window._itPendingPlan.name,
+        idqr: String(refId),
+      });
+      planUrl = result.url;
+      planNom = window._itPendingPlan.name;
+      if (stat) stat.textContent = '✅ Plano subido a Drive';
+      window._itPendingPlan = null;
+    } catch(e) {
+      toast('⚠️ No se pudo subir el plano: ' + e.message, 'error');
+    }
+  }
+
+  return { imgUrl, imgNom, planUrl, planNom };
 }
 
 // Cuando el usuario edita el % de Sobremargen: vuelve el Precio Unitario a modo
@@ -10025,6 +10246,13 @@ async function saveItem(exist, cotId){
   data['Perimetro'] = hiloRow?.peri || 0;
   data['Espesor']   = hiloRow?.esp  || 0;
   data['Material']  = hiloRow?.matHilo || '';
+
+  // ── Subir archivos pendientes del item (imagen y plano) ────
+  try {
+    const { imgUrl, imgNom, planUrl, planNom } = await _itSubirArchivosPendientes(cotId);
+    if (imgUrl)  { data.IMAGEN_URL = imgUrl;  data.IMAGEN_NOMBRE = imgNom; }
+    if (planUrl) { data.PLANO_URL  = planUrl; data.PLANO_NOMBRE  = planNom; }
+  } catch(e) { console.warn('_itSubirArchivosPendientes:', e); }
 
   try{
     const saved=await POST(exist?'updateItem':'createItem',data);
@@ -10944,8 +11172,15 @@ async function saveRem(exist){
   });
 
   try{
+    // Si es nueva remisión, pedir el siguiente número correlativo al GAS
+    if (!exist) {
+      const nextRes = await POST('nextRemId', {});
+      if (nextRes?.nextId) {
+        data.REMISION = String(nextRes.nextId);
+      }
+    }
     await POST(exist?'updateRemision':'createRemision', data);
-    toast('✅ Remisión '+(exist?'actualizada':'creada'));
+    toast('✅ Remisión '+(exist?'actualizada':'creada')+(data.REMISION?' — REM-'+data.REMISION:''));
     closeModal();
     DB.remisiones = null;
     _autoSync(['remisiones'], remisiones);
@@ -16717,7 +16952,7 @@ const USUARIOS = [
 
 // ── MÓDULOS POR ROL ─────────────────────────────────────────────
 const MODS_POR_ROL = {
-  admin:      ['dashboard','cotizaciones','clientes','remisiones','produccion','compras','proveedores','diseño','items','materiales','servicios','procesos'],
+  admin:      ['dashboard','cotizaciones','clientes','remisiones','produccion','compras','proveedores','diseño','items','materiales','servicios','procesos','admin'],
   comercial:  ['dashboard','cotizaciones','clientes','remisiones','produccion'],
   planeacion: ['dashboard','produccion','compras','cotizaciones'],
   diseno:     ['dashboard','diseño','cotizaciones'],
@@ -16727,7 +16962,7 @@ const MODS_POR_ROL = {
 
 // ── MÓDULOS EN BOTTOM NAV POR ROL ──────────────────────────────
 const BOTTOM_NAV_POR_ROL = {
-  admin:      ['dashboard','cotizaciones','clientes','remisiones','diseño','produccion','compras','proveedores','items','procesos','materiales','servicios'],
+  admin:      ['dashboard','cotizaciones','clientes','remisiones','diseño','produccion','compras','proveedores','items','procesos','materiales','servicios','admin'],
   comercial:  ['dashboard','cotizaciones','clientes','remisiones','produccion'],
   planeacion: ['dashboard','produccion','compras','cotizaciones','items'],
   diseno:     ['dashboard','diseño','cotizaciones','items'],
@@ -16950,7 +17185,7 @@ async function _loginSync() {
   if (msg)  msg.textContent  = 'Conectando con el servidor...';
   try {
     // Forzar recarga completa del DB (igual que el botón refresh de la app)
-    const res = await fetch(GAS_URL + '?action=kpis&_t=' + Date.now());
+    const res = await fetch(API + '?action=kpis&_t=' + Date.now());
     if (!res.ok) throw new Error('HTTP ' + res.status);
     if (icon) icon.textContent = '✅';
     if (msg)  msg.textContent  = 'Conexión OK — datos actualizados';
@@ -16989,6 +17224,434 @@ async function _loginSync() {
   window._loginPendiente = true;
 })();
 
+
+
+// ══════════════════════════════════════════════════════════════
+//  ADMIN USUARIOS v5.8
+//  - Lee/escribe hoja USUARIOS en el Spreadsheet via GAS
+//  - Gestiona usuarios (crear/editar/eliminar)
+//  - Gestiona permisos por rol (módulos + acciones CRUD)
+// ══════════════════════════════════════════════════════════════
+
+// Todos los módulos disponibles en el sistema
+const TODOS_LOS_MODULOS = [
+  { id:'dashboard',     label:'Dashboard',          icon:'📊' },
+  { id:'cotizaciones',  label:'Cotizaciones',        icon:'📋' },
+  { id:'clientes',      label:'Clientes',            icon:'🏢' },
+  { id:'remisiones',    label:'Remisiones',          icon:'🚚' },
+  { id:'produccion',    label:'Control Producción',  icon:'🏭' },
+  { id:'diseño',        label:'Control Diseño',      icon:'🎨' },
+  { id:'compras',       label:'Compras / OC',        icon:'🛒' },
+  { id:'proveedores',   label:'Proveedores',         icon:'🏪' },
+  { id:'items',         label:'Items / Elementos',   icon:'🔩' },
+  { id:'materiales',    label:'Materiales',          icon:'🧱' },
+  { id:'servicios',     label:'Servicios Externos',  icon:'🛠️' },
+  { id:'procesos',      label:'Procesos/Máquinas',   icon:'⚙️' },
+];
+
+const ACCIONES_CRUD = ['ver','crear','editar','eliminar'];
+const ROLES_SISTEMA = ['admin','comercial','planeacion','diseno','produccion','lectura'];
+
+// Estado local del panel admin
+let _adminUsuariosDB  = []; // usuarios cargados desde GAS
+let _adminPermisosDB  = {}; // { rol: { modulo: { ver,crear,editar,eliminar } } }
+let _adminTabActual   = 'usuarios'; // 'usuarios' | 'roles'
+let _adminEditUser    = null; // usuario en edición
+
+// ── Cargar datos desde GAS ────────────────────────────────────
+async function _adminCargarDatos() {
+  try {
+    const [resU, resP] = await Promise.all([
+      POST('getUsuarios', {}),
+      POST('getPermisosRoles', {}),
+    ]);
+    if (resU?.ok && Array.isArray(resU.data) && resU.data.length > 0) {
+      _adminUsuariosDB = resU.data;
+      // Sincronizar array local USUARIOS para que el login funcione
+      USUARIOS.length = 0;
+      resU.data.forEach(u => USUARIOS.push({
+        id: u.ID_USUARIO || u.id,
+        nombre: u.NOMBRE || u.nombre,
+        avatar: u.AVATAR || u.avatar || '👤',
+        rol: (u.ROL || u.rol || 'lectura').toLowerCase(),
+        pin: u.PIN || u.pin || '0000',
+      }));
+    }
+    if (resP?.ok && resP.data) {
+      _adminPermisosDB = resP.data;
+      // Sincronizar MODS_POR_ROL y BOTTOM_NAV_POR_ROL dinámicamente
+      _adminSincronizarRoles();
+    }
+  } catch(e) {
+    console.warn('Admin: no se pudo cargar desde GAS, usando datos locales', e);
+    // Fallback: usar USUARIOS hardcodeados
+    _adminUsuariosDB = USUARIOS.map(u => ({
+      ID_USUARIO: u.id, NOMBRE: u.nombre, AVATAR: u.avatar,
+      ROL: u.rol, PIN: u.pin, ACTIVO: 'SI'
+    }));
+  }
+}
+
+// Sincronizar MODS_POR_ROL y BOTTOM_NAV_POR_ROL desde _adminPermisosDB
+function _adminSincronizarRoles() {
+  if (!Object.keys(_adminPermisosDB).length) return;
+  ROLES_SISTEMA.forEach(rol => {
+    const permisos = _adminPermisosDB[rol] || {};
+    const modulosConVer = TODOS_LOS_MODULOS
+      .filter(m => permisos[m.id]?.ver)
+      .map(m => m.id);
+    if (modulosConVer.length > 0) {
+      MODS_POR_ROL[rol] = modulosConVer;
+      BOTTOM_NAV_POR_ROL[rol] = modulosConVer;
+    }
+  });
+}
+
+// ── Render principal del módulo ───────────────────────────────
+async function adminUsuarios() {
+  if (!_esAdmin()) {
+    setContent('<div style="padding:40px;text-align:center;color:var(--muted)">🔒 Acceso restringido</div>');
+    return;
+  }
+  loading();
+  await _adminCargarDatos();
+
+  setContent(`
+    <div style="max-width:900px;margin:0 auto;padding:16px">
+
+      <!-- Header -->
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+        <div style="font-size:32px">🔐</div>
+        <div>
+          <div style="font-size:18px;font-weight:800;color:var(--text)">Administración de Usuarios</div>
+          <div style="font-size:12px;color:var(--muted)">Gestión de usuarios y permisos por rol · Solo Admin</div>
+        </div>
+        <button onclick="_adminCargarDatos().then(adminUsuarios)" style="margin-left:auto;padding:7px 14px;border:1px solid var(--border);border-radius:8px;background:transparent;color:var(--muted);cursor:pointer;font-size:12px">🔄 Recargar</button>
+      </div>
+
+      <!-- Tabs -->
+      <div style="display:flex;gap:4px;background:var(--card2);border-radius:10px;padding:4px;margin-bottom:20px">
+        <button id="atab-usuarios" onclick="_adminTab('usuarios')" style="flex:1;padding:8px;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;background:${_adminTabActual==='usuarios'?'var(--accent)':'transparent'};color:${_adminTabActual==='usuarios'?'#fff':'var(--muted)'}">
+          👤 Usuarios (${_adminUsuariosDB.length})
+        </button>
+        <button id="atab-roles" onclick="_adminTab('roles')" style="flex:1;padding:8px;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;background:${_adminTabActual==='roles'?'var(--accent)':'transparent'};color:${_adminTabActual==='roles'?'#fff':'var(--muted)'}">
+          🛡️ Permisos por Rol
+        </button>
+      </div>
+
+      <!-- Contenido del tab activo -->
+      <div id="admin-tab-content">
+        ${_adminTabActual === 'usuarios' ? _adminRenderUsuarios() : _adminRenderRoles()}
+      </div>
+    </div>
+  `);
+}
+
+function _adminTab(tab) {
+  _adminTabActual = tab;
+  adminUsuarios();
+}
+
+// ── TAB USUARIOS ─────────────────────────────────────────────
+function _adminRenderUsuarios() {
+  const AVATARES = ['👨‍💼','👩‍💼','👨‍🔧','👩‍🔧','👨‍🎨','👩‍🎨','👷','🔧','👁️','🧑‍💻','👩‍💻','🧑‍🏭'];
+  return `
+    <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+      <button onclick="_adminNuevoUsuario()" style="padding:9px 18px;background:var(--accent);color:#fff;border:none;border-radius:9px;font-weight:700;cursor:pointer;font-size:13px">＋ Nuevo Usuario</button>
+    </div>
+
+    <!-- Tabla de usuarios -->
+    <div style="background:var(--card);border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08)">
+      <table style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr style="background:var(--card2)">
+            <th style="padding:11px 14px;text-align:left;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase">Usuario</th>
+            <th style="padding:11px 14px;text-align:left;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase">Rol</th>
+            <th style="padding:11px 14px;text-align:center;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase">PIN</th>
+            <th style="padding:11px 14px;text-align:center;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase">Estado</th>
+            <th style="padding:11px 14px;text-align:center;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${_adminUsuariosDB.map((u, i) => {
+            const activo = String(u.ACTIVO||'SI').toUpperCase() !== 'NO';
+            const rol = (u.ROL||u.rol||'lectura').toLowerCase();
+            const nombre = u.NOMBRE||u.nombre||'—';
+            const avatar = u.AVATAR||u.avatar||'👤';
+            const pin = u.PIN||u.pin||'';
+            const id = u.ID_USUARIO||u.id||'';
+            return `
+            <tr style="border-top:1px solid var(--border);${!activo?'opacity:.5':''}">
+              <td style="padding:12px 14px">
+                <div style="display:flex;align-items:center;gap:10px">
+                  <div style="font-size:24px">${avatar}</div>
+                  <div>
+                    <div style="font-weight:700;font-size:13px;color:var(--text)">${nombre}</div>
+                    <div style="font-size:11px;color:var(--muted)">${id}</div>
+                  </div>
+                </div>
+              </td>
+              <td style="padding:12px 14px">
+                <span style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;background:${_adminRolColor(rol)};color:#fff">
+                  ${_rolLabel(rol)}
+                </span>
+              </td>
+              <td style="padding:12px 14px;text-align:center;font-family:var(--mono);font-size:14px;letter-spacing:4px;color:var(--muted)">
+                ${'●'.repeat(pin.length||4)}
+              </td>
+              <td style="padding:12px 14px;text-align:center">
+                <span style="font-size:11px;font-weight:700;color:${activo?'#16a34a':'#ef4444'}">
+                  ${activo?'✓ Activo':'✗ Inactivo'}
+                </span>
+              </td>
+              <td style="padding:12px 14px;text-align:center">
+                <div style="display:flex;gap:6px;justify-content:center">
+                  <button onclick="_adminEditarUsuario('${id}')" style="padding:5px 12px;border:1px solid var(--border);border-radius:7px;background:transparent;cursor:pointer;font-size:12px;color:var(--accent)">✏️ Editar</button>
+                  ${id !== 'u1' ? `<button onclick="_adminEliminarUsuario('${id}','${nombre}')" style="padding:5px 12px;border:1px solid #fca5a5;border-radius:7px;background:transparent;cursor:pointer;font-size:12px;color:#ef4444">🗑️</button>` : ''}
+                </div>
+              </td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function _adminRolColor(rol) {
+  return {
+    admin:'#1d4ed8', comercial:'#0891b2', planeacion:'#7c3aed',
+    diseno:'#db2777', produccion:'#b45309', lectura:'#6b7280'
+  }[rol] || '#6b7280';
+}
+
+// ── Modal nuevo/editar usuario ────────────────────────────────
+function _adminNuevoUsuario() {
+  _adminEditUser = null;
+  _adminModalUsuario(null);
+}
+
+function _adminEditarUsuario(id) {
+  const u = _adminUsuariosDB.find(x => (x.ID_USUARIO||x.id) === id);
+  if (!u) return;
+  _adminEditUser = u;
+  _adminModalUsuario(u);
+}
+
+function _adminModalUsuario(u) {
+  const isNew = !u;
+  const AVATARES = ['👨‍💼','👩‍💼','👨‍🔧','👩‍🔧','👨‍🎨','👩‍🎨','👷','🔧','👁️','🧑‍💻','👩‍💻','🧑‍🏭','👨‍🏭','🧑‍🔬'];
+  const avatarActual = u?.AVATAR || u?.avatar || '👨‍💼';
+  const rolActual = (u?.ROL || u?.rol || 'comercial').toLowerCase();
+
+  openModal(isNew ? '➕ Nuevo Usuario' : '✏️ Editar Usuario', `
+    <div style="display:flex;flex-direction:column;gap:14px">
+
+      <!-- Avatar selector -->
+      <div>
+        <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase">Avatar</label>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px" id="avatar-grid">
+          ${AVATARES.map(av => `
+            <button type="button" onclick="_adminSelAvatar('${av}')" id="av-${av.codePointAt(0)}"
+              style="font-size:22px;width:44px;height:44px;border-radius:10px;border:2px solid ${av===avatarActual?'var(--accent)':'var(--border)'};background:${av===avatarActual?'var(--accent)10':'transparent'};cursor:pointer">
+              ${av}
+            </button>`).join('')}
+        </div>
+        <input type="hidden" id="adm-avatar" value="${avatarActual}">
+      </div>
+
+      <!-- Nombre -->
+      <div class="field">
+        <label>Nombre completo ★</label>
+        <input type="text" id="adm-nombre" value="${u?.NOMBRE||u?.nombre||''}" placeholder="Ej: Juan Diego García">
+      </div>
+
+      <!-- Rol -->
+      <div class="field">
+        <label>Rol ★</label>
+        <select id="adm-rol">
+          ${ROLES_SISTEMA.map(r => `<option value="${r}" ${r===rolActual?'selected':''}>${_rolLabel(r)}</option>`).join('')}
+        </select>
+      </div>
+
+      <!-- PIN -->
+      <div class="field">
+        <label>${isNew ? 'PIN (4 dígitos) ★' : 'PIN (dejar vacío para no cambiar)'}</label>
+        <input type="password" id="adm-pin" maxlength="4" placeholder="••••" inputmode="numeric"
+          style="letter-spacing:6px;font-size:20px;text-align:center">
+      </div>
+
+      <!-- Activo -->
+      ${!isNew ? `
+      <div style="display:flex;align-items:center;gap:10px">
+        <label style="font-size:13px;font-weight:600">Activo</label>
+        <input type="checkbox" id="adm-activo" ${String(u?.ACTIVO||'SI').toUpperCase()!=='NO'?'checked':''} style="width:18px;height:18px;cursor:pointer">
+      </div>` : ''}
+
+      <div id="adm-error" style="color:#ef4444;font-size:12px;min-height:16px"></div>
+    </div>
+  `, `
+    <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+    <button class="btn btn-primary" onclick="_adminGuardarUsuario('${u?.ID_USUARIO||u?.id||''}',${isNew})">
+      ${isNew ? '✓ Crear Usuario' : '✓ Guardar Cambios'}
+    </button>
+  `);
+}
+
+function _adminSelAvatar(av) {
+  document.getElementById('adm-avatar').value = av;
+  document.querySelectorAll('#avatar-grid button').forEach(btn => {
+    const isSelected = btn.textContent.trim() === av;
+    btn.style.borderColor = isSelected ? 'var(--accent)' : 'var(--border)';
+    btn.style.background  = isSelected ? 'rgba(59,130,246,.12)' : 'transparent';
+  });
+}
+
+async function _adminGuardarUsuario(existId, isNew) {
+  const nombre = document.getElementById('adm-nombre')?.value.trim();
+  const rol    = document.getElementById('adm-rol')?.value;
+  const pin    = document.getElementById('adm-pin')?.value.trim();
+  const avatar = document.getElementById('adm-avatar')?.value || '👤';
+  const activo = isNew ? 'SI' : (document.getElementById('adm-activo')?.checked ? 'SI' : 'NO');
+  const errEl  = document.getElementById('adm-error');
+
+  if (!nombre) { errEl.textContent = 'El nombre es obligatorio'; return; }
+  if (isNew && (!pin || pin.length !== 4 || !/^\d{4}$/.test(pin))) {
+    errEl.textContent = 'El PIN debe ser exactamente 4 dígitos numéricos'; return;
+  }
+  if (pin && (pin.length !== 4 || !/^\d{4}$/.test(pin))) {
+    errEl.textContent = 'El PIN debe ser exactamente 4 dígitos numéricos'; return;
+  }
+
+  const data = {
+    ID_USUARIO: isNew ? ('u_' + Date.now()) : existId,
+    NOMBRE: nombre, ROL: rol, AVATAR: avatar, ACTIVO: activo,
+  };
+  if (pin) data.PIN = pin;
+
+  try {
+    errEl.textContent = '⏳ Guardando...';
+    const action = isNew ? 'createUsuario' : 'updateUsuario';
+    const res = await POST(action, data);
+    if (!res?.ok) throw new Error(res?.error || 'Error desconocido');
+    closeModal();
+    toast(`✅ Usuario ${isNew?'creado':'actualizado'}: ${nombre}`, 'success');
+    await _adminCargarDatos();
+    _renderLoginUsuarios();
+    adminUsuarios();
+  } catch(e) {
+    errEl.textContent = '❌ ' + e.message;
+  }
+}
+
+async function _adminEliminarUsuario(id, nombre) {
+  if (!confirm(`¿Eliminar al usuario "${nombre}"?\nEsta acción no se puede deshacer.`)) return;
+  try {
+    const res = await POST('deleteUsuario', { ID_USUARIO: id });
+    if (!res?.ok) throw new Error(res?.error || 'Error');
+    toast(`🗑️ Usuario eliminado: ${nombre}`, 'success');
+    await _adminCargarDatos();
+    _renderLoginUsuarios();
+    adminUsuarios();
+  } catch(e) {
+    toast('❌ ' + e.message, 'error');
+  }
+}
+
+// ── TAB ROLES / PERMISOS ─────────────────────────────────────
+function _adminRenderRoles() {
+  // Construir estructura de permisos actual
+  const permisos = _adminPermisosDB;
+
+  return `
+    <div style="margin-bottom:16px;display:flex;justify-content:flex-end">
+      <button onclick="_adminGuardarPermisos()" style="padding:9px 20px;background:#16a34a;color:#fff;border:none;border-radius:9px;font-weight:700;cursor:pointer;font-size:13px">
+        💾 Guardar Permisos
+      </button>
+    </div>
+
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;background:var(--card);border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08)">
+        <thead>
+          <tr style="background:var(--card2)">
+            <th style="padding:12px 14px;text-align:left;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;min-width:160px">Módulo</th>
+            ${ROLES_SISTEMA.filter(r=>r!=='admin').map(r => `
+              <th colspan="4" style="padding:10px 6px;text-align:center;font-size:11px;font-weight:700;color:#fff;text-transform:uppercase;background:${_adminRolColor(r)};border-left:2px solid var(--bg)">
+                ${_rolLabel(r)}
+              </th>`).join('')}
+          </tr>
+          <tr style="background:var(--card2);border-bottom:2px solid var(--border)">
+            <th style="padding:6px 14px"></th>
+            ${ROLES_SISTEMA.filter(r=>r!=='admin').map(() =>
+              ACCIONES_CRUD.map(a => `
+                <th style="padding:4px 2px;text-align:center;font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;min-width:36px">
+                  ${a.substring(0,3).toUpperCase()}
+                </th>`).join('')
+            ).join('')}
+          </tr>
+        </thead>
+        <tbody>
+          ${TODOS_LOS_MODULOS.map((mod, mi) => `
+            <tr style="border-top:1px solid var(--border);${mi%2===0?'background:var(--card)':'background:var(--card2)'}">
+              <td style="padding:10px 14px;font-size:13px;font-weight:600;color:var(--text)">
+                ${mod.icon} ${mod.label}
+              </td>
+              ${ROLES_SISTEMA.filter(r=>r!=='admin').map(rol => {
+                const rolPerms = permisos[rol]?.[mod.id] || {};
+                return ACCIONES_CRUD.map(accion => {
+                  const checked = rolPerms[accion] !== false && (rolPerms[accion] === true || accion === 'ver' && (MODS_POR_ROL[rol]||[]).includes(mod.id));
+                  const cbId = `perm_${rol}_${mod.id}_${accion}`;
+                  // Admin siempre tiene todo — no mostrar checkbox
+                  return `<td style="padding:6px 2px;text-align:center">
+                    <input type="checkbox" id="${cbId}" ${checked?'checked':''}
+                      style="width:15px;height:15px;cursor:pointer;accent-color:${_adminRolColor(rol)}"
+                      title="${_rolLabel(rol)} · ${mod.label} · ${accion}">
+                  </td>`;
+                }).join('');
+              }).join('')}
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+
+    <div style="margin-top:10px;font-size:11px;color:var(--muted)">
+      ℹ️ El rol <strong>Admin</strong> siempre tiene acceso completo a todo. Las columnas de acción son: 
+      <strong>VER</strong> (puede ver el módulo), <strong>CRE</strong> (crear), <strong>EDI</strong> (editar), <strong>ELI</strong> (eliminar).
+    </div>
+  `;
+}
+
+async function _adminGuardarPermisos() {
+  const nuevosPermisos = {};
+  ROLES_SISTEMA.filter(r => r !== 'admin').forEach(rol => {
+    nuevosPermisos[rol] = {};
+    TODOS_LOS_MODULOS.forEach(mod => {
+      nuevosPermisos[rol][mod.id] = {};
+      ACCIONES_CRUD.forEach(accion => {
+        const cb = document.getElementById(`perm_${rol}_${mod.id}_${accion}`);
+        nuevosPermisos[rol][mod.id][accion] = cb ? cb.checked : false;
+      });
+    });
+  });
+
+  try {
+    toast('⏳ Guardando permisos...', 'info');
+    const res = await POST('savePermisosRoles', { permisos: nuevosPermisos });
+    if (!res?.ok) throw new Error(res?.error || 'Error');
+    _adminPermisosDB = nuevosPermisos;
+    _adminSincronizarRoles();
+    _aplicarRolNav(); // re-aplicar nav del usuario actual
+    toast('✅ Permisos guardados correctamente', 'success');
+  } catch(e) {
+    toast('❌ Error guardando permisos: ' + e.message, 'error');
+  }
+}
+
+// Cargar usuarios desde GAS al arrancar (en background, sin bloquear)
+// para mantener USUARIOS sincronizado con Sheets
+setTimeout(async () => {
+  try { await _adminCargarDatos(); _renderLoginUsuarios(); } catch(e) {}
+}, 2000);
 
 // ══ BUSCADORES Y LIMPIADORES DE FILAS DE ITEM ══════════════════════════════
 // Leen directamente de DB para autocompletar precios igual que hacía el select.
