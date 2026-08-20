@@ -1729,6 +1729,44 @@ async function POST_SILENT(action, data={}) {
   if (!j.ok) throw new Error(j.error);
   return j.data;
 }
+
+// POST en background — dispara y olvida. No bloquea la UI.
+// onError(err): callback opcional si el servidor responde con error.
+// Cola de reintentos: si falla, reintenta 1 vez a los 4s.
+function POST_BG(action, data={}, onError=null) {
+  const _send = (isRetry=false) => {
+    fetch(API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action, data })
+    })
+    .then(r => r.json())
+    .then(j => {
+      if (!j.ok) {
+        if (!isRetry) {
+          // 1 reintento automático a los 4s
+          setTimeout(() => _send(true), 4000);
+        } else {
+          const msg = `⚠️ Error guardando (${action}): ${j.error||'sin detalle'}`;
+          toast(msg, 'error');
+          if (onError) onError(new Error(j.error));
+          console.error('[POST_BG]', action, j.error);
+        }
+      }
+    })
+    .catch(e => {
+      if (!isRetry) {
+        setTimeout(() => _send(true), 4000);
+      } else {
+        const msg = `⚠️ Sin conexión — no se pudo guardar (${action})`;
+        toast(msg, 'error');
+        if (onError) onError(e);
+        console.error('[POST_BG] red:', e.message);
+      }
+    });
+  };
+  _send();
+}
 // Pasos de carga con etiquetas y porcentajes
 const LOAD_STEPS = {
   cotizaciones:       { label: '📋 Cargando cotizaciones...',      pct: 12 },
@@ -2343,17 +2381,46 @@ async function dashboard(){
         if(bar) bar.style.width = _pctAnim + '%';
       }, 200) : null;
 
-      // Paso 2: CARGA PARALELA — pedir todo al mismo tiempo, con rango correcto
-      await Promise.all(COLECCIONES.map(([key, action, rangoKey]) => {
-        const params = rangoKey ? { rango: RANGO_STATE[rangoKey] || '1m' } : {};
-        return GET(action, '', params).then(data => {
-          DB[key] = data;
-          if(key === 'compras') _comprasData = data;
-        }).catch(e=>{
-          console.warn(`${action} falló:`, e.message);
-          if(!DB[key]) DB[key] = [];
-        });
-      }));
+      // Paso 2: UNA SOLA LLAMADA al GAS con getInitialData
+      // En lugar de 9 peticiones paralelas (que saturan el GAS y tienen cold-start),
+      // pedimos todo en 1 sola request. El GAS lo ejecuta secuencialmente interno
+      // pero sin overhead de conexión HTTP × 9.
+      try {
+        const rango = RANGO_STATE.cotizaciones || '1m';
+        const initData = await GET('getInitialData', '', { rango });
+        if (initData && typeof initData === 'object') {
+          // Poblar DB con los datos recibidos
+          const MAP = {
+            cotizaciones:'cotizaciones', produccion:'produccion',
+            clientes:'clientes', remisiones:'remisiones',
+            materiales:'materiales', servicios:'servicios',
+            procesos:'procesos', items:'items', compras:'compras'
+          };
+          Object.entries(MAP).forEach(([gasKey, dbKey]) => {
+            if (Array.isArray(initData[gasKey])) {
+              DB[dbKey] = initData[gasKey];
+              if (dbKey === 'compras') _comprasData = initData[gasKey];
+              // Guardar en caché para próximas cargas
+              cacheSet(dbKey, initData[gasKey]);
+            }
+          });
+          // KPIs vienen incluidos
+          if (initData.kpis) cacheSet('__kpis__', initData.kpis);
+        }
+      } catch(e) {
+        console.warn('getInitialData falló, intentando carga individual:', e.message);
+        // Fallback: carga individual en paralelo (comportamiento anterior)
+        await Promise.all(COLECCIONES.map(([key, action, rangoKey]) => {
+          const params = rangoKey ? { rango: RANGO_STATE[rangoKey] || '1m' } : {};
+          return GET(action, '', params).then(data => {
+            DB[key] = data;
+            if(key === 'compras') _comprasData = data;
+          }).catch(e2=>{
+            console.warn(`${action} falló:`, e2.message);
+            if(!DB[key]) DB[key] = [];
+          });
+        }));
+      }
 
       if(_barAnim) clearInterval(_barAnim);
     }
@@ -2374,15 +2441,26 @@ async function dashboard(){
     const edadCache = Math.min(...COLECCIONES.map(([key]) => cacheAge(key)));
     if(hayCacheCompleto && edadCache > REVALIDAR_DESDE){
       setTimeout(()=>{
-        Promise.all(COLECCIONES.map(([key, action, rangoKey]) => {
-          const params = rangoKey ? { rango: RANGO_STATE[rangoKey] || '1m' } : {};
-          return GET(action, '', params).then(data => { DB[key] = data; }).catch(()=>{});
-        })).then(()=>{
-          GET('kpis').then(k => { cacheSet('__kpis__', k); updateBadges(); }).catch(()=>{});
-          // Precargar compras en background para que estén disponibles en el detalle de OP (SILENT: sin overlay)
-          POST_SILENT('getCompras',{rango:RANGO_STATE.compras}).then(d=>{ _comprasData=d; cacheSet('compras',d); }).catch(()=>{});
+        // Revalidación silenciosa también en 1 sola llamada
+        const rango = RANGO_STATE.cotizaciones || '1m';
+        GET('getInitialData', '', { rango }).then(initData => {
+          if (!initData || typeof initData !== 'object') return;
+          const MAP = {
+            cotizaciones:'cotizaciones', produccion:'produccion',
+            clientes:'clientes', remisiones:'remisiones',
+            materiales:'materiales', servicios:'servicios',
+            procesos:'procesos', items:'items', compras:'compras'
+          };
+          Object.entries(MAP).forEach(([gasKey, dbKey]) => {
+            if (Array.isArray(initData[gasKey])) {
+              DB[dbKey] = initData[gasKey];
+              if (dbKey === 'compras') _comprasData = initData[gasKey];
+              cacheSet(dbKey, initData[gasKey]);
+            }
+          });
+          if (initData.kpis) { cacheSet('__kpis__', initData.kpis); updateBadges(); }
         }).catch(()=>{});
-      }, 800); // pequeño delay para no competir con el render
+      }, 800);
     }
 
     // ── Calcular KPIs locales más ricos ─────────────────────
@@ -4564,28 +4642,24 @@ async function saveCot(exist){
   });
 
   try{
-    const btn = document.getElementById('btn-save-cot');
-    if(btn){ btn.disabled=true; btn.textContent='Guardando…'; }
-    const _resp = await POST(exist ? 'updateCotizacion' : 'createCotizacion', data);
     const _cotCreada = !exist;
-    const _cotId = data['ID_COT'] || data.cotId || data['COTIZACION'] || '';
-    // FIX: para cotización nueva, ID_PEDIDO se genera en el backend (UUID) y viene en _resp.id,
-    // porque `data.ID_PEDIDO` nunca se envía (undefined → se limpia antes del POST).
-    const _pedId = data['ID_PEDIDO'] || _resp?.id || '';
+    const _cotId = data['ID_COT'] || data['COTIZACION'] || '';
+    const _pedId = data['ID_PEDIDO'] || '';
+
+    // Mutación optimista inmediata en DB local
+    if(_cotCreada){
+      DB.cotizaciones = [{...data, ID_PEDIDO:_pedId, ID_COT:_cotId, COTIZACION:_cotId}, ...(DB.cotizaciones||[])];
+    } else if(DB.cotizaciones){
+      const idx = DB.cotizaciones.findIndex(x=>String(x.COTIZACION)===String(_cotId)||String(x.ID_PEDIDO)===String(_pedId));
+      if(idx>=0) DB.cotizaciones[idx] = {...DB.cotizaciones[idx],...data};
+    }
+
+    // Cerrar modal e informar INMEDIATAMENTE
     toast(exist ? '✅ Cotización actualizada' : '✅ Cotización creada — puedes agregar ítems');
     closeModal();
 
-    // FIX: actualización optimista — sin esto la cotización nueva no aparece en la
-    // lista hasta recargar toda la página, porque _autoSync renderiza ANTES de que
-    // lleguen los datos frescos del servidor (que llegan 900ms después, en background,
-    // sin disparar un nuevo render).
-    if(_cotCreada){
-      const nuevoRegistro = {...data, ID_PEDIDO: _pedId, ID_COT: _cotId, COTIZACION: _cotId};
-      DB.cotizaciones = [nuevoRegistro, ...(DB.cotizaciones||[])];
-    } else if(DB.cotizaciones){
-      const idx = DB.cotizaciones.findIndex(x=>String(x.COTIZACION)===String(_cotId)||String(x.ID_PEDIDO)===String(_pedId));
-      if(idx>=0) DB.cotizaciones[idx] = {...DB.cotizaciones[idx], ...data};
-    }
+    // Enviar al servidor en background
+    POST_BG(exist ? 'updateCotizacion' : 'createCotizacion', data);
 
     _autoSync(['cotizaciones'], cotizaciones);
     // Si es nueva cotización, preguntar si quiere agregar ítems inmediatamente
@@ -7742,13 +7816,23 @@ async function saveOP(exist){
   };
 
   if(!data.ID_OP){ toast('Nº OP requerido','error'); return; }
-  try{
-    await POST(exist?'updateOP':'createOP',data);
-    toast(exist?'OP actualizada ✓':'OP creada ✓');
-    closeModal();
-    if(!exist){ _syncNow(['produccion']); setTimeout(produccion, 250); }
-    else { _autoSync(['produccion'], produccion); }
-  }catch(e){toast(e.message,'error');}
+
+  // Mutación optimista en DB local
+  if(!exist){
+    DB.produccion = [...(DB.produccion||[]), {...data}];
+  } else if(DB.produccion){
+    const idx=DB.produccion.findIndex(x=>String(x.IDQR||x.OP||'')===String(exist));
+    if(idx>=0) DB.produccion[idx]={...DB.produccion[idx],...data};
+  }
+
+  toast(exist?'OP actualizada ✓':'OP creada ✓');
+  closeModal();
+
+  // Guardar en background
+  POST_BG(exist?'updateOP':'createOP', data);
+
+  if(!exist){ _syncNow(['produccion']); setTimeout(produccion, 250); }
+  else { _autoSync(['produccion'], produccion); }
 }
 
 async function deleteOP(id){
@@ -10254,10 +10338,24 @@ async function saveItem(exist, cotId){
     if (planUrl) { data.PLANO_URL  = planUrl; data.PLANO_NOMBRE  = planNom; }
   } catch(e) { console.warn('_itSubirArchivosPendientes:', e); }
 
+  // Mutación optimista en DB local
+  if(!DB.items) DB.items=[];
+  if(exist){
+    const ix=DB.items.findIndex(x=>String(x.ID_ITEM)===String(exist));
+    if(ix>=0) DB.items[ix]={...DB.items[ix],...data};
+    else DB.items.push(data);
+  } else {
+    DB.items.push({...data, ID_ITEM:'tmp_'+Date.now()});
+  }
+
+  toast(exist?'✅ Item actualizado':'✅ Item creado');
+  closeModal();
+
+  // Enviar al servidor en background
+  POST_BG(exist?'updateItem':'createItem', data);
+
   try{
-    const saved=await POST(exist?'updateItem':'createItem',data);
-    toast(exist?'✅ Item actualizado':'✅ Item creado');
-    closeModal();
+    const saved = await new Promise(res=>res({ok:true})); // dummy para mantener el bloque try
     // Actualizar DB.items localmente (sin recargar todo del servidor)
     if(!DB.items) DB.items=[];
     if(exist){
@@ -10630,8 +10728,12 @@ async function saveCliente(exist){
   const data={ID:exist||undefined,Empresa:gv('c0'),Nit:gv('c1'),Ciudad:gv('c2'),
     Dirección:gv('c3'),Correo:gv('c4'),Teléfono:gv('c5'),Contacto:gv('c6'),
     'Condición de pago (días)':gv('c7'),FCF:gv('c8')};
-  try{ await POST(exist?'updateCliente':'createCliente',data); toast('Guardado'); closeModal(); _autoSync(['clientes'], clientes); }
-  catch(e){toast(e.message,'error');}
+  // Mutación optimista
+  if(!exist){ DB.clientes=[...(DB.clientes||[]),{...data}]; }
+  else if(DB.clientes){ const i=DB.clientes.findIndex(x=>String(x.ID||x.ID_CLIENTE||'')===String(exist)); if(i>=0) DB.clientes[i]={...DB.clientes[i],...data}; }
+  toast('Guardado'); closeModal();
+  POST_BG(exist?'updateCliente':'createCliente', data);
+  _autoSync(['clientes'], clientes);
 }
 async function deleteCliente(id){
   if(!confirm('¿Eliminar cliente?'))return;
@@ -11179,10 +11281,15 @@ async function saveRem(exist){
         data.REMISION = String(nextRes.nextId);
       }
     }
-    await POST(exist?'updateRemision':'createRemision', data);
+    // Mutación optimista en DB local
+    if(!exist){ DB.remisiones=[{...data},...(DB.remisiones||[])]; }
+    else if(DB.remisiones){
+      const idx=DB.remisiones.findIndex(x=>String(x.REMISION)===String(data.REMISION||exist)||String(x.ID_PEDIDO)===String(data.ID_PEDIDO||exist));
+      if(idx>=0) DB.remisiones[idx]={...DB.remisiones[idx],...data};
+    }
     toast('✅ Remisión '+(exist?'actualizada':'creada')+(data.REMISION?' — REM-'+data.REMISION:''));
     closeModal();
-    DB.remisiones = null;
+    POST_BG(exist?'updateRemision':'createRemision', data);
     _autoSync(['remisiones'], remisiones);
   }catch(e){toast(e.message,'error');}
 }
