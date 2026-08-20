@@ -1415,7 +1415,7 @@ kbd{
 
 
 <!-- ══ MODAL ══════════════════════════════════= -->
-<div class="overlay" id="modal-ov" onclick="closeModal(event)">
+<div class="overlay" id="modal-ov">
   <div class="modal" id="modal-box">
     <div class="modal-handle"></div>
     <div class="modal-head">
@@ -1478,10 +1478,24 @@ function _stripImages(data){
   });
 }
 
+// Clave de caché que incluye el rango activo cuando aplica
+// Así 'cotizaciones_1m' y 'cotizaciones_todo' no se pisan entre sí
+const _RANGEABLE_KEYS = new Set(['cotizaciones','produccion','remisiones','items','compras']);
+function _cacheKey(key){
+  if(!_RANGEABLE_KEYS.has(key)) return key;
+  // Buscar el rangoKey correcto para esta colección
+  const rangoMap = { cotizaciones:'cotizaciones', produccion:'produccion',
+    remisiones:'remisiones', items:'elementos', compras:'compras' };
+  const rk = rangoMap[key];
+  const rango = (rk && typeof RANGO_STATE !== 'undefined' && RANGO_STATE[rk]) ? RANGO_STATE[rk] : '1m';
+  return key + '_' + rango;
+}
+
 function cacheSet(key, data){
   try{
     const slim = _stripImages(data);
-    localStorage.setItem(CACHE_KEY_PREFIX+key, JSON.stringify({ts:Date.now(), data:slim}));
+    const ck = _cacheKey(key);
+    localStorage.setItem(CACHE_KEY_PREFIX+ck, JSON.stringify({ts:Date.now(), data:slim, rango:ck}));
   }catch(e){
     // localStorage lleno — limpiar caché viejo y reintentar
     try{
@@ -1492,7 +1506,7 @@ function cacheSet(key, data){
 }
 function cacheGet(key){
   try{
-    const raw = localStorage.getItem(CACHE_KEY_PREFIX+key);
+    const raw = localStorage.getItem(CACHE_KEY_PREFIX+_cacheKey(key));
     if(!raw) return null;
     const obj = JSON.parse(raw);
     if(Date.now() - obj.ts > CACHE_TTL) return null; // expirado
@@ -1501,7 +1515,7 @@ function cacheGet(key){
 }
 function cacheGetStale(key){
   try{
-    const raw = localStorage.getItem(CACHE_KEY_PREFIX+key);
+    const raw = localStorage.getItem(CACHE_KEY_PREFIX+_cacheKey(key));
     if(!raw) return null;
     return JSON.parse(raw).data; // devuelve aunque esté expirado
   }catch(e){ return null; }
@@ -1509,7 +1523,7 @@ function cacheGetStale(key){
 // Edad del caché en ms (cuánto hace que se guardó). Retorna Infinity si no existe.
 function cacheAge(key){
   try{
-    const raw = localStorage.getItem(CACHE_KEY_PREFIX+key);
+    const raw = localStorage.getItem(CACHE_KEY_PREFIX+_cacheKey(key));
     if(!raw) return Infinity;
     return Date.now() - JSON.parse(raw).ts;
   }catch(e){ return Infinity; }
@@ -1630,6 +1644,11 @@ function _autoSync(keys=[], renderFn=null){
 
 // Recarga silenciosa: actualiza DB y localStorage sin tocar la UI.
 let _bgSyncTimer = null;
+// Mapa de rangoKey por colección (para _syncBackground)
+const _RANGO_KEY = {
+  cotizaciones:'cotizaciones', produccion:'produccion',
+  remisiones:'remisiones', items:'elementos', compras:'compras',
+};
 function _syncBackground(keys=[], delay=900){
   clearTimeout(_bgSyncTimer);
   _bgSyncTimer = setTimeout(async () => {
@@ -1637,8 +1656,10 @@ function _syncBackground(keys=[], delay=900){
       await Promise.all(keys.map(async k => {
         const action = _SYNC_ACTION[k];
         if(!action) return;
-        const data = await GET(action);
-        if(data) DB[k] = data; // GET ya actualiza localStorage via cacheSet
+        const rangoKey = _RANGO_KEY[k];
+        const params   = rangoKey ? { rango: RANGO_STATE[rangoKey] || '1m' } : {};
+        const data = await GET(action, '', params);
+        if(data) DB[k] = data;
       }));
     } catch(e) { /* silencioso */ }
   }, delay);
@@ -1657,7 +1678,12 @@ async function GET(action, id='', extraParams={}, _retry=1) {
     const j = await r.json();
     if (!j.ok) throw new Error(j.error);
     // Guardar en caché local si es una colección principal (solo la carga por defecto, sin filtros extra)
-    if(ACTION_TO_KEY[action] && !id && !Object.keys(extraParams||{}).length) cacheSet(ACTION_TO_KEY[action], j.data);
+    if(ACTION_TO_KEY[action] && !id){
+      // Cachear si es la carga por defecto O si el rango coincide con el estado actual
+      const rangoKey = _RANGO_KEY?.[ACTION_TO_KEY[action]];
+      const esRangoActual = rangoKey && extraParams?.rango === (RANGO_STATE?.[rangoKey]||'1m');
+      if(!Object.keys(extraParams||{}).length || esRangoActual) cacheSet(ACTION_TO_KEY[action], j.data);
+    }
     return j.data;
   }catch(e){
     if(_retry > 0 && (e.name==='AbortError' || e.message?.includes('fetch'))){
@@ -1980,12 +2006,13 @@ function openModal(title,body,foot=''){
   document.getElementById('modal-foot').innerHTML=foot;
   document.getElementById('modal-ov').classList.add('open');
 }
+// El clic afuera del modal (en el fondo/overlay) YA NO cierra el modal —
+// solo se cierra con el botón ✕ o los botones "Cancelar"/"Cerrar" de cada
+// formulario, para que nunca se pierda lo que ya se escribió por error.
 function closeModal(e){
-  if(!e||e.target===document.getElementById('modal-ov')){
-    document.getElementById('modal-ov').classList.remove('open');
-    if(window._qaModalPasteCleanup){ window._qaModalPasteCleanup(); window._qaModalPasteCleanup = null; }
-    if(window._provModalPasteCleanup){ window._provModalPasteCleanup(); window._provModalPasteCleanup = null; }
-  }
+  document.getElementById('modal-ov').classList.remove('open');
+  if(window._qaModalPasteCleanup){ window._qaModalPasteCleanup(); window._qaModalPasteCleanup = null; }
+  if(window._provModalPasteCleanup){ window._provModalPasteCleanup(); window._provModalPasteCleanup = null; }
 }
 
 // Detail panel
@@ -2053,6 +2080,30 @@ function fmtDate(d){
     }
     return s||'—';
   }catch(e){ return '—'; }
+}
+
+// Convierte cualquier fecha que venga de la Sheet (dd/mm/aaaa, ISO datetime, etc.)
+// al formato yyyy-mm-dd que exige un <input type="date">. Sin esto, un valor
+// como "14/08/2026" hace que el input se vea vacío aunque sí tenga dato.
+function toISODate(d){
+  if(!d) return '';
+  try{
+    const s=String(d).trim();
+    if(!s) return '';
+    if(s.startsWith('1899')||s.startsWith('1900')||s.startsWith('190')) return '';
+    if(/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0,10);
+    if(s.includes('T')){
+      const dt=new Date(s);
+      if(isNaN(dt)||dt.getFullYear()<1990) return '';
+      return dt.toISOString().slice(0,10);
+    }
+    if(s.includes('/')){
+      const dt=new Date(s.split('/').reverse().join('-'));
+      if(isNaN(dt)||dt.getFullYear()<1990) return '';
+      return dt.toISOString().slice(0,10);
+    }
+    return '';
+  }catch(e){ return ''; }
 }
 function prog(pct){
   const p=Math.min(100,Math.max(0,Number(pct)||0));
@@ -2224,16 +2275,19 @@ async function dashboard(){
     // 2) Pedir a GAS solo lo que falta, en paralelo (no secuencial)
     // 3) Revalidar en background si el caché era stale
 
+    // [key, action, rangoKey|null]
+    // rangoKey = la clave en RANGO_STATE que controla este módulo
+    // null = sin filtro de fecha (catálogos pequeños que se cargan completos siempre)
     const COLECCIONES = [
-      ['cotizaciones', 'getCotizaciones'],
-      ['produccion',   'getControlProduccion'],
-      ['clientes',     'getClientes'],
-      ['remisiones',   'getRemisiones'],
-      ['materiales',   'getMateriales'],
-      ['servicios',    'getServicios'],
-      ['procesos',     'getProcesos'],
-      ['items',        'getItems'],
-      ['compras',      'getCompras'],
+      ['cotizaciones', 'getCotizaciones',       'cotizaciones'],
+      ['produccion',   'getControlProduccion',  'produccion'],
+      ['clientes',     'getClientes',           null],
+      ['remisiones',   'getRemisiones',         'remisiones'],
+      ['materiales',   'getMateriales',         null],
+      ['servicios',    'getServicios',          null],
+      ['procesos',     'getProcesos',           null],
+      ['items',        'getItems',              'elementos'],
+      ['compras',      'getCompras',            'compras'],
     ];
 
     // Paso 1: cargar desde localStorage lo que haya
@@ -2278,17 +2332,17 @@ async function dashboard(){
         if(bar) bar.style.width = _pctAnim + '%';
       }, 200) : null;
 
-      // Paso 2: CARGA PARALELA — pedir todo al mismo tiempo
-      await Promise.all(COLECCIONES.map(([key, action]) =>
-        GET(action).then(data => {
+      // Paso 2: CARGA PARALELA — pedir todo al mismo tiempo, con rango correcto
+      await Promise.all(COLECCIONES.map(([key, action, rangoKey]) => {
+        const params = rangoKey ? { rango: RANGO_STATE[rangoKey] || '1m' } : {};
+        return GET(action, '', params).then(data => {
           DB[key] = data;
           if(key === 'compras') _comprasData = data;
         }).catch(e=>{
-          // Si falla un endpoint, continuar con lo que haya en DB
           console.warn(`${action} falló:`, e.message);
           if(!DB[key]) DB[key] = [];
-        })
-      ));
+        });
+      }));
 
       if(_barAnim) clearInterval(_barAnim);
     }
@@ -2309,9 +2363,10 @@ async function dashboard(){
     const edadCache = Math.min(...COLECCIONES.map(([key]) => cacheAge(key)));
     if(hayCacheCompleto && edadCache > REVALIDAR_DESDE){
       setTimeout(()=>{
-        Promise.all(COLECCIONES.map(([key, action]) =>
-          GET(action).then(data => { DB[key] = data; }).catch(()=>{})
-        )).then(()=>{
+        Promise.all(COLECCIONES.map(([key, action, rangoKey]) => {
+          const params = rangoKey ? { rango: RANGO_STATE[rangoKey] || '1m' } : {};
+          return GET(action, '', params).then(data => { DB[key] = data; }).catch(()=>{});
+        })).then(()=>{
           GET('kpis').then(k => { cacheSet('__kpis__', k); updateBadges(); }).catch(()=>{});
           // Precargar compras en background para que estén disponibles en el detalle de OP (SILENT: sin overlay)
           POST_SILENT('getCompras',{rango:RANGO_STATE.compras}).then(d=>{ _comprasData=d; cacheSet('compras',d); }).catch(()=>{});
@@ -2807,7 +2862,7 @@ async function cotizaciones(){
     } else {
       setContent(moduleBanner('📋','Cotizaciones','Gestión de cotizaciones y presupuestos',rangoSelector('cotizaciones'),'linear-gradient(135deg,#1d4ed8,#3b82f6)')+fb + viewToggleBtns('cotizaciones') + `<div class="card-list">
         ${sorted.length ? sorted.map(c=>{
-          const dias=Number(c['LEAD TIME COT'])||0;
+          const dias=leadTimeDias(c['LEAD TIME COT']);
           const opVincCard = (DB.produccion||[]).filter(x=>String(x.COT)===String(c.COTIZACION));
           return `<div class="list-card" onclick="detailCot('${c.COTIZACION}')">
             <div class="lc-top">
@@ -2862,7 +2917,7 @@ async function detailCot(id){
     const hoy=new Date(); hoy.setHours(0,0,0,0);
     const entrega=new Date(String(c['FECHA ENTREGA PACTADA']).includes('T')?c['FECHA ENTREGA PACTADA']:c['FECHA ENTREGA PACTADA']+'T00:00:00');
     diasRestantes=Math.round((entrega-hoy)/86400000);
-    const lead=Number(c['LEAD TIME COT'])||Math.max(diasRestantes,1);
+    const lead=leadTimeDias(c['LEAD TIME COT'])||Math.max(diasRestantes,1);
     pctTiempo=Math.min(100,Math.max(0,100-(diasRestantes/lead*100)));
   }
   const colorPlazo = diasRestantes==null?'var(--muted)':diasRestantes<0?'var(--danger)':diasRestantes<5?'var(--warn)':'var(--accent)';
@@ -3103,6 +3158,7 @@ async function detailCot(id){
         <h4>🏢 Cliente</h4>
         ${dr('Empresa',`<strong>${c.EMPRESA||c.Empresa||'—'}</strong>`)}
         ${dr('NIT',c.Nit||c.NIT||'—')}
+        ${dr('Dirección',c.DIRECCION||c.Dirección||'—')}
         ${dr('Ciudad',c.Ciudad||c.CIUDAD||'—')}
       </div>
       <div class="dp-section">
@@ -3656,6 +3712,11 @@ async function ejecutarDuplicar(idOrigen){
     }
     toast(`✅ COT-${newId} creada con ${creados} ítem(s)`);
     closeModal();
+
+    // FIX: misma actualización optimista que en saveCot() — evita que la COT
+    // duplicada quede invisible hasta un refresh completo de la página.
+    DB.cotizaciones = [newCot, ...(DB.cotizaciones||[])];
+
     _autoSync(['cotizaciones','items'], cotizaciones);
   }catch(e){
     if(btn){btn.disabled=false;btn.textContent='⧉ Confirmar Duplicado';}
@@ -3681,6 +3742,23 @@ function addDias(fechaISO, dias){
   const d = fechaISO ? new Date(fechaISO+'T00:00:00') : new Date();
   d.setDate(d.getDate()+Number(dias||0));
   return d.toISOString().slice(0,10);
+}
+
+// Convierte LEAD TIME COT a días enteros de forma robusta: normalmente es un
+// número, pero a veces Apps Script lo devuelve como Date (formato de celda en
+// Sheets), serializado tipo "1900-01-11T04:56:16.000Z" — hay que reconvertir
+// a días contando desde la fecha base de Sheets (1899-12-30). Sin esto,
+// Number(v) da NaN y rompe el cálculo de Fecha Pactada Entrega.
+function leadTimeDias(v){
+  if(v===undefined||v===null||v==='') return 0;
+  const s=String(v).trim();
+  if(/^\d{4}-\d{2}-\d{2}T/.test(s)){
+    const ms=Date.parse(s)-Date.parse('1899-12-30T00:00:00Z');
+    const dias=Math.round(ms/86400000);
+    return isNaN(dias)?0:dias;
+  }
+  const n=Number(s);
+  return isNaN(n)?0:n;
 }
 
 
@@ -3728,7 +3806,7 @@ async function modalCrearOP(cotId, soloItemId){
   const itemsAUsar = opExistenteNum ? itsFaltantes : its;
 
   const hoy=new Date().toISOString().slice(0,10);
-  _opModalLeadDias = Number(c['LEAD TIME COT']||c['LEAD TIME']||0);
+  _opModalLeadDias = leadTimeDias(c['LEAD TIME COT']) || leadTimeDias(c['LEAD TIME']) || 0;
   const fpCalc = addDias(hoy, _opModalLeadDias);
 
   const avisoTexto = soloItemId
@@ -3861,7 +3939,7 @@ async function ejecutarCrearOP(cotId, soloItemId){
   // Fechas automáticas: NO se leen del formulario (evita que se puedan alterar).
   // Fecha Inicio = momento real de creación de la OP. Fecha Pactada = inicio + lead time de la COT.
   const fi        = new Date().toISOString().slice(0,10);
-  const leadDias  = Number(c['LEAD TIME COT']||c['LEAD TIME']||0);
+  const leadDias  = leadTimeDias(c['LEAD TIME COT']) || leadTimeDias(c['LEAD TIME']) || 0;
   const fp        = addDias(fi, leadDias);
   const fep       = addDias(fp, -2); // Fecha Entrega Producción = Fecha Pactada - 2 días
   const obs       = richGet('op-obs');
@@ -4095,8 +4173,8 @@ async function formCot(c={}){
         </div>
         <div class="field"><label>Fecha Emisión COT. ${isNew?'★':'<span style="font-size:9px;color:var(--muted)">(no editable)</span>'}</label>
           <input type="date" id="fe"
-            value="${c['FECHA EMISION COT.']||new Date().toISOString().slice(0,10)}"
-            readonly style="opacity:.6;background:var(--card2)"
+            value="${isNew ? (toISODate(c['FECHA EMISION COT.'])||new Date().toISOString().slice(0,10)) : toISODate(c['FECHA EMISION COT.'])}"
+            ${isNew ? '' : 'disabled'} style="opacity:.6;background:var(--card2)"
             ${isNew ? 'oninput="if(document.getElementById(\'fd\')?.value) calcFechaEntrega()"' : ''}></div>
 
         <div class="field span2"><label>Tipo</label>
@@ -4138,6 +4216,8 @@ async function formCot(c={}){
           </datalist></div>
         <div class="field"><label>NIT</label>
           <input id="f3" value="${c.Nit||c.NIT||''}"></div>
+        <div class="field span2"><label>Dirección</label>
+          <input id="fdir" value="${c.DIRECCION||c.Dirección||''}"></div>
         <div class="field"><label>Ciudad</label>
           <input id="f4" value="${c.Ciudad||''}"></div>
         <div class="field"><label>Encargado</label>
@@ -4259,8 +4339,9 @@ async function formCot(c={}){
     // Edición: mostrar el número existente
     const display = document.getElementById('f0-display');
     const hidden  = document.getElementById('f0h');
-    if(display) display.innerHTML = `<span style="font-size:22px">COT-<strong>${c.ID_COT}</strong></span>`;
-    if(hidden)  hidden.value = String(c.COTIZACION);
+    const cotNumExist = c.COTIZACION||c.ID_COT||'';
+    if(display) display.innerHTML = `<span style="font-size:22px">COT-<strong>${cotNumExist}</strong></span>`;
+    if(hidden)  hidden.value = String(cotNumExist);
   }
 }
 
@@ -4293,6 +4374,7 @@ function onSelectCliente(clienteId){
   if(!c) return;
   const set=(id,v)=>{ const el=document.getElementById(id); if(el) el.value=v||''; };
   set('f3', c.Nit||c.NIT||'');
+  set('fdir', c.DIRECCION||c.Dirección||'');
   set('f4', c.Ciudad||'');
   set('fenc', c.ENCARGADO||c.Contacto||'');
   set('ftel', c.Teléfono||c.TELEFONO||'');
@@ -4439,6 +4521,7 @@ async function saveCot(exist){
     Empresa:                     empresa,
     NIT:                         gv('f3'),
     Nit:                         gv('f3'),
+    DIRECCION:                   gv('fdir'),
     CIUDAD:                      gv('f4'),
     Ciudad:                      gv('f4'),
     ASESOR:                      gv('f5'),
@@ -4469,12 +4552,27 @@ async function saveCot(exist){
   try{
     const btn = document.getElementById('btn-save-cot');
     if(btn){ btn.disabled=true; btn.textContent='Guardando…'; }
-    await POST(exist ? 'updateCotizacion' : 'createCotizacion', data);
+    const _resp = await POST(exist ? 'updateCotizacion' : 'createCotizacion', data);
     const _cotCreada = !exist;
     const _cotId = data['ID_COT'] || data.cotId || data['COTIZACION'] || '';
-    const _pedId = data['ID_PEDIDO'] || '';
+    // FIX: para cotización nueva, ID_PEDIDO se genera en el backend (UUID) y viene en _resp.id,
+    // porque `data.ID_PEDIDO` nunca se envía (undefined → se limpia antes del POST).
+    const _pedId = data['ID_PEDIDO'] || _resp?.id || '';
     toast(exist ? '✅ Cotización actualizada' : '✅ Cotización creada — puedes agregar ítems');
     closeModal();
+
+    // FIX: actualización optimista — sin esto la cotización nueva no aparece en la
+    // lista hasta recargar toda la página, porque _autoSync renderiza ANTES de que
+    // lleguen los datos frescos del servidor (que llegan 900ms después, en background,
+    // sin disparar un nuevo render).
+    if(_cotCreada){
+      const nuevoRegistro = {...data, ID_PEDIDO: _pedId, ID_COT: _cotId, COTIZACION: _cotId};
+      DB.cotizaciones = [nuevoRegistro, ...(DB.cotizaciones||[])];
+    } else if(DB.cotizaciones){
+      const idx = DB.cotizaciones.findIndex(x=>String(x.COTIZACION)===String(_cotId)||String(x.ID_PEDIDO)===String(_pedId));
+      if(idx>=0) DB.cotizaciones[idx] = {...DB.cotizaciones[idx], ...data};
+    }
+
     _autoSync(['cotizaciones'], cotizaciones);
     // Si es nueva cotización, preguntar si quiere agregar ítems inmediatamente
     if(_cotCreada){
@@ -8423,7 +8521,7 @@ function syncMatEspecial(idx){
     hid.type='hidden'; hid.id='mat'+idx+'cost';
     document.getElementById('mat-row-'+idx)?.appendChild(hid);
   }
-  hid.value=costEsp;
+  hid.value=Math.round(costEsp*1.3); // ×1.3 igual que material normal (calcCostMat)
   recalcItem();
 }
 // Muestra/oculta el bloque ESPECIAL vs el bloque normal según el material elegido
@@ -16844,38 +16942,63 @@ function clearSvcRow(idx){
   recalcItem();
 }
 
-// Proceso: coincidencia exacta → llena tarifa/hora, horas hilo, costo (igual que onSelectPrc original)
+// _normPrc: normaliza nombre de proceso para comparar (espacios, mayúsculas, tildes)
+function _normPrc(s){
+  return (s||'').toString()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'') // quita tildes
+    .replace(/\s+/g,' ') // colapsa espacios dobles/tabs
+    .trim()
+    .toUpperCase();
+}
+// Proceso: el bloque de horas/costo aparece siempre que haya texto escrito.
+// Si el texto coincide exactamente con el catálogo (normalizado), autocompleta la tarifa/hr.
+// Si no coincide pero hay UNA sola variante del catálogo que empieza igual, se sugiere (sin autocompletar).
+// Si no hay match, deja el modo manual disponible (tarifa=0 → costo manual).
 function onBuscarPrc(idx){
-  const txt=(document.getElementById('prc'+idx+'-text')?.value||'').trim();
+  const txtRaw=(document.getElementById('prc'+idx+'-text')?.value||'').trim();
+  const txt=_normPrc(txtRaw);
   const hid=document.getElementById('prc'+idx);
   const extra=document.getElementById('prc'+idx+'-extra');
-  const prc=(DB.procesos||[]).find(p=>{
-    const nm=p.PROCESO||p.NOMBRE_MAQUINA||'';
-    return nm.toLowerCase()===txt.toLowerCase();
-  });
-  if(prc){
-    const nm=prc.PROCESO||prc.NOMBRE_MAQUINA||'';
-    const costo=Number(prc.TARIFA_HR||prc['TARIFA / HR']||prc.COSTO_HORA||0);
-    if(hid) hid.value=nm;
-    if(extra) extra.style.display='';
-    // Tarifa/hora display
-    const choraEl=document.getElementById('prc'+idx+'-chora');
-    if(choraEl) choraEl.textContent='$'+costo.toLocaleString('es-CO')+'/hr';
-    // Guardar tarifa como data-attr para que calcCostPrcSilent la encuentre
-    if(extra) extra.dataset.tarifa=costo;
-    // Mostrar/ocultar campo de costo manual según si tiene tarifa
-    const manualWrap=document.getElementById('prc'+idx+'-manual-wrap');
-    if(manualWrap) manualWrap.style.display=costo?'none':'';
-    // Hilo
-    const hiloDiv=document.getElementById('prc'+idx+'-hilo-calc');
-    const esHilo=nm.toUpperCase()==='EROSIONADORA DE HILO';
-    if(hiloDiv) hiloDiv.style.display=esHilo?'':'none';
-    if(esHilo) calcHorasHilo(idx);
-    calcCostPrc(idx);
-  } else {
+  const catalogo=DB.procesos||[];
+  const prc=catalogo.find(p=>_normPrc(p.PROCESO||p.NOMBRE_MAQUINA||'')===txt);
+
+  if(!txtRaw){
     if(hid) hid.value='';
     if(extra) extra.style.display='none';
+    return;
   }
+
+  const nm=prc ? (prc.PROCESO||prc.NOMBRE_MAQUINA||'') : txtRaw;
+  const costo=prc ? Number(prc.TARIFA_HR||prc['TARIFA / HR']||prc.COSTO_HORA||0) : 0;
+  if(hid) hid.value=nm;
+  if(extra) extra.style.display='';
+  // Tarifa/hora display (o aviso de modo manual / sugerencia si no hay coincidencia)
+  const choraEl=document.getElementById('prc'+idx+'-chora');
+  if(choraEl){
+    if(prc){
+      choraEl.textContent='$'+costo.toLocaleString('es-CO')+'/hr';
+    } else {
+      // Buscar candidatos únicos que empiecen igual, para sugerir sin autocompletar
+      const candidatos=catalogo.filter(p=>_normPrc(p.PROCESO||p.NOMBRE_MAQUINA||'').startsWith(txt));
+      if(candidatos.length===1){
+        const sugerido=candidatos[0].PROCESO||candidatos[0].NOMBRE_MAQUINA||'';
+        choraEl.innerHTML='Sin tarifa exacta — modo manual. ¿Quisiste decir: <a href="#" onclick="document.getElementById(\'prc'+idx+'-text\').value='+JSON.stringify(sugerido)+';onBuscarPrc('+idx+');return false;" style="color:var(--primary,#2563eb)">'+sugerido+'</a>?';
+      } else {
+        choraEl.textContent='Sin tarifa en catálogo — modo manual';
+      }
+    }
+  }
+  // Guardar tarifa como data-attr para que calcCostPrcSilent la encuentre
+  if(extra) extra.dataset.tarifa=costo;
+  // Mostrar/ocultar campo de costo manual según si tiene tarifa
+  const manualWrap=document.getElementById('prc'+idx+'-manual-wrap');
+  if(manualWrap) manualWrap.style.display=costo?'none':'';
+  // Hilo
+  const hiloDiv=document.getElementById('prc'+idx+'-hilo-calc');
+  const esHilo=prc && nm.toUpperCase()==='EROSIONADORA DE HILO';
+  if(hiloDiv) hiloDiv.style.display=esHilo?'':'none';
+  if(esHilo) calcHorasHilo(idx);
+  calcCostPrc(idx);
 }
 function clearPrcRow(idx){
   const txt=document.getElementById('prc'+idx+'-text');
