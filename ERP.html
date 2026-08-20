@@ -2893,7 +2893,7 @@ async function dashboard(){
 async function cotizaciones(){
   loading();
   try{
-    if(!DB.cotizaciones) DB.cotizaciones = cacheGetStale('cotizaciones') || [];
+    if(!DB.cotizaciones) DB.cotizaciones = await GET('getCotizaciones', '', {rango:RANGO_STATE.cotizaciones||'1m'});
     if(!DB.clientes)     await load('clientes','getClientes');
     updateBadges();
 
@@ -3029,7 +3029,7 @@ async function detailCot(id){
 
   // Si no hay items en caché, cargarlos ahora (síncronamente para mostrarlos)
   if(!DB.items) {
-    try { DB.items = await GET('getItems'); } catch(e) {}
+    try { DB.items = await GET('getItems','',{rango:RANGO_STATE.elementos||'1m'}); cacheSet('items',DB.items); } catch(e) {}
   }
   const its = (DB.items||[]).filter(x=>String(x.COTIZACION)===String(id)||String(x.ID_PEDIDO)===String(id));
 
@@ -3349,7 +3349,7 @@ async function detailCot(id){
     // Si no había items en caché, cargar y actualizar el tab
     if(!DB.items){
       try {
-        DB.items = await GET('getItems');
+        GET('getItems','',{rango:RANGO_STATE.elementos||'1m'}).then(d=>{if(d){DB.items=d;cacheSet('items',d);}}).catch(()=>{});
         const itsNuevos = DB.items.filter(x=>String(x.COTIZACION)===String(id)||String(x.ID_PEDIDO)===String(id));
         // Actualizar contador en tab
         const tabItems = document.querySelector('.dp-tab[data-tab="items"]');
@@ -3726,7 +3726,7 @@ function fallbackCopy(txt,cb){
 async function duplicarCot(id){
   const c=(DB.cotizaciones||[]).find(x=>String(x.COTIZACION)===String(id)||String(x.ID_PEDIDO)===String(id));
   if(!c){ toast('Cotización no encontrada','error'); return; }
-  if(!DB.items) DB.items = cacheGetStale('items') || [];
+  if(!DB.items) DB.items = await GET('getItems', '', {rango:RANGO_STATE.elementos||'1m'});
   const its=DB.items.filter(x=>String(x.COTIZACION)===String(id)||String(x.ID_PEDIDO)===String(id));
 
   // Calcular nuevo ID: max actual + 1
@@ -3885,8 +3885,8 @@ function leadTimeDias(v){
 
 
 async function modalCrearOP(cotId, soloItemId){
-  if(!DB.items) DB.items = cacheGetStale('items') || [];
-  if(!DB.produccion) DB.produccion=await GET('getControlProduccion');
+  if(!DB.items)     DB.items     = await GET('getItems', '', {rango:RANGO_STATE.elementos||'1m'});
+  if(!DB.produccion)DB.produccion = await GET('getControlProduccion', '', {rango:RANGO_STATE.produccion||'1m'});
   const c=(DB.cotizaciones||[]).find(x=>String(x.COTIZACION)===String(cotId));
   if(!c){ toast('Cotización no encontrada','error'); return; }
   let its=DB.items.filter(x=>String(x.COTIZACION)===String(cotId)||String(x.ID_PEDIDO)===String(cotId));
@@ -5097,7 +5097,7 @@ function _renderListaProd(allOps, viewMode='cards'){
 async function produccion(){
   loading();
   try{
-    if(!DB.produccion) DB.produccion = cacheGetStale('produccion') || [];
+    if(!DB.produccion) DB.produccion = await GET('getControlProduccion', '', {rango:RANGO_STATE.produccion||'1m'});
     if(!DB.cotizaciones) await load('cotizaciones','getCotizaciones');
     updateBadges();
 
@@ -7918,7 +7918,7 @@ async function deleteOP(id){
 async function items(){
   loading();
   try{
-    if(!DB.items)        DB.items = await GET('getItems', '', {rango:RANGO_STATE.elementos});
+    if(!DB.items) DB.items = await GET('getItems', '', {rango:RANGO_STATE.elementos||'1m'});
     if(!DB.cotizaciones) await load('cotizaciones','getCotizaciones');
     if(!DB.produccion)   await load('produccion','getControlProduccion');
     updateBadges();
@@ -8572,9 +8572,10 @@ const svcOpts = (DB.servicios || []).map(s => {
     </div>`,
     itemFooterHtml(0, it, isNew));
 
-  document.getElementById('modal-body').dataset.itemExist = it.ID_ITEM||'';
-  document.getElementById('modal-body').dataset.itemCot   = it.COTIZACION||'';
-  document.getElementById('modal-body').dataset.itemNew   = isNew?'1':'0';
+  document.getElementById('modal-body').dataset.itemExist  = it.ID_ITEM||'';
+  document.getElementById('modal-body').dataset.itemCot    = it.COTIZACION||it.ID_PEDIDO||'';
+  document.getElementById('modal-body').dataset.itemPedId  = it.ID_PEDIDO||'';
+  document.getElementById('modal-body').dataset.itemNew    = isNew?'1':'0';
 
   // FIX urgencia: guardar TIPO de cotización para el control de sobremargen mínimo
   const _cotTipoInfo = cotInfo(it.COTIZACION||'');
@@ -8608,7 +8609,7 @@ function itemFooterHtml(idx, it, isNew){
   if(idx<ITEM_WIZ_LAST_STEP){
     html+=`<button class="btn btn-primary" onclick="wizItemTab(${idx+1})">Siguiente →</button>`;
   } else {
-    html+=`<button class="btn btn-primary" onclick="saveItem('${it.ID_ITEM||''}','${it.COTIZACION||''}')">
+    html+=`<button class="btn btn-primary" onclick="saveItem('${it.ID_ITEM||''}','${it.COTIZACION||it.ID_PEDIDO||''}')">
        ${isNew?'✓ Guardar Item':'✓ Actualizar'}</button>`;
   }
   return html;
@@ -8619,7 +8620,7 @@ function itemFooterHtml(idx, it, isNew){
 function wizItemTab(idx){
   wizTab('wiz-item',idx);
   const mb=document.getElementById('modal-body');
-  const it={ID_ITEM:mb?.dataset.itemExist||'', COTIZACION:mb?.dataset.itemCot||''};
+  const it={ID_ITEM:mb?.dataset.itemExist||'', COTIZACION:mb?.dataset.itemCot||'', ID_PEDIDO:mb?.dataset.itemPedId||''};
   const isNew=mb?.dataset.itemNew==='1';
   document.getElementById('modal-foot').innerHTML=itemFooterHtml(idx, it, isNew);
   // FIX urgencia: al entrar a la pestaña Precios (idx=4), verificar/mostrar aviso
@@ -10119,7 +10120,7 @@ async function recalcularTotalesCot(cotId){
 }
 
 async function recalcularTotalesCotUI(cotId){
-  if(!DB.items){ DB.items = cacheGetStale('items') || DB.items || []; }
+  if(!DB.items) DB.items = await GET('getItems', '', {rango:RANGO_STATE.elementos||'1m'});
   const its=(DB.items||[]).filter(x=>String(x.COTIZACION)===String(cotId)||String(x.ID_PEDIDO)===String(cotId));
   if(!its.length){ toast('Esta cotización no tiene ítems para sumar','error'); return; }
   await recalcularTotalesCot(cotId);
@@ -10131,7 +10132,7 @@ async function recalcularTotalesCotUI(cotId){
 async function actualizarItemsCot(cotId){
   toast('Actualizando ítems…');
   try{
-    DB.items = await GET('getItems');
+    DB.items = await GET('getItems','',{rango:RANGO_STATE.elementos||'1m'}); cacheSet('items',DB.items);
     await recalcularTotalesCot(cotId);
     toast('✅ Ítems actualizados');
     detailCot(cotId);
@@ -10181,7 +10182,7 @@ async function guardarDiseñadorTodos(cotId) {
     detailCot(cotId);
     // Recargar del servidor en background para mantener consistencia
     setTimeout(async()=>{
-      try{ DB.items = await GET('getItems'); }catch(e){ console.warn('Sync bg items:',e); }
+      try{ DB.items = await GET('getItems', '', {rango:RANGO_STATE.elementos||'1m'}); }catch(e){ console.warn('Sync bg items:',e); }
     }, 2000);
   } catch(e){ toast(e.message,'error'); }
 }
@@ -10309,7 +10310,7 @@ async function saveItem(exist, cotId){
     // ── Identificación ─────────────────────────────────────
     ID_ITEM:          exist||undefined,
     ID_PEDIDO:        cotRef?.ID_PEDIDO||cotId||'',
-    COTIZACION:       cotId||gv('i0')||'',
+    COTIZACION:       cotRef?.COTIZACION||cotRef?.ID_COT||cotId||gv('i0')||'',
     // ── Campos heredados de cotización ─────────────────────
     TIPO:             cotRef?.TIPO||'',
     ASESOR:           cotRef?.ASESOR||'',
@@ -10420,11 +10421,19 @@ async function saveItem(exist, cotId){
   toast(exist?'✅ Item actualizado':'✅ Item creado');
   closeModal();
 
-  // Enviar al servidor en background
-  POST_BG(exist?'updateItem':'createItem', data);
+  // Guardar en servidor — createItem es await (crítico: necesita el ID real)
+  // updateItem puede ser BG
+  let saved = null;
+  if(!exist){
+    try{ saved = await POST('createItem', data); }
+    catch(e){ toast('❌ Error guardando item: '+e.message,'error'); return; }
+  } else {
+    POST_BG('updateItem', data);
+    saved = {ok:true};
+  }
 
   try{
-    const saved = await new Promise(res=>res({ok:true})); // dummy para mantener el bloque try
+    // bloque try para el resto del flujo
     // Actualizar DB.items localmente (sin recargar todo del servidor)
     if(!DB.items) DB.items=[];
     if(exist){
@@ -10443,7 +10452,7 @@ async function saveItem(exist, cotId){
     else items();
     // Sincronizar en segundo plano
     setTimeout(async()=>{
-      try{ DB.items=await GET('getItems'); }catch(e){ console.warn('Sync bg items:',e); }
+      try{ DB.items = await GET('getItems', '', {rango:RANGO_STATE.elementos||'1m'}); }catch(e){ console.warn('Sync bg items:',e); }
     }, 2000);
   }catch(e){toast(e.message,'error');}
 }
@@ -10927,7 +10936,7 @@ async function deletePrc(id){
 async function remisiones(){
   loading();
   try{
-    if(!DB.remisiones) DB.remisiones = cacheGetStale('remisiones') || [];
+    if(!DB.remisiones) DB.remisiones = await GET('getRemisiones', '', {rango:RANGO_STATE.remisiones||'1m'});
     if(!DB.cotizaciones)       await load('cotizaciones','getCotizaciones');
     if(!DB.elementosRemision)  await load('elementosRemision','getElementosRemision');
 
