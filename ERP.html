@@ -8329,7 +8329,12 @@ const svcOpts = (DB.servicios || []).map(s => {
   document.getElementById('modal-body').dataset.itemCot   = it.COTIZACION||'';
   document.getElementById('modal-body').dataset.itemNew   = isNew?'1':'0';
 
-  setTimeout(()=>{ recalcItem(); renderDescImages(); },100);
+  // FIX urgencia: guardar TIPO de cotización para el control de sobremargen mínimo
+  const _cotTipoInfo = cotInfo(it.COTIZACION||'');
+  const _cotTipo = String(_cotTipoInfo?.TIPO||'').toUpperCase();
+  document.getElementById('modal-body').dataset.cotTipo = _cotTipo;
+
+  setTimeout(()=>{ recalcItem(); _checkMargenUrgencia(true); renderDescImages(); },100);
 }
 
 // Genera el footer del wizard de Item: Cancelar + Anterior (si aplica) + Siguiente
@@ -8355,6 +8360,8 @@ function wizItemTab(idx){
   const it={ID_ITEM:mb?.dataset.itemExist||'', COTIZACION:mb?.dataset.itemCot||''};
   const isNew=mb?.dataset.itemNew==='1';
   document.getElementById('modal-foot').innerHTML=itemFooterHtml(idx, it, isNew);
+  // FIX urgencia: al entrar a la pestaña Precios (idx=4), verificar/mostrar aviso
+  if(idx===4) setTimeout(()=>_checkMargenUrgencia(true),80);
   // Enfocar el primer campo del nuevo paso (llenado más fluido)
   setTimeout(()=>{
     const step=document.getElementById('wiz-item-'+idx);
@@ -9145,10 +9152,97 @@ function recalcItem(){
 
 // Cuando el usuario edita el % de Sobremargen: vuelve el Precio Unitario a modo
 // "automático" (calculado desde costo+margen) y recalcula todo.
+// FIX urgencia: si la COT es tipo UR, el sobremargen mínimo es 50%.
+// Si el usuario intenta bajar de 50, se pide clave WEDM. Si la pone,
+// se permite pero queda el aviso visible. Si no, se revierte a 50.
 function onMargenInput(){
   const ip=document.getElementById('ipunit');
   if(ip) ip._manual=false;
+  _checkMargenUrgencia(false);
   recalcItem();
+}
+
+const _MARGEN_MIN_UR = 50;
+const _CLAVE_UR      = 'WEDM';
+
+// Verifica si la COT activa es UR y el margen está por debajo del mínimo.
+// init=true → solo pone el valor mínimo y muestra aviso (sin preguntar clave).
+// init=false → usuario cambió el valor → pide clave si baja de mínimo.
+function _checkMargenUrgencia(init){
+  const mb = document.getElementById('modal-body');
+  if(!mb) return;
+  const tipo = String(mb.dataset.cotTipo||'').toUpperCase();
+  if(!tipo.includes('UR')) return; // no es urgencia → sin restricción
+
+  const imargen = document.getElementById('imargen');
+  if(!imargen) return;
+
+  const val = Number(imargen.value||0);
+
+  // Asegurar que el aviso permanente esté visible siempre en COT UR
+  _showAvisoUrgencia();
+
+  if(init){
+    // Al abrir el modal: si el margen guardado es menor a 50, forzar a 50
+    if(val < _MARGEN_MIN_UR){
+      imargen.value = _MARGEN_MIN_UR;
+    }
+    return;
+  }
+
+  // El usuario bajó el margen por debajo del mínimo → pedir clave
+  if(val < _MARGEN_MIN_UR){
+    const clave = prompt(
+      `⚠️ COTIZACIÓN URGENCIA — Sobremargen mínimo ${_MARGEN_MIN_UR}%\n\n` +
+      `Estás intentando bajar el sobremargen a ${val}%.\n` +
+      `Ingresa la clave de autorización para continuar:`
+    );
+    if(clave && clave.trim().toUpperCase() === _CLAVE_UR){
+      // Clave correcta → permitir, pero dejar aviso visible
+      _showAvisoUrgencia(true); // aviso en modo "autorizado"
+    } else {
+      // Clave incorrecta o canceló → revertir a mínimo
+      imargen.value = _MARGEN_MIN_UR;
+      const ip = document.getElementById('ipunit');
+      if(ip) ip._manual = false;
+      recalcItem();
+      if(clave !== null){
+        toast('❌ Clave incorrecta. Sobremargen revertido a ' + _MARGEN_MIN_UR + '%', 'error');
+      }
+    }
+  }
+}
+
+// Muestra el aviso de urgencia en la pestaña Precios.
+// autorizado=true → cambia el texto a "autorizado por WEDM".
+function _showAvisoUrgencia(autorizado){
+  const paso4 = document.getElementById('wiz-item-4');
+  if(!paso4) return;
+  const ID_AVISO = 'aviso-margen-urgencia';
+  let aviso = document.getElementById(ID_AVISO);
+  if(!aviso){
+    aviso = document.createElement('div');
+    aviso.id = ID_AVISO;
+    aviso.style.cssText = [
+      'background:#fef3c7','border:2px solid #f59e0b','border-radius:8px',
+      'padding:10px 14px','margin-bottom:12px','font-size:12px',
+      'font-weight:700','color:#92400e','display:flex',
+      'align-items:center','gap:8px'
+    ].join(';');
+    // Insertar al inicio de la pestaña Precios
+    paso4.insertBefore(aviso, paso4.firstChild);
+  }
+  if(autorizado){
+    aviso.innerHTML = '🔓 <span>COTIZACIÓN URGENCIA — Sobremargen reducido autorizado por WEDM. El mínimo recomendado es ' + _MARGEN_MIN_UR + '%.</span>';
+    aviso.style.background = '#fff7ed';
+    aviso.style.borderColor = '#fb923c';
+    aviso.style.color = '#9a3412';
+  } else {
+    aviso.innerHTML = '⚠️ <span>COTIZACIÓN URGENCIA — Sobremargen mínimo <strong>' + _MARGEN_MIN_UR + '%</strong>. Se requiere clave para reducirlo.</span>';
+    aviso.style.background = '#fef3c7';
+    aviso.style.borderColor = '#f59e0b';
+    aviso.style.color = '#92400e';
+  }
 }
 
 // Cuando el usuario edita el Precio Unitario directamente (a mano o con +/-):
