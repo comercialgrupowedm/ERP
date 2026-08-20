@@ -1479,7 +1479,7 @@ async function POST_ARCH(action, data = {}) {
 //    IMAGENES_DESCRIPCION) del caché para evitar que localStorage se
 //    llene (límite ~5 MB) y corrompa otros datos. Las imágenes se
 //    obtienen siempre desde el servidor.
-const CACHE_TTL = 30 * 60 * 1000; // 30 minutos (sync optimista mantiene DB fresco)
+const CACHE_TTL = 45 * 60 * 1000; // 45 minutos (sync optimista mantiene DB fresco)
 const CACHE_KEY_PREFIX = 'erp_wedm_';
 // Campos pesados que NO se cachean
 const CACHE_EXCLUDE_FIELDS = ['PLANO_B64','IMAGENES_DESCRIPCION','IMAGEN_NOMBRE','PLANO_NOMBRE','HOJA_RUTA_JSON','QA_JSON']; // IMAGEN_B64=URL corta, no excluir
@@ -1635,7 +1635,7 @@ function hideBusy(){
 
 // ══ API ════════════════════════════════════════════════════════
 // Timeout helper — GAS tiene cold-start; si tarda más de 25 s algo falló
-function _fetchTimeout(url, opts={}, ms=20000){
+function _fetchTimeout(url, opts={}, ms=15000){
   const ctrl = new AbortController();
   const timer = setTimeout(()=>ctrl.abort(), ms);
   return fetch(url, {...opts, signal:ctrl.signal}).finally(()=>clearTimeout(timer));
@@ -2893,7 +2893,7 @@ async function dashboard(){
 async function cotizaciones(){
   loading();
   try{
-    if(!DB.cotizaciones) DB.cotizaciones = await GET('getCotizaciones', '', {rango:RANGO_STATE.cotizaciones});
+    if(!DB.cotizaciones) DB.cotizaciones = cacheGetStale('cotizaciones') || [];
     if(!DB.clientes)     await load('clientes','getClientes');
     updateBadges();
 
@@ -3621,7 +3621,7 @@ async function cotRecoSaveRow(cotId){
   try{
     const btn=document.querySelector('#modal-foot .btn-primary');
     if(btn){btn.disabled=true;btn.textContent='Guardando…';}
-    await POST('updateCotizacion',{...c, RECOMENDACIONES_JSON: JSON.stringify(reco)});
+    POST_BG('updateCotizacion',{...c, RECOMENDACIONES_JSON: JSON.stringify(reco)});
     c.RECOMENDACIONES_JSON=JSON.stringify(reco);
     toast('✅ Recomendación agregada');
     closeModal();
@@ -3642,7 +3642,7 @@ async function cotRecoDelRow(cotId, idx){ idx=Number(idx);
   try{ reco=JSON.parse(c.RECOMENDACIONES_JSON||'[]'); }catch(e){}
   reco.splice(idx,1);
   try{
-    await POST('updateCotizacion',{...c, RECOMENDACIONES_JSON: JSON.stringify(reco)});
+    POST_BG('updateCotizacion',{...c, RECOMENDACIONES_JSON: JSON.stringify(reco)});
     c.RECOMENDACIONES_JSON=JSON.stringify(reco);
     toast('🗑 Eliminada');
     const panel=document.getElementById('dp-reco-'+cotId);
@@ -3726,7 +3726,7 @@ function fallbackCopy(txt,cb){
 async function duplicarCot(id){
   const c=(DB.cotizaciones||[]).find(x=>String(x.COTIZACION)===String(id)||String(x.ID_PEDIDO)===String(id));
   if(!c){ toast('Cotización no encontrada','error'); return; }
-  if(!DB.items) DB.items=await GET('getItems');
+  if(!DB.items) DB.items = cacheGetStale('items') || [];
   const its=DB.items.filter(x=>String(x.COTIZACION)===String(id)||String(x.ID_PEDIDO)===String(id));
 
   // Calcular nuevo ID: max actual + 1
@@ -3885,7 +3885,7 @@ function leadTimeDias(v){
 
 
 async function modalCrearOP(cotId, soloItemId){
-  if(!DB.items) DB.items=await GET('getItems');
+  if(!DB.items) DB.items = cacheGetStale('items') || [];
   if(!DB.produccion) DB.produccion=await GET('getControlProduccion');
   const c=(DB.cotizaciones||[]).find(x=>String(x.COTIZACION)===String(cotId));
   if(!c){ toast('Cotización no encontrada','error'); return; }
@@ -4043,15 +4043,13 @@ async function ejecutarCrearOP(cotId, soloItemId){
 
   if(!itsFaltantes.length){ toast('Los ítems seleccionados ya están en Producción.','error'); return; }
 
-  // ── Blindaje anti-duplicados: revalidar contra el servidor (no la caché) ──
-  let prodFresca;
-  try{ prodFresca = await GET('getControlProduccion'); }catch(e){ prodFresca = DB.produccion||[]; }
-  DB.produccion = prodFresca;
-  const tomadaPorOtraCot = prodFresca.some(x=>String(x.OP)===String(numOP) && String(x.COT)!==String(cotId));
+  // ── Anti-duplicados: verificar solo en caché local (DB.produccion)
+  // El número de OP ya fue calculado como MAX+1 sobre la caché — si dos usuarios
+  // crean simultáneamente el GAS devuelve error de fila duplicada igual.
+  const prodLocal = DB.produccion||[];
+  const tomadaPorOtraCot = prodLocal.some(x=>String(x.OP)===String(numOP) && String(x.COT)!==String(cotId));
   if(tomadaPorOtraCot){
-    toast(`La OP-${numOP} ya fue tomada por otra cotización justo ahora. Se recalculó el número, revisa e intenta de nuevo.`,'error');
-    closeModal();
-    modalCrearOP(cotId, soloItemId||undefined);
+    toast(`⚠️ La OP-${numOP} ya existe en otra cotización. Recarga e intenta de nuevo.`,'error');
     return;
   }
 
@@ -4094,9 +4092,12 @@ async function ejecutarCrearOP(cotId, soloItemId){
   // Re-renderizar inmediatamente con los datos optimistas
   detailCot(cotId);
 
-  // Enviar al GAS en background (sin bloquear)
+  // Enviar al GAS en background — 1 solo request para todas las OPs
   (async () => {
     try{
+    // Construir todos los payloads primero (sin awaits)
+    const opRows      = [];
+    const itemUpdates = [];
     for(const it of itsFaltantes){
       // Construir rutas desde item
       // Construir rutas MQ1-MQ10 desde los 10 procesos del ítem
@@ -4217,9 +4218,8 @@ async function ejecutarCrearOP(cotId, soloItemId){
         PLANO_NOMBRE:it.PLANO_NOMBRE||it['PLANO_NOMBRE']||'',
       };
 
-      await POST('createOP', opRow);
-      // Actualizar item con OP_ID, diseñador y estado
-      await POST('updateItem',{
+      opRows.push(opRow);
+      itemUpdates.push({
         ID_ITEM: it.ID_ITEM,
         OP_ID: numOP,
         DISEÑADOR: diseñador,
@@ -4228,10 +4228,17 @@ async function ejecutarCrearOP(cotId, soloItemId){
         MP_INSUMOS: 'N'
       });
     }
-    // Actualizar COT → EN PROCESO
-    POST_BG('updateCotizacion',{...c, ESTADO:'EN PROCESO'});
-
-    toast(`✅ OP-${numOP} — ${nItems} ítem(s) creados en Producción`);
+    // 1 SOLO POST al GAS con todas las OPs + actualizaciones de items + COT
+    const res = await POST_SILENT('bulkCreateOP', {
+      rows: opRows,
+      itemUpdates,
+      cotUpdate: { ...c, ESTADO: 'EN PROCESO' }
+    });
+    if(res?.fail > 0){
+      toast(`⚠️ OP-${numOP}: ${res.ok} creadas, ${res.fail} con error`, 'error');
+    } else {
+      toast(`✅ OP-${numOP} — ${nItems} ítem(s) creados en Producción`);
+    }
     _autoSync(['produccion','items','cotizaciones'], () => { detailCot(cotId); });
     }catch(e){ toast(`⚠️ Error creando OP: ${e.message}`,'error'); }
   })(); // fin async IIFE background
@@ -4745,12 +4752,11 @@ async function deleteCot(id){
   const c=(DB.cotizaciones||[]).find(x=>String(x.COTIZACION)===String(id)||String(x.ID_PEDIDO)===String(id));
   const uuid=c?c.ID_PEDIDO:id;
   if(!confirm('¿Eliminar COT-'+id+'?'))return;
-  try{
-    await POST('deleteCotizacion',{ID_PEDIDO:uuid, ID_COT:id});
-    toast('Eliminada'); closeDetail();
-    if(DB.cotizaciones) DB.cotizaciones = DB.cotizaciones.filter(x=>String(x.COTIZACION)!==String(id)&&x.ID_PEDIDO!==uuid);
-    cotizaciones(); _syncNow(['cotizaciones']);
-  }catch(e){toast(e.message,'error');}
+  // Mutación optimista: quitar de DB local inmediatamente
+  if(DB.cotizaciones) DB.cotizaciones=DB.cotizaciones.filter(x=>String(x.COTIZACION)!==String(id)&&x.ID_PEDIDO!==uuid);
+  toast('Eliminada'); closeDetail(); cotizaciones();
+  POST_BG('deleteCotizacion',{ID_PEDIDO:uuid, ID_COT:id});
+  _syncNow(['cotizaciones']);
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -5091,7 +5097,7 @@ function _renderListaProd(allOps, viewMode='cards'){
 async function produccion(){
   loading();
   try{
-    if(!DB.produccion) DB.produccion = await GET('getControlProduccion', '', {rango:RANGO_STATE.produccion});
+    if(!DB.produccion) DB.produccion = cacheGetStale('produccion') || [];
     if(!DB.cotizaciones) await load('cotizaciones','getCotizaciones');
     updateBadges();
 
@@ -5427,7 +5433,7 @@ async function qaAvanzarEtapa(opId){
     }
   }
   try{
-    await POST('updateOP', payload);
+    POST_BG('updateOP', payload);
     Object.keys(payload).forEach(k => { if(k!=='IDQR') op[k] = payload[k]; });
     toast(etCascada
       ? `✅ ${et.nombreLargo} marcado — ${etCascada.nombreLargo} avanzado`
@@ -5496,7 +5502,7 @@ async function qaConfirmarCalidad(opId, responsable){
   if(et.dateKeys.length) payload[_realKey(et.dateKeys)] = hoy;
   payload[_realKey(QA_RESPONSABLE_LIB_KEYS)] = responsable;
   try{
-    await POST('updateOP', payload);
+    POST_BG('updateOP', payload);
     Object.keys(payload).forEach(k => { if(k!=='IDQR') op[k] = payload[k]; });
     toast(`✅ Calidad marcada — Liberación asignada a ${responsable}`);
     closeModal();
@@ -5597,7 +5603,7 @@ async function qaSetEtapa(opId, etapaId){
     payload.HISTORIAL_RETROCESOS_JSON = _qaGuardarHistorialRetroceso(op, etapas[idx].nombreLargo, valoresPrevios);
 
     try{
-      await POST('updateOP', payload);
+      POST_BG('updateOP', payload);
       Object.keys(payload).forEach(k=>{ if(k!=='IDQR') op[k]=payload[k]; });
       toast(`↩️ Proceso retrocedido hasta "${etapas[idx].nombreLargo}"`);
       detailOP(opId);
@@ -5630,7 +5636,7 @@ async function qaSetEtapa(opId, etapaId){
   }
 
   try{
-    await POST('updateOP', payload);
+    POST_BG('updateOP', payload);
     Object.keys(payload).forEach(k=>{ if(k!=='IDQR') op[k]=payload[k]; });
     toast(`✅ OP movida a "${etapas[idx].nombreLargo}"`);
     detailOP(opId);
@@ -5688,7 +5694,7 @@ async function qaRecuperarHistorial(opId, histIdx){
   historial.splice(histIdx,1);
   const payload = { IDQR: op.IDQR, ...snap.valores, HISTORIAL_RETROCESOS_JSON: JSON.stringify(historial) };
   try{
-    await POST('updateOP', payload);
+    POST_BG('updateOP', payload);
     Object.keys(payload).forEach(k=>{ if(k!=='IDQR') op[k]=payload[k]; });
     toast('✅ Datos recuperados');
     closeModal();
@@ -5727,7 +5733,7 @@ async function qaCambiarSemaforo(opId, valor){
   const op = qaFindOP(opId);
   if(!op){ toast('OP no encontrada','error'); return; }
   try{
-    await POST('updateOP', { IDQR: op.IDQR, 'SEMAFORO AVANCE': valor });
+    POST_BG('updateOP', { IDQR: op.IDQR, 'SEMAFORO AVANCE': valor });
     op['SEMAFORO AVANCE'] = valor;
     toast(`✅ Semáforo cambiado a "${valor}"`);
     closeModal();
@@ -6073,7 +6079,7 @@ async function qaGuardarAvanceManual(opId){
   // ESTADO tampoco se envía — también es fórmula automática en el Sheet
   const payload = { IDQR: op.IDQR };
   try{
-    await POST('updateOP', payload);
+    POST_BG('updateOP', payload);
     toast(`✅ Avance guardado — ${globalPct}% (estado calculado por fórmula en Sheet)`);
     closeModal();
     Object.assign(op, payload);
@@ -6118,7 +6124,7 @@ async function qaGuardarAvance(opId){
   // ESTADO tampoco se envía — también es fórmula automática en el Sheet
 
   try{
-    await POST('updateOP', payload);
+    POST_BG('updateOP', payload);
     toast(`✅ Avance guardado — ${globalPct}% global (ponderado por horas)`);
     closeModal();
     Object.assign(op, payload);
@@ -6342,7 +6348,7 @@ async function qaGuardarArchivo(opId, kind){
       prog.step(0);
       const { url } = await uploadToImgbb(file);
       prog.step(1);
-      await POST('updateOP', { IDQR: op.IDQR, IMAGEN_B64: url, IMAGEN_NOMBRE: file.name });
+      POST_BG('updateOP', { IDQR: op.IDQR, IMAGEN_B64: url, IMAGEN_NOMBRE: file.name });
       prog.step(2);
       // Actualizar caché local → miniatura aparece de inmediato
       const cached = (DB.produccion||[]).find(x => String(x.IDQR) === String(op.IDQR));
@@ -6389,7 +6395,7 @@ async function qaGuardarArchivo(opId, kind){
     prog.step(2);
     // Limpiar IDQR — Sheets a veces devuelve "135241.0", el GAS espera "135241"
     const idqrLimpio = String(op.IDQR).replace(/\.0+$/, '').trim();
-    await POST('updateOP', { IDQR: idqrLimpio, PLANO_URL: result.url, PLANO_NOMBRE: file.name });
+    POST_BG('updateOP', { IDQR: idqrLimpio, PLANO_URL: result.url, PLANO_NOMBRE: file.name });
 
     const cached = (DB.produccion||[]).find(x => String(x.IDQR) === String(op.IDQR));
     if(cached){ cached.PLANO_URL = result.url; cached.PLANO_NOMBRE = file.name; }
@@ -6773,7 +6779,7 @@ async function _qaFmtSave(imprimir=false){
     const prog = _progress({ icon:'📋', label:'Guardando Formato QA', steps:['Guardando…','Listo'] });
     prog.step(0);
     const idqrLimpio = String(st.op.IDQR).replace(/\.0+$/,'').trim();
-    await POST('updateOP', { IDQR: idqrLimpio, QA_JSON: JSON.stringify(qaData) });
+    POST_BG('updateOP', { IDQR: idqrLimpio, QA_JSON: JSON.stringify(qaData) });
     const cached = (DB.produccion||[]).find(x=>String(x.IDQR)===String(st.op.IDQR));
     if(cached) cached.QA_JSON = JSON.stringify(qaData);
     st.op.QA_JSON = JSON.stringify(qaData);
@@ -7898,7 +7904,9 @@ async function saveOP(exist){
 
 async function deleteOP(id){
   if(!confirm('¿Eliminar OP-'+id+'?'))return;
-  try{ await POST('deleteOP',{ID_OP:id}); toast('OP eliminada'); closeDetail();
+  if(DB.produccion) DB.produccion=DB.produccion.filter(x=>String(x.IDQR)!==String(id)&&String(x.OP)!==String(id));
+  toast('OP eliminada'); closeDetail();
+  try{ POST_BG('deleteOP',{ID_OP:id});
     if(DB.produccion) DB.produccion = DB.produccion.filter(x=>String(x.ID_OP)!==String(id)&&String(x.IDQR)!==String(id));
     produccion(); _syncNow(['produccion']); }
   catch(e){toast(e.message,'error');}
@@ -10106,12 +10114,12 @@ async function recalcularTotalesCot(cotId){
   c['PRECIO TOTAL']=total;
   c.SUBTOTAL_DESC=total-desc;
   try{
-    await POST('updateCotizacion',{...c,'PRECIO SIN IVA':sinIva,'PRECIO TOTAL':total,SUBTOTAL_DESC:total-desc});
+    POST_BG('updateCotizacion',{...c,'PRECIO SIN IVA':sinIva,'PRECIO TOTAL':total,SUBTOTAL_DESC:total-desc});
   }catch(e){ console.warn('No se pudo sincronizar el total de COT-'+cotId, e); }
 }
 
 async function recalcularTotalesCotUI(cotId){
-  if(!DB.items){ try{ DB.items=await GET('getItems'); }catch(e){ toast('No se pudieron cargar los ítems','error'); return; } }
+  if(!DB.items){ DB.items = cacheGetStale('items') || DB.items || []; }
   const its=(DB.items||[]).filter(x=>String(x.COTIZACION)===String(cotId)||String(x.ID_PEDIDO)===String(cotId));
   if(!its.length){ toast('Esta cotización no tiene ítems para sumar','error'); return; }
   await recalcularTotalesCot(cotId);
@@ -10445,7 +10453,7 @@ async function deleteItem(id){
   const itPrev=(DB.items||[]).find(x=>String(x.ID_ITEM)===String(id));
   const cotId = itPrev ? (itPrev.COTIZACION||itPrev.ID_PEDIDO) : null;
   try{
-    await POST('deleteItem',{ID_ITEM:id});
+    POST_BG('deleteItem',{ID_ITEM:id});
     toast('Eliminado');
     DB.items=(DB.items||[]).filter(x=>String(x.ID_ITEM)!==String(id));
     if(cotId) await recalcularTotalesCot(cotId);
@@ -10554,7 +10562,7 @@ async function confirmarCopiarItem(){
   newItem['FECHA ENTREGA PACTADA']=cotDest['FECHA ENTREGA PACTADA']||'';
 
   try{
-    await POST('createItem',newItem);
+    POST_BG('createItem',newItem);
     toast(`✅ Ítem copiado a COT-${_copiarItemDestId} como ítem #${nuevoNumItem}`);
     closeModal();
     _autoSync(['items']);
@@ -10634,7 +10642,7 @@ async function ejecutarDuplicarItem(idOrigen){
   delete newItem.ID_ITEM;
 
   try{
-    await POST('createItem',newItem);
+    POST_BG('createItem',newItem);
     toast(`✅ Ítem #${newNum} creado en COT-${cotId}`);
     closeModal();
     if(cotId) await recalcularTotalesCot(cotId);
@@ -10798,7 +10806,9 @@ async function saveCliente(exist){
 }
 async function deleteCliente(id){
   if(!confirm('¿Eliminar cliente?'))return;
-  try{ await POST('deleteCliente',{ID:id}); toast('Eliminado'); closeDetail();
+  if(DB.clientes) DB.clientes=DB.clientes.filter(x=>String(x.ID||x.ID_CLIENTE||'')!==String(id));
+  toast('Eliminado'); closeDetail();
+  try{ POST_BG('deleteCliente',{ID:id});
     if(DB.clientes) DB.clientes = DB.clientes.filter(x=>String(x.ID_CLIENTE||x.ID)!==String(id));
     clientes(); _syncNow(['clientes']); }
   catch(e){toast(e.message,'error');}
@@ -10917,7 +10927,7 @@ async function deletePrc(id){
 async function remisiones(){
   loading();
   try{
-    if(!DB.remisiones) DB.remisiones = await GET('getRemisiones', '', {rango:RANGO_STATE.remisiones});
+    if(!DB.remisiones) DB.remisiones = cacheGetStale('remisiones') || [];
     if(!DB.cotizaciones)       await load('cotizaciones','getCotizaciones');
     if(!DB.elementosRemision)  await load('elementosRemision','getElementosRemision');
 
@@ -11359,7 +11369,7 @@ async function eliminarRem(remId, idPedido){
   if(!confirm(`¿Eliminar Remisión REM-${remId}? Esta acción no se puede deshacer.`)) return;
   try{
     // Intentar eliminar por ID_PEDIDO (UUID) primero, luego por REMISION (número)
-    await POST('deleteRemision', {
+    POST_BG('deleteRemision', {
       ID_REMISION_UUID: idPedido||remId,
       ID_REMISION:      remId,
       REMISION:         remId,
@@ -13839,7 +13849,7 @@ async function _cmpConfirmar(idqr){
       const r = await _cmpSubirArchivo(window._compraPlano, idqr, 'plano');
       prog.step(1); planoUrl=r.url; planoNom=r.nombre;
       if(!op.PLANO_URL&&!op.PLANO_B64){
-        await POST('updateOP',{IDQR:idqr,PLANO_URL:planoUrl,PLANO_NOMBRE:planoNom});
+        POST_BG('updateOP',{IDQR:idqr,PLANO_URL:planoUrl,PLANO_NOMBRE:planoNom});
         if(op){op.PLANO_URL=planoUrl;op.PLANO_NOMBRE=planoNom;}
       }
       prog.done('Plano subido');
@@ -14020,7 +14030,7 @@ async function guardarDiseñadorOP(idOp, opNum) {
 // ── Marcar materiales pedidos ─────────────────────────────────
 async function marcarMPPedido(itemId, dis) {
   try {
-    await POST('updateItem',{ID_ITEM:itemId, MP_INSUMOS:'Y'});
+    POST_BG('updateItem',{ID_ITEM:itemId, MP_INSUMOS:'Y'});
     toast(`✅ MP marcado como pedido — ${dis||''}`);
     _autoSync(['items'], controlDiseno);
   } catch(e){ toast(e.message,'error'); }
@@ -14052,9 +14062,9 @@ async function guardarDiseñador(itemId, opId, returnCotId) {
   if(!dis){ toast('Selecciona un diseñador','error'); return; }
   try {
     const hoy = new Date().toISOString().slice(0,10);
-    await POST('updateItem',{ID_ITEM:itemId, DISEÑADOR:dis, FECHA_INICIO_OP:hoy, MP_INSUMOS:'N'});
+    POST_BG('updateItem',{ID_ITEM:itemId, DISEÑADOR:dis, FECHA_INICIO_OP:hoy, MP_INSUMOS:'N'});
     // Si hay OP, también actualizar la OP
-    if(opId) await POST('updateOP',{ID_OP:opId, DISEÑADOR:dis});
+    if(opId) POST_BG('updateOP',{ID_OP:opId, DISEÑADOR:dis});
     // Actualizar caché local inmediatamente (optimistic update)
     if(DB.items){
       const idx = DB.items.findIndex(x=>String(x.ID_ITEM)===String(itemId));
@@ -14565,7 +14575,7 @@ async function _hrSave(imprimir=false) {
     const idqrLimpio = String(op.IDQR).replace(/\.0+$/,'').trim();
     // Si se escribió directamente sobre Cliente/Descripción/Tipo/etc. (campos
     // reales de la OP), se guardan junto con la hoja de ruta en la misma llamada.
-    await POST('updateOP', { IDQR: idqrLimpio, HOJA_RUTA_JSON: JSON.stringify(hrData), ...(camposOP||{}) });
+    POST_BG('updateOP', { IDQR: idqrLimpio, HOJA_RUTA_JSON: JSON.stringify(hrData), ...(camposOP||{}) });
     const cached = (DB.produccion||[]).find(x=>String(x.IDQR)===String(op.IDQR));
     if(cached) { cached.HOJA_RUTA_JSON = JSON.stringify(hrData); Object.assign(cached, camposOP||{}); Object.assign(op, camposOP||{}); }
     prog.done('Guardado');
@@ -16030,7 +16040,7 @@ async function _avanzarEstadoOC(noc, nuevoEstado) {
   try {
     const payload = { N_OC: noc, ESTADO: nuevoEstado };
     if(nuevoEstado.includes('RECIBIDO')) payload.FECHA_RECIBIDO = new Date().toISOString().slice(0,10);
-    await POST('updateCompra', payload);
+    POST_BG('updateCompra', payload);
     // Actualizar caché local
     const c = (_comprasData||[]).find(x=>x.N_OC===noc);
     if(c){ c.ESTADO = nuevoEstado; if(payload.FECHA_RECIBIDO) c.FECHA_RECIBIDO = payload.FECHA_RECIBIDO; }
@@ -16618,8 +16628,8 @@ async function _guardarProveedor(idExistente) {
     NOTAS:     document.getElementById('prov-notas')?.value||''
   };
   try {
-    if(idExistente){ await POST('updateProveedor',data); toast('✅ Proveedor actualizado'); }
-    else { await POST('createProveedor',data); toast('✅ Proveedor creado'); }
+    toast(idExistente?'✅ Proveedor actualizado':'✅ Proveedor creado');
+    POST_BG(idExistente?'updateProveedor':'createProveedor', data);
     _proveedoresData = null;
     closeModal();
     proveedores();
@@ -16629,7 +16639,7 @@ async function _guardarProveedor(idExistente) {
 async function _deleteProveedor(id) {
   if(!confirm('¿Eliminar este proveedor?')) return;
   try {
-    await POST('deleteProveedor',{ID_PROVEEDOR:id});
+    POST_BG('deleteProveedor',{ID_PROVEEDOR:id});
     _proveedoresData=null; closeModal(); proveedores();
     toast('Proveedor eliminado');
   } catch(e){ toast(e.message,'error'); }
@@ -16672,7 +16682,7 @@ async function _confirmarProveedorOC(noc, provId) {
   const prov = (_proveedoresData||[]).find(p=>String(p.ID_PROVEEDOR)===String(provId));
   if(!prov){ toast('No se encontró el proveedor seleccionado','error'); return; }
   try {
-    await POST('updateCompra',{
+    POST_BG('updateCompra',{
       N_OC: noc,
       PROVEEDOR: prov.NOMBRE,
       PROVEEDOR_ID: prov.ID_PROVEEDOR,
@@ -18104,7 +18114,7 @@ async function cotFmaeSaveRow(cotId){
   try{
     const btn=document.querySelector('#modal-foot .btn-primary');
     if(btn){btn.disabled=true;btn.textContent='Guardando…';}
-    await POST('updateCotizacion',{...c, FMAE_JSON: JSON.stringify(fmae)});
+    POST_BG('updateCotizacion',{...c, FMAE_JSON: JSON.stringify(fmae)});
     c.FMAE_JSON=JSON.stringify(fmae);
     toast('✅ Falla agregada al FMAE');
     closeModal();
@@ -18124,7 +18134,7 @@ async function cotFmaeDelRow(cotId, idx){ idx=Number(idx);
   try{ fmae=JSON.parse(c.FMAE_JSON||'[]'); }catch(e){}
   fmae.splice(idx,1);
   try{
-    await POST('updateCotizacion',{...c, FMAE_JSON: JSON.stringify(fmae)});
+    POST_BG('updateCotizacion',{...c, FMAE_JSON: JSON.stringify(fmae)});
     c.FMAE_JSON=JSON.stringify(fmae);
     toast('🗑 Eliminado');
     _fmaeRefreshAfterChange(cotId);
