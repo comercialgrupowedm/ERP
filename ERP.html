@@ -1265,6 +1265,8 @@ kbd{
 .login-user-selected .u-info .u-rol{font-size:11px;color:var(--muted)}
 
 </style>
+
+
 </head>
 <body>
 
@@ -1646,7 +1648,7 @@ const ACTION_TO_KEY = {
   getCotizaciones:'cotizaciones', getControlProduccion:'produccion',
   getClientes:'clientes', getRemisiones:'remisiones', getMateriales:'materiales',
   getServicios:'servicios', getProcesos:'procesos', getItems:'items',
-  getCompras:'compras',
+  getCompras:'compras', getElementosRemision:'elementosRemision',
 };
 
 // ── Mapa de acciones para sync ────────────────────────────────
@@ -1654,7 +1656,7 @@ const _SYNC_ACTION = {
   produccion:'getControlProduccion', cotizaciones:'getCotizaciones',
   items:'getItems', clientes:'getClientes', remisiones:'getRemisiones',
   materiales:'getMateriales', servicios:'getServicios', procesos:'getProcesos',
-  compras:'getCompras'
+  compras:'getCompras', elementosRemision:'getElementosRemision',
 };
 
 // ── Auto-sincronización OPTIMISTA ─────────────────────────────
@@ -1793,15 +1795,15 @@ function POST_BG(action, data={}, onError=null) {
 }
 // Pasos de carga con etiquetas y porcentajes
 const LOAD_STEPS = {
-  cotizaciones:       { label: '📋 Cargando cotizaciones...',      pct: 12 },
-  items:              { label: '🔩 Cargando ítems / elementos...', pct: 24 },
-  produccion:         { label: '🏭 Cargando órdenes de prod...',   pct: 36 },
-  clientes:           { label: '🏢 Cargando clientes...',          pct: 48 },
-  remisiones:         { label: '🚚 Cargando remisiones...',        pct: 60 },
-  elemRemision:       { label: '📦 Cargando detalle remisiones...', pct: 70 },
-  materiales:         { label: '🪨 Cargando materiales...',        pct: 80 },
-  servicios:          { label: '⚙️ Cargando servicios externos...', pct: 88 },
-  procesos:           { label: '🔧 Cargando procesos...',          pct: 94 },
+  cotizaciones:       { label: '📋 Cargando cotizaciones...',        pct: 12 },
+  items:              { label: '🔩 Cargando ítems / elementos...',   pct: 22 },
+  produccion:         { label: '🏭 Cargando órdenes de prod...',     pct: 33 },
+  clientes:           { label: '🏢 Cargando clientes...',            pct: 44 },
+  remisiones:         { label: '🚚 Cargando remisiones...',          pct: 55 },
+  elementosRemision:  { label: '📦 Cargando detalle remisiones...',  pct: 64 },
+  materiales:         { label: '🪨 Cargando materiales...',          pct: 73 },
+  servicios:          { label: '⚙️ Cargando servicios externos...',  pct: 82 },
+  procesos:           { label: '🔧 Cargando procesos...',            pct: 91 },
 };
 
 function splashProgress(key) {
@@ -2361,15 +2363,16 @@ async function dashboard(){
     // rangoKey = la clave en RANGO_STATE que controla este módulo
     // null = sin filtro de fecha (catálogos pequeños que se cargan completos siempre)
     const COLECCIONES = [
-      ['cotizaciones', 'getCotizaciones',       'cotizaciones'],
-      ['produccion',   'getControlProduccion',  'produccion'],
-      ['clientes',     'getClientes',           null],
-      ['remisiones',   'getRemisiones',         'remisiones'],
-      ['materiales',   'getMateriales',         null],
-      ['servicios',    'getServicios',          null],
-      ['procesos',     'getProcesos',           null],
-      ['items',        'getItems',              'elementos'],
-      ['compras',      'getCompras',            'compras'],
+      ['cotizaciones',      'getCotizaciones',       'cotizaciones'],
+      ['produccion',        'getControlProduccion',  'produccion'],
+      ['clientes',          'getClientes',           null],
+      ['remisiones',        'getRemisiones',         'remisiones'],
+      ['elementosRemision', 'getElementosRemision',  null],
+      ['materiales',        'getMateriales',         null],
+      ['servicios',         'getServicios',          null],
+      ['procesos',          'getProcesos',           null],
+      ['items',             'getItems',              'elementos'],
+      ['compras',           'getCompras',            'compras'],
     ];
 
     // Paso 1: cargar desde localStorage lo que haya
@@ -7310,55 +7313,76 @@ function dpUploadSection(idqr) {
 // Panel de documentos a nivel de COTIZACIÓN: agrupa los archivos (plano/imagen)
 // de cada OP vinculada a esta cotización, reutilizando dpUploadSection() por OP.
 function dpUploadSectionCot(cotId){
-  const ops = (DB.produccion||[]).filter(x=>String(x.COT)===String(cotId)||String(x.COTIZACION)===String(cotId));
-  if(!ops.length){
-    return `<div class="dp-section">
-      <p style="font-size:12px;color:var(--muted);text-align:center;padding:20px 0">
-        📁 Aún no hay OPs con archivos para esta cotización.<br>Crea una OP primero para poder subir planos e imágenes.
-      </p>
-    </div>`;
+  const ops   = (DB.produccion||[]).filter(x=>String(x.COT)===String(cotId)||String(x.COTIZACION)===String(cotId));
+  const items = (DB.items||[]).filter(x=>String(x.COTIZACION)===String(cotId));
+  const itemsSinOP = items.filter(it=>!ops.find(op=>String(op.ITEM)===String(it.ITEM)));
+  if(!ops.length && !items.length){
+    return `<div class="dp-section"><p style="font-size:12px;color:var(--muted);text-align:center;padding:20px 0">📁 No hay ítems con archivos para esta cotización.</p></div>`;
   }
-  return `<div class="dp-section">
-    ${ops.map(op=>{
-      const idqr = op.IDQR||op.OP;
-      const body = dpUploadSection(idqr);
-      return `<div style="background:var(--card2);border-radius:12px;padding:12px 14px;margin-bottom:12px">
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <div style="font-weight:700;font-size:13px">OP-${op.OP||idqr} · Ítem ${op.ITEM||''}</div>
-          <button class="btn btn-ghost btn-sm" onclick="detailOP('${String(idqr).replace(/'/g,"\\'")}')">Ver OP ↗</button>
-        </div>
-        ${body||'<p style="font-size:11px;color:var(--muted);margin-top:6px">Sin archivos aún.</p>'}
-      </div>`;
-    }).join('')}
-  </div>`;
+  let html = '<div class="dp-section">';
+  ops.forEach(op=>{
+    const idqr = op.IDQR||op.OP;
+    const body = dpUploadSection(idqr);
+    html += `<div style="background:var(--card2);border-radius:12px;padding:12px 14px;margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div style="font-weight:700;font-size:13px">OP-${op.OP||idqr} · Ítem ${op.ITEM||''}</div>
+        <button class="btn btn-ghost btn-sm" onclick="detailOP('${String(idqr).replace(/'/g,"\'")}')">Ver OP ↗</button>
+      </div>
+      ${body||'<p style="font-size:11px;color:var(--muted);margin-top:6px">Sin archivos aún.</p>'}
+    </div>`;
+  });
+  itemsSinOP.forEach(it=>{
+    const planoUrl = it.PLANO_URL||it['PLANO_URL']||'';
+    const planoNom = it.PLANO_NOMBRE||'Plano';
+    const imgUrl   = it.IMAGEN_URL||it['IMAGEN_URL']||it.IMAGEN_B64||'';
+    const safeId   = String(it.ID_ITEM||'').replace(/'/g,"\'");
+    html += `<div style="background:var(--card2);border-radius:12px;padding:12px 14px;margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="font-weight:700;font-size:13px">Ítem ${it.ITEM||''} <span style="font-weight:400;color:var(--muted);font-size:11px">(sin OP)</span></div>
+        <button class="btn btn-ghost btn-sm" onclick="formItem(DB.items.find(x=>x.ID_ITEM==='${safeId}')||{})">✏️ Editar</button>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+        ${planoUrl ? `<a href="${planoUrl}" target="_blank" class="btn btn-ghost btn-sm" style="font-size:11px">${_archIcon(planoNom)} ${planoNom}</a>` : `<button class="btn btn-ghost btn-sm" style="font-size:11px" onclick="closeModal();setTimeout(()=>{formItem(DB.items.find(x=>x.ID_ITEM==='${safeId}')||{});setTimeout(()=>wizItemTab(5),300)},200)">📐 Subir plano</button>`}
+        ${imgUrl ? `<button class="btn btn-ghost btn-sm" style="font-size:11px" onclick="window.open('${imgUrl}','_blank')">🖼️ Ver imagen</button>` : `<button class="btn btn-ghost btn-sm" style="font-size:11px" onclick="closeModal();setTimeout(()=>{formItem(DB.items.find(x=>x.ID_ITEM==='${safeId}')||{});setTimeout(()=>wizItemTab(5),300)},200)">🖼️ Subir imagen</button>`}
+      </div>
+      ${imgUrl ? `<img src="${imgUrl}" style="max-width:100%;max-height:160px;border-radius:8px;border:1px solid var(--border);object-fit:contain;cursor:pointer" onclick="window.open('${imgUrl}','_blank')">` : ''}
+    </div>`;
+  });
+  html += '</div>';
+  return html;
 }
 
 // Panel de documentos a nivel de ÍTEM: reutiliza dpUploadSection() de su OP
 // vinculada (mismo cruce confiable COT+ITEM que usa detailItem) — los archivos
 // que se suban acá son los MISMOS que se ven en la ficha de la OP en Control
-// Producción, no una copia aparte.
+// Panel de documentos a nivel de ÍTEM
 function dpUploadSectionItem(itemId){
   const it = (DB.items||[]).find(x=>String(x.ID_ITEM)===String(itemId));
   if(!it) return '<p style="font-size:12px;color:var(--muted);padding:6px 0">Ítem no encontrado.</p>';
-
-  const op = (DB.produccion||[]).find(x=>
-    String(x.COT)===String(it.COTIZACION) && String(x.ITEM)===String(it.ITEM)
-  );
-
-  if(!op){
-    return `<p style="font-size:12px;color:var(--muted);padding:6px 0">
-      📁 Este ítem aún no tiene Orden de Producción — crea la OP para poder subir plano, imagen o pedir material.
-    </p>`;
+  const op = (DB.produccion||[]).find(x=>String(x.COT)===String(it.COTIZACION) && String(x.ITEM)===String(it.ITEM));
+  if(op){
+    const idqr = op.IDQR||op.OP;
+    const body = dpUploadSection(idqr);
+    return `<div class="dp-section">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <div style="font-weight:700;font-size:13px">OP-${op.OP||idqr}</div>
+        <button class="btn btn-ghost btn-sm" onclick="detailOP('${String(idqr).replace(/'/g,"\'")}')">Ver OP ↗</button>
+      </div>
+      ${body||'<p style="font-size:11px;color:var(--muted);margin-top:6px">Sin archivos aún.</p>'}
+    </div>`;
   }
-
-  const idqr = op.IDQR||op.OP;
-  const body = dpUploadSection(idqr);
+  const planoUrl = it.PLANO_URL||it['PLANO_URL']||'';
+  const planoNom = it.PLANO_NOMBRE||'Plano';
+  const imgUrl   = it.IMAGEN_URL||it['IMAGEN_URL']||it.IMAGEN_B64||'';
+  const safeId   = String(it.ID_ITEM||'').replace(/'/g,"\'");
   return `<div class="dp-section">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-      <div style="font-weight:700;font-size:13px">OP-${op.OP||idqr}</div>
-      <button class="btn btn-ghost btn-sm" onclick="detailOP('${String(idqr).replace(/'/g,"\\'")}')">Ver OP ↗</button>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:8px">📁 Archivos del ítem</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:${(planoUrl||imgUrl)?'10px':'0'}">
+      ${planoUrl ? `<a href="${planoUrl}" target="_blank" class="btn btn-ghost btn-sm" style="font-size:11px">${_archIcon(planoNom)} ${planoNom||'Ver plano'}</a>` : `<button class="btn btn-ghost btn-sm" style="font-size:11px" onclick="closeModal();setTimeout(()=>{formItem(DB.items.find(x=>x.ID_ITEM==='${safeId}')||{});setTimeout(()=>wizItemTab(5),300)},200)">📐 Subir plano</button>`}
+      ${imgUrl ? `<button class="btn btn-ghost btn-sm" style="font-size:11px" onclick="window.open('${imgUrl}','_blank')">🖼️ Ver imagen</button>` : `<button class="btn btn-ghost btn-sm" style="font-size:11px" onclick="closeModal();setTimeout(()=>{formItem(DB.items.find(x=>x.ID_ITEM==='${safeId}')||{});setTimeout(()=>wizItemTab(5),300)},200)">🖼️ Subir imagen</button>`}
     </div>
-    ${body||'<p style="font-size:11px;color:var(--muted);margin-top:6px">Sin archivos aún.</p>'}
+    ${imgUrl ? `<img src="${imgUrl}" style="max-width:100%;max-height:200px;border-radius:8px;border:1px solid var(--border);object-fit:contain;cursor:pointer;margin-bottom:8px" onclick="window.open('${imgUrl}','_blank')">` : ''}
+    ${planoUrl ? `<iframe src="${planoUrl.includes('drive.google.com')?planoUrl.replace('/view','/preview'):planoUrl}" style="width:100%;height:220px;border:1px solid var(--border);border-radius:8px" allow="autoplay"></iframe>` : ''}
   </div>`;
 }
 
@@ -10988,7 +11012,8 @@ async function remisiones(){
               const cotLabel = cotNum && !String(cotNum).includes('-') ? `COT-${cotNum}` : (cotNum||'—');
               const desc   = r['DESCRIPCION DEL PROYECTO']||r.DESCRIPCION||'—';
               const remId  = r.REMISION||r['NUMERO DE REMISION']||'';
-              return `<tr onclick="detailRem('${remId}')" style="cursor:pointer">
+              const remUUID = r.ID_PEDIDO||r.ID_REMISION_UUID||'';
+              return `<tr onclick="detailRem('${remId}','${remUUID}')" style="cursor:pointer">
                 <td><b>${remId?`REM-${remId}`:'—'}</b></td>
                 <td>${fmtDate(fecha)||'—'}</td>
                 <td>${r.EMPRESA||'—'}</td>
@@ -11012,7 +11037,8 @@ async function remisiones(){
         const cotLabel = cotNum && !String(cotNum).includes('-') ? `COT-${cotNum}` : (cotNum||'—');
         const desc   = r['DESCRIPCION DEL PROYECTO']||r.DESCRIPCION||'';
         const remId  = r.REMISION||r['NUMERO DE REMISION']||'';
-        return `<div class="list-card" onclick="detailRem('${remId}')">
+        const remUUID = r.ID_PEDIDO||r.ID_REMISION_UUID||'';
+        return `<div class="list-card" onclick="detailRem('${remId}','${remUUID}')">
           <div class="lc-top">
             <div>
               <div class="lc-id">${remId?`REM-${remId}`:'—'} · ${fmtDate(fecha)||'—'}</div>
@@ -11033,7 +11059,7 @@ async function remisiones(){
   }catch(e){setContent(`<div class="empty"><div class="empty-icon">⚠️</div><p>${e.message}</p></div>`);}
 }
 
-async function detailRem(id){
+async function detailRem(id, uuid=''){
   const r=(DB.remisiones||[]).find(x=>
     String(x.REMISION)===String(id) ||
     String(x['NUMERO DE REMISION']||'')===String(id) ||
@@ -11042,6 +11068,7 @@ async function detailRem(id){
   ); if(!r) return;
 
   const remId  = r.REMISION||r['NUMERO DE REMISION']||id;
+  const remUUID = uuid || r.ID_PEDIDO || r.ID_REMISION_UUID || '';
   const rawCot = r.COTIZACION||r.COT_ID||'';
   const cot    = cotInfo(rawCot);
   const cotNum = cot ? cot.COTIZACION : rawCot;
@@ -11097,7 +11124,7 @@ async function detailRem(id){
       <div id="er-body"><div class="loading-wrap"><div class="spinner"></div></div></div>
     </div>`,
     `<button class="btn btn-primary btn-sm" onclick="formElemRem('${remId}')">＋ Elemento</button>
-     <button class="btn btn-ghost btn-sm" onclick="generarPDFRemision('${remId}')">📄 PDF</button>
+     <button class="btn btn-ghost btn-sm" onclick="generarPDFRemision('${remId}','${r.ID_PEDIDO||r.ID_REMISION_UUID||''}')">📄 PDF</button>
      <button class="btn btn-ghost btn-sm" onclick="formRemision(${JSON.stringify(r).replace(/"/g,'&quot;')})">✏️ Editar</button>
      <button class="btn btn-danger btn-sm" onclick="eliminarRem('${remId}','${r.ID_PEDIDO||r.ID_REMISION_UUID||r.ID_REMISION||remId}')">🗑️</button>`
   );
@@ -11109,24 +11136,33 @@ async function detailRem(id){
   // Cargar elementos de esta remisión de forma asíncrona
   (async()=>{
     try{
-      let els;
-      if(DB.elementosRemision){
-        els=DB.elementosRemision.filter(e=>String(e.REMISION_ID||e.ID_REMISION||'')===String(id));
-      } else {
-        els = await GET('getElemByRemision', id);
+      if(!DB.elementosRemision){
+        DB.elementosRemision = await GET('getElementosRemision');
       }
+      const numStr  = String(remId);
+      const uuidStr = String(remUUID);
+      const els = (DB.elementosRemision||[]).filter(e=>{
+        // ID_REMISION en la Sheet es el UUID del ID_PEDIDO de la remisión padre
+        const eUUID = String(e.ID_REMISION||e.ID_REMISION_UUID||e.REMISION_ID||'');
+        // Comparar por UUID primero (más confiable), luego por número correlativo
+        if(uuidStr && eUUID && eUUID===uuidStr) return true;
+        if(eUUID===numStr) return true;
+        if(String(e.REMISION||'')===numStr) return true;
+        if(String(e['NUMERO DE REMISION']||'')===numStr) return true;
+        return false;
+      });
       const ctEl=document.getElementById('er-ct');
       const bodyEl=document.getElementById('er-body');
       if(ctEl) ctEl.textContent=`(${els.length})`;
       if(bodyEl) bodyEl.innerHTML=els.length?`<div class="sub-tbl"><table>
-        <thead><tr><th>OP</th><th>Ítem</th><th>Descripción</th><th>Cant</th><th>P.Unit</th><th>Subtotal</th></tr></thead>
+        <thead><tr><th>COT</th><th>Ítem</th><th>Descripción</th><th>Cant</th><th>P.Unit</th><th>Subtotal</th></tr></thead>
         <tbody>${els.map(e=>`<tr>
-          <td>${e.OP||e.OP_ID||'—'}</td>
-          <td>${e.ITEM||e.ITEM_ID||'—'}</td>
-          <td>${e.DESCRIPCION||e['DESCRIPCION DE ITEMS']||'—'}</td>
-          <td>${e.CANT||e.CANTIDAD||0}</td>
-          <td style="font-family:var(--mono)">${fmt(e.PRECIO_UNITARIO)}</td>
-          <td style="font-family:var(--mono);font-weight:700">${fmt(e.SUBTOTAL)}</td>
+          <td>${e.COTIZACION||'—'}</td>
+          <td>${e.ITEM||e.ITEM_ID||e.ID_ELEMENTO||e.OP_ID||'—'}</td>
+          <td>${e.DESCRIPCION||e['DESCRIPCION DE ITEMS']||e['DESCRIPCION ITEM']||'—'}</td>
+          <td>${e.UNIDADES||e.CANT||e.CANTIDAD||0}</td>
+          <td style="font-family:var(--mono)">${fmt(e.PRECIO_UNITARIO||e['PRECIO UNITARIO']||0)}</td>
+          <td style="font-family:var(--mono);font-weight:700">${fmt(e.SUBTOTAL||((e.UNIDADES||e.CANT||0)*(e.PRECIO_UNITARIO||0)))}</td>
         </tr>`).join('')}</tbody>
       </table></div>`:
       `<p style="font-size:12px;color:var(--muted);padding:6px 0">Sin elementos — usa ＋ Elemento para agregar</p>`;
@@ -11136,43 +11172,79 @@ async function detailRem(id){
 
 function formRemision(r={}){
   const isNew=!r.REMISION && !r['NUMERO DE REMISION'];
+  const cotSeleccionada = String(r.COT_ID||r.COTIZACION||'');
 
-  // Solo mostrar COTs aprobadas o en proceso (que tienen OP o están listas para remisionar)
-  const cotOpts=(DB.cotizaciones||[])
+  // ── Pre-calcular disponibilidad por COT ──────────────────────
+  // Para cada COT: cuántos ítems tiene y cuántos ya están completamente remisionados
+  const elemsExistentes = DB.elementosRemision||[];
+  const _cotDisp = {}; // cotNum → { totalItems, itemsConDisp, unidadesDisp, items:[...] }
+  (DB.cotizaciones||[]).forEach(c=>{
+    const num = String(c.COTIZACION||c.ID_COT||'');
+    if(!num) return;
+    const itsDeEsta = (DB.items||[]).filter(it=>
+      String(it.COTIZACION||'')===num||String(it.ID_PEDIDO||'')===num
+    );
+    let itemsConDisp = 0;
+    let unidadesDisp = 0;
+    const itemsDetalle = itsDeEsta.map(it=>{
+      const cantIt = Number(it.UNIDADES||it.CANT||1);
+      const despachos = elemsExistentes
+        .filter(e=>String(e.ITEM_ID||e.OP_ID||'')===String(it.ID_ITEM||it.OP_ID||''));
+      const remisionado = despachos.reduce((s,e)=>s+Number(e.CANT||0),0);
+      const disp = Math.max(0, cantIt - remisionado);
+      if(disp > 0) itemsConDisp++;
+      unidadesDisp += disp;
+      const porRem = {};
+      despachos.forEach(e=>{
+        const rId = e.REMISION_ID||e.ID_REMISION||'?';
+        porRem[rId]=(porRem[rId]||0)+Number(e.CANT||0);
+      });
+      return { item: it.ITEM||it.OP_ID||it.ID_ITEM||'?', itemId:it.ID_ITEM||it.OP_ID||'', desc:(it['DESCRIPCION ITEM']||it.DESCRIPCION||'').slice(0,55), precio:Number(it['PRECIO UNITARIO']||it['PRECIO SIN IVA']||it.PRECIO_UNIT||0), cant:cantIt, remisionado, disp, porRem };
+    });
+    _cotDisp[num] = { totalItems:itsDeEsta.length, itemsConDisp, unidadesDisp, items:itemsDetalle };
+  });
+  window._cotDisp = _cotDisp;
+
+  // ── Guardar cotizaciones para el buscador ────────────────────
+  window._remCots = (DB.cotizaciones||[])
     .filter(c => c.COTIZACION || c.ID_COT)
-    .sort((a,b)=>Number(b.COTIZACION||0)-Number(a.COTIZACION||0))
-    .map(c=>{
-      const num = String(c.COTIZACION || c.ID_COT || '');
-      const emp = c.EMPRESA || c.Empresa || '—';
-      const sel = (String(r.COT_ID||r.COTIZACION||'')===num) ? 'selected' : '';
-      return `<option value="${num}" ${sel}>COT-${num} · ${emp}</option>`;
-    }).join('');
+    .sort((a,b)=>Number(b.COTIZACION||0)-Number(a.COTIZACION||0));
+  window._remCotSeleccionada = cotSeleccionada;
+  window._remIsNew = isNew;
+
+  // Preview de la COT ya seleccionada (para edición)
+  const cotActual = cotSeleccionada
+    ? (DB.cotizaciones||[]).find(x=>String(x.COTIZACION||x.ID_COT||'')===cotSeleccionada)
+    : null;
+  const previewInicialHTML = cotActual ? _buildCotPreviewHTML(cotActual) : '';
 
   openModal(isNew ? 'Nueva Remisión' : `Editar Remisión ${r.REMISION||r['NUMERO DE REMISION']||''}`, `
     <div class="form-grid">
 
+      <!-- ── Buscador de COT ── -->
       <div class="field span2">
         <label>Cotización (COT) ★</label>
-        <select id="r_cot" onchange="onSelectCotRem()">
-          <option value="">— Seleccionar cotización —</option>${cotOpts}
-        </select>
+        <div style="position:relative">
+          <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px;pointer-events:none">🔍</span>
+          <input type="text" id="r_cot_buscar" placeholder="Buscar por N° COT, empresa, descripción..."
+            style="padding-left:32px;width:100%" autocomplete="off"
+            oninput="_filtrarCots(this.value)">
+        </div>
       </div>
 
-      <!-- Bloque que se llena desde la COT -->
-      <div id="r_cot_preview" style="${isNew?'display:none':''}background:var(--card2);border-radius:10px;padding:10px 14px;margin-bottom:2px;font-size:12px;grid-column:1/-1;border:1px solid var(--border)">
-        <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:6px">📋 Datos de la Cotización</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 16px">
-          <div><span style="color:var(--muted)">Empresa:</span> <strong id="rv_emp">${r.EMPRESA||''}</strong></div>
-          <div><span style="color:var(--muted)">NIT:</span> <strong id="rv_nit">${r.NIT||''}</strong></div>
-          <div><span style="color:var(--muted)">Ciudad:</span> <strong id="rv_ciu">${r.CIUDAD||''}</strong></div>
-          <div><span style="color:var(--muted)">Teléfono:</span> <strong id="rv_tel">${r.TELEFONO||''}</strong></div>
-          <div><span style="color:var(--muted)">Encargado:</span> <strong id="rv_enc">${r.ENCARGADO||''}</strong></div>
-          <div><span style="color:var(--muted)">Asesor:</span> <strong id="rv_ase">${r.ASESOR||''}</strong></div>
-          <div><span style="color:var(--muted)">Tipo COT:</span> <strong id="rv_tipo">${r.TIPO||''}</strong></div>
-          <div><span style="color:var(--muted)">Valor Total:</span> <strong id="rv_val" style="color:var(--gold)"></strong></div>
+      <!-- Lista de COTs -->
+      <div class="field span2">
+        <div id="r_cot_lista" style="display:flex;flex-direction:column;gap:5px;max-height:220px;overflow-y:auto;border:1.5px solid var(--border);border-radius:10px;padding:6px;background:var(--bg)">
+          <p style="font-size:12px;color:var(--muted);text-align:center;padding:14px 0">Escribe para buscar una cotización…</p>
         </div>
-        <div style="margin-top:6px"><span style="color:var(--muted)">Descripción:</span> <span id="rv_desc" style="font-size:11px">${r['DESCRIPCION DE LA COTIZACION']||r['DESCRIPCION DEL PROYECTO']||r.DESCRIPCION||''}</span></div>
-        <div style="margin-top:4px"><span style="color:var(--muted)">Dirección:</span> <span id="rv_dir">${r.DIRECCION||''}</span></div>
+      </div>
+
+      <!-- Campo oculto con el valor real de la COT seleccionada -->
+      <input type="hidden" id="r_cot" value="${cotSeleccionada}">
+
+      <!-- Preview de la COT seleccionada -->
+      <div id="r_cot_preview" style="${cotActual?'':'display:none'}background:var(--card2);border-radius:10px;padding:10px 14px;margin-bottom:2px;font-size:12px;grid-column:1/-1;border:1px solid var(--border)">
+        ${previewInicialHTML}
       </div>
 
       <!-- Campos propios de la remisión -->
@@ -11186,7 +11258,7 @@ function formRemision(r={}){
       <div class="field"><label>Orden de Compra cliente</label>
         <input id="r_oc" value="${r['ORDEN DE COMPRA']||''}"></div>
 
-      <!-- Bloque OP — se llena dinámicamente al elegir COT -->
+      <!-- Bloque OP -->
       <div class="field span2" id="r_op_blk">
         ${r.OP ? `<div style="background:#d1fae5;border:1px solid #6ee7b7;border-radius:8px;padding:8px 12px;font-size:12px">
           ✅ <strong>OP vinculada:</strong> <span style="background:#065f46;color:#fff;border-radius:4px;padding:2px 8px;margin-left:4px;font-weight:700">OP-${r.OP}</span>
@@ -11200,7 +11272,7 @@ function formRemision(r={}){
       <div class="field span2"><label>Observaciones Especiales</label>
         <textarea id="r_obs">${r['OBSERVACIONES ESPECIALES']||r.OBSERVACIONES||''}</textarea></div>
 
-      <!-- Campos ocultos que se llenan desde la COT -->
+      <!-- Campos ocultos -->
       <input type="hidden" id="r_emp"  value="${r.EMPRESA||''}">
       <input type="hidden" id="r_nit"  value="${r.NIT||''}">
       <input type="hidden" id="r_ciu"  value="${r.CIUDAD||''}">
@@ -11215,20 +11287,218 @@ function formRemision(r={}){
      <button class="btn btn-primary" onclick="saveRem('${r.REMISION||r['NUMERO DE REMISION']||''}')">
        ${isNew?'Crear Remisión':'Guardar'}</button>`);
 
-  // Si es edición, mostrar preview ya cargado
-  if(!isNew && (r.COT_ID||r.COTIZACION)){
-    const preview = document.getElementById('r_cot_preview');
-    if(preview) preview.style.display = '';
-  }
+  // Mostrar todas si hay pocas, o la seleccionada en edición
+  setTimeout(()=>{
+    if(cotSeleccionada){
+      // Edición: pre-poblar buscador con la empresa de la COT actual
+      const buscar = document.getElementById('r_cot_buscar');
+      if(buscar && cotActual){
+        buscar.value = `COT-${cotSeleccionada} · ${cotActual.EMPRESA||cotActual.Empresa||''}`;
+      }
+    }
+    _filtrarCots('');
+  }, 50);
 }
 
-function onSelectCotRem(){
-  const sel = document.getElementById('r_cot');
-  const num  = sel?.value;
-  if(!num) return;
+function _buildCotPreviewHTML(c){
+  if(!c) return '';
+  const num  = String(c.COTIZACION||c.ID_COT||'');
+  const emp  = c.EMPRESA||c.Empresa||'—';
+  const nit  = c.Nit||c.NIT||'—';
+  const ciu  = c.Ciudad||c.CIUDAD||'—';
+  const dir  = c.DIRECCION||c.Direccion||'—';
+  const enc  = c.ENCARGADO||c['ENCARGADO/CONTACTO']||'—';
+  const tel  = c.TELEFONO||c.Telefono||'—';
+  const ase  = c.ASESOR||'—';
+  const tipo = c.TIPO||'—';
+  const desc = c['DESCRIPCION DEL PROYECTO']||c.DESCRIPCION||'—';
+  const val  = Number(c['PRECIO TOTAL']||c['PRECIO SIN IVA']||0);
+  const disp = (window._cotDisp||{})[num]||{};
+  const totalItems   = disp.totalItems||0;
+  const itemsConDisp = disp.itemsConDisp||0;
+  const items        = disp.items||[];
 
-  // Buscar la COT real en DB
-  const c = (DB.cotizaciones||[]).find(x=>String(x.COTIZACION)===String(num)||String(x.ID_COT)===String(num));
+  // Badge resumen: "X de Y ítems disponibles"
+  let dispTexto;
+  if(totalItems===0){
+    dispTexto = `<span style="color:var(--muted)">Sin ítems registrados</span>`;
+  } else if(itemsConDisp===0){
+    dispTexto = `<span style="color:var(--danger);font-weight:700">Todos los ítems remisionados</span>`;
+  } else {
+    const color = itemsConDisp < totalItems ? 'var(--warn)' : 'var(--accent)';
+    dispTexto = `<span style="color:${color};font-weight:700">${itemsConDisp} de ${totalItems} ítem(s) disponibles</span>`;
+  }
+
+  // Ítems interactivos: checkbox + cantidad editable
+  const histHTML = items.length ? `
+    <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px">
+      <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">📦 Ítems a remisionar — marca los que vas a despachar</div>
+      <div style="display:flex;flex-direction:column;gap:5px" id="rem-items-list">
+        ${items.map((it,idx)=>{
+          const dispColor = it.disp===0 ? 'var(--danger)' : it.remisionado>0 ? 'var(--warn)' : 'var(--accent)';
+          const agotado = it.disp===0;
+          const remChips = Object.entries(it.porRem).map(([rId,cant])=>
+            `<span style="background:rgba(37,99,235,.12);color:var(--accent);border-radius:5px;padding:1px 6px;font-size:10px;margin-right:2px">REM-${rId}: ${cant}u</span>`
+          ).join('');
+          return `<div id="rem-item-row-${idx}" style="background:var(--surface);border:2px solid var(--border);border-radius:8px;padding:8px 10px;${agotado?'opacity:.5':''}">
+            <div style="display:flex;align-items:flex-start;gap:10px">
+              <input type="checkbox" id="rem-chk-${idx}"
+                ${agotado?'disabled':''}
+                data-idx="${idx}"
+                data-itemid="${it.itemId}"
+                data-itemnum="${it.item}"
+                data-desc="${(it.desc||'').replace(/"/g,'&quot;')}"
+                data-precio="${it.precio||0}"
+                data-disp="${it.disp}"
+                style="margin-top:3px;width:16px;height:16px;cursor:${agotado?'not-allowed':'pointer'};flex-shrink:0"
+                onchange="_onRemItemCheck(${idx})">
+              <div style="flex:1;min-width:0">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px">
+                  <div>
+                    <span style="font-weight:700;font-size:12px">Ítem ${it.item}</span>
+                    <span style="color:var(--muted);font-size:11px;margin-left:5px">${it.desc||''}</span>
+                  </div>
+                  <div style="text-align:right;flex-shrink:0;font-size:11px">
+                    <span style="color:${dispColor};font-weight:700">${it.disp} disp.</span>
+                    <span style="color:var(--muted)"> / ${it.cant} total</span>
+                  </div>
+                </div>
+                ${it.remisionado>0?`<div style="margin-top:3px">${remChips}<span style="font-size:10px;color:var(--muted)"> · ${it.remisionado}u ya despachadas</span></div>`:''}
+                <div id="rem-cant-row-${idx}" style="display:none;margin-top:7px;align-items:center;gap:8px">
+                  <label style="font-size:11px;color:var(--muted);white-space:nowrap">Cant. a despachar:</label>
+                  <input type="number" id="rem-cant-${idx}" value="${it.disp}" min="1" max="${it.disp}"
+                    style="width:70px;padding:4px 8px;border:1.5px solid var(--accent);border-radius:6px;font-size:13px;font-weight:700"
+                    oninput="_recalcRemTotal()">
+                  <span style="font-size:11px;color:var(--muted)">máx ${it.disp}</span>
+                  ${it.precio?`<span style="font-family:var(--mono);font-size:11px;color:var(--gold);margin-left:auto" id="rem-sub-${idx}"></span>`:''}
+                </div>
+              </div>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+      <div id="rem-total-bar" style="display:none;margin-top:8px;background:var(--card2);border-radius:8px;padding:8px 12px;display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:12px;color:var(--muted)">Total seleccionado</span>
+        <span id="rem-total-val" style="font-family:var(--mono);font-size:15px;font-weight:700;color:var(--gold)">$0</span>
+      </div>
+    </div>` : '';
+
+  return `
+    <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:6px">📋 COT-${num} · ${dispTexto}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 16px">
+      <div><span style="color:var(--muted)">Empresa:</span> <strong id="rv_emp">${emp}</strong></div>
+      <div><span style="color:var(--muted)">NIT:</span> <strong id="rv_nit">${nit}</strong></div>
+      <div><span style="color:var(--muted)">Ciudad:</span> <strong id="rv_ciu">${ciu}</strong></div>
+      <div><span style="color:var(--muted)">Teléfono:</span> <strong id="rv_tel">${tel}</strong></div>
+      <div><span style="color:var(--muted)">Encargado:</span> <strong id="rv_enc">${enc}</strong></div>
+      <div><span style="color:var(--muted)">Asesor:</span> <strong id="rv_ase">${ase}</strong></div>
+      <div><span style="color:var(--muted)">Tipo:</span> <strong id="rv_tipo">${tipo}</strong></div>
+      <div><span style="color:var(--muted)">Valor:</span> <strong id="rv_val" style="color:var(--gold)">${val?'$'+val.toLocaleString('es-CO'):'—'}</strong></div>
+    </div>
+    <div style="margin-top:6px"><span style="color:var(--muted)">Descripción:</span> <span id="rv_desc" style="font-size:11px">${desc}</span></div>
+    <div style="margin-top:4px"><span style="color:var(--muted)">Dirección:</span> <span id="rv_dir">${dir}</span></div>
+    ${histHTML}`;
+}
+
+function _filtrarCots(q){
+  const cots   = window._remCots || [];
+  const cotSel = window._remCotSeleccionada || '';
+  const dispMap= window._cotDisp || {};
+  const lista  = document.getElementById('r_cot_lista');
+  if(!lista) return;
+
+  const termino = (q||'').toLowerCase().trim();
+  const filtradas = termino
+    ? cots.filter(c=>{
+        const num  = String(c.COTIZACION||c.ID_COT||'');
+        const emp  = (c.EMPRESA||c.Empresa||'').toLowerCase();
+        const desc = (c['DESCRIPCION DEL PROYECTO']||c.DESCRIPCION||'').toLowerCase();
+        return num.includes(termino) || emp.includes(termino) || desc.includes(termino) || `cot-${num}`.includes(termino);
+      })
+    : cots;
+
+  // Separar: con disponibles primero, agotadas al final
+  const conDisp = filtradas.filter(c=>{
+    const num = String(c.COTIZACION||c.ID_COT||'');
+    const d = dispMap[num];
+    return !d || d.itemsConDisp > 0 || String(num)===cotSel;
+  });
+  const sinDisp = filtradas.filter(c=>{
+    const num = String(c.COTIZACION||c.ID_COT||'');
+    const d = dispMap[num];
+    return d && d.itemsConDisp === 0 && d.totalItems > 0 && String(num)!==cotSel;
+  });
+
+  if(!filtradas.length){
+    lista.innerHTML=`<p style="font-size:12px;color:var(--muted);text-align:center;padding:14px 0">Sin resultados para "${q}"</p>`;
+    return;
+  }
+
+  const renderCot = (c, agotada)=>{
+    const num  = String(c.COTIZACION||c.ID_COT||'');
+    const emp  = c.EMPRESA||c.Empresa||'—';
+    const ase  = c.ASESOR||'';
+    const desc = c['DESCRIPCION DEL PROYECTO']||c.DESCRIPCION||'';
+    const val  = Number(c['PRECIO TOTAL']||c['PRECIO SIN IVA']||0);
+    const d    = dispMap[num]||{};
+    const isSel= String(num)===cotSel;
+    const totalItems   = d.totalItems||0;
+    const itemsConDisp = d.itemsConDisp||0;
+
+    let dispBadge;
+    if(agotada){
+      dispBadge = `<span style="background:#fee2e2;color:var(--danger);border-radius:6px;padding:2px 8px;font-size:10px;font-weight:700">Agotada</span>`;
+    } else if(totalItems > 0){
+      const dispColor = itemsConDisp < totalItems ? 'var(--warn)' : 'var(--accent)';
+      dispBadge = `<span style="background:rgba(37,99,235,.1);color:${dispColor};border-radius:6px;padding:2px 8px;font-size:10px;font-weight:700">${itemsConDisp}/${totalItems} ítems</span>`;
+    } else {
+      dispBadge = `<span style="background:var(--card2);color:var(--muted);border-radius:6px;padding:2px 8px;font-size:10px">Sin ítems</span>`;
+    }
+
+    const opacity = agotada ? 'opacity:.55;' : '';
+    return `<div onclick="${agotada?'':'_seleccionarCotRem(\''+num+'\')'}"
+      id="r-cot-card-${num}"
+      style="cursor:${agotada?'not-allowed':'pointer'};border-radius:8px;padding:9px 11px;${opacity}
+        border:2px solid ${isSel?'var(--accent)':'var(--border)'};
+        background:${isSel?'rgba(37,99,235,.06)':'var(--surface)'};transition:border-color .12s">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:700;font-size:13px">COT-${num} <span style="font-weight:400;color:var(--muted);font-size:12px">· ${emp}</span></div>
+          ${desc?`<div style="font-size:11px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${desc}</div>`:''}
+          ${ase?`<div style="font-size:11px;color:var(--muted);margin-top:1px">👤 ${ase}</div>`:''}
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          ${val?`<div style="font-family:var(--mono);font-size:12px;color:var(--gold)">${'$'+val.toLocaleString('es-CO')}</div>`:''}
+          <div style="margin-top:3px">${dispBadge}</div>
+        </div>
+      </div>
+    </div>`;
+  };
+
+  let html = conDisp.map(c=>renderCot(c,false)).join('');
+  if(sinDisp.length){
+    html += `<div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;padding:8px 4px 4px">Sin disponibilidad</div>`;
+    html += sinDisp.map(c=>renderCot(c,true)).join('');
+  }
+  lista.innerHTML = html;
+}
+
+function _seleccionarCotRem(num){
+  // Marcar visualmente
+  document.querySelectorAll('[id^="r-cot-card-"]').forEach(el=>{
+    el.style.borderColor='var(--border)';
+    el.style.background='var(--surface)';
+  });
+  const card = document.getElementById('r-cot-card-'+num);
+  if(card){ card.style.borderColor='var(--accent)'; card.style.background='rgba(37,99,235,.06)'; }
+
+  // Guardar selección
+  window._remCotSeleccionada = num;
+  const cotInput = document.getElementById('r_cot');
+  if(cotInput) cotInput.value = num;
+
+  // Buscar datos de la COT
+  const c = (DB.cotizaciones||[]).find(x=>String(x.COTIZACION||x.ID_COT||'')===String(num));
   if(!c) return;
 
   const emp  = c.EMPRESA||c.Empresa||'';
@@ -11242,34 +11512,24 @@ function onSelectCotRem(){
   const desc = c['DESCRIPCION DEL PROYECTO']||c.DESCRIPCION||'';
   const val  = Number(c['PRECIO TOTAL']||c['PRECIO SIN IVA']||0);
 
-  // Buscar OPs vinculadas a esta COT en producción
-  const opsVinc = (DB.produccion||[]).filter(op=>String(op.COT)===String(num));
-  const opNums  = [...new Set(opsVinc.map(op=>op.OP).filter(Boolean))];
-
   // Llenar hidden inputs
   const sh = (id,v)=>{ const el=document.getElementById(id); if(el) el.value=v||''; };
-  sh('r_emp',  emp);  sh('r_nit', nit);  sh('r_ciu', ciu);
-  sh('r_dir',  dir);  sh('r_enc', enc);  sh('r_tel', tel);
-  sh('r_ase',  ase);  sh('r_tipo',tipo); sh('r_desc',desc);
-
-  // Valor total
+  sh('r_emp',emp); sh('r_nit',nit); sh('r_ciu',ciu); sh('r_dir',dir);
+  sh('r_enc',enc); sh('r_tel',tel); sh('r_ase',ase); sh('r_tipo',tipo); sh('r_desc',desc);
   const valEl = document.getElementById('r_val');
   if(valEl && (Number(valEl.value)||0)===0) valEl.value = val||0;
 
-  // Actualizar preview visual
-  const sv = (id,v)=>{ const el=document.getElementById(id); if(el) el.textContent=v||'—'; };
-  sv('rv_emp',  emp);  sv('rv_nit', nit);  sv('rv_ciu', ciu);
-  sv('rv_dir',  dir);  sv('rv_enc', enc);  sv('rv_tel', tel);
-  sv('rv_ase',  ase);  sv('rv_tipo',tipo); sv('rv_desc',desc);
-  const rvVal = document.getElementById('rv_val');
-  if(rvVal) rvVal.textContent = val?'$'+val.toLocaleString('es-CO'):'—';
+  // Mostrar preview
+  const preview = document.getElementById('r_cot_preview');
+  if(preview){ preview.innerHTML = _buildCotPreviewHTML(c); preview.style.display=''; }
 
-  // ── Bloque de OP ──────────────────────────────────────────
+  // ── Bloque OP ──────────────────────────────────────────────
+  const opsVinc = (DB.produccion||[]).filter(op=>String(op.COT)===String(num));
+  const opNums  = [...new Set(opsVinc.map(op=>op.OP).filter(Boolean))];
   const opEl    = document.getElementById('r_op');
   const opBlk   = document.getElementById('r_op_blk');
 
   if(opNums.length > 0){
-    // Tiene OPs → autocompletar y mostrar como lectura
     const opStr = opNums.join(', ');
     if(opEl) opEl.value = opStr;
     if(opBlk) opBlk.innerHTML = `
@@ -11281,12 +11541,11 @@ function onSelectCotRem(){
         </div>
       </div>`;
   } else {
-    // Sin OP → advertencia + botón para continuar igual
     if(opEl) opEl.value = '';
     if(opBlk) opBlk.innerHTML = `
       <div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:8px 12px;font-size:12px">
         ⚠️ <strong>Esta cotización no tiene OP en Control Producción.</strong>
-        <div style="margin-top:6px;display:flex;align-items:center;gap:8px">
+        <div style="margin-top:6px">
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;font-weight:600">
             <input type="checkbox" id="r_sin_op" onchange="
               const lbl=document.getElementById('r_sin_op_lbl');
@@ -11298,10 +11557,49 @@ function onSelectCotRem(){
         </div>
       </div>`;
   }
+}
 
-  // Mostrar bloque preview
-  const preview = document.getElementById('r_cot_preview');
-  if(preview) preview.style.display = '';
+function _onRemItemCheck(idx){
+  const chk = document.getElementById('rem-chk-'+idx);
+  const row = document.getElementById('rem-cant-row-'+idx);
+  const card = document.getElementById('rem-item-row-'+idx);
+  if(!chk||!row) return;
+  if(chk.checked){
+    row.style.display = 'flex';
+    if(card){ card.style.borderColor='var(--accent)'; card.style.background='rgba(37,99,235,.04)'; }
+    _recalcRemTotal();
+  } else {
+    row.style.display = 'none';
+    if(card){ card.style.borderColor='var(--border)'; card.style.background='var(--surface)'; }
+    _recalcRemTotal();
+  }
+}
+
+function _recalcRemTotal(){
+  let total = 0;
+  let alguno = false;
+  document.querySelectorAll('[id^="rem-chk-"]').forEach(chk=>{
+    if(!chk.checked) return;
+    alguno = true;
+    const idx   = chk.dataset.idx;
+    const cant  = Number(document.getElementById('rem-cant-'+idx)?.value||0);
+    const precio= Number(chk.dataset.precio||0);
+    const sub   = cant * precio;
+    total += sub;
+    const subEl = document.getElementById('rem-sub-'+idx);
+    if(subEl) subEl.textContent = sub ? '$'+sub.toLocaleString('es-CO') : '';
+  });
+  const bar = document.getElementById('rem-total-bar');
+  const valEl = document.getElementById('rem-total-val');
+  if(bar) bar.style.display = alguno ? 'flex' : 'none';
+  if(valEl) valEl.textContent = '$'+total.toLocaleString('es-CO');
+  // Actualizar el campo Valor Total si está en $0
+  const rVal = document.getElementById('r_val');
+  if(rVal && (Number(rVal.value)||0)===0 && total>0) rVal.value = total;
+}
+
+function onSelectCotRem(){
+  // Ya no se usa — reemplazado por _seleccionarCotRem
 }
 
 async function saveRem(exist){
@@ -11354,22 +11652,91 @@ async function saveRem(exist){
   });
 
   try{
-    // Si es nueva remisión, pedir el siguiente número correlativo al GAS
-    if (!exist) {
-      const nextRes = await POST('nextRemId', {});
-      if (nextRes?.nextId) {
-        data.REMISION = String(nextRes.nextId);
-      }
+    // Recoger ítems seleccionados con checkbox ANTES de cerrar el modal
+    const itemsChecked = [];
+    let totalItemsVal = 0;
+    const hoy = new Date().toISOString().slice(0,10);
+    document.querySelectorAll('[id^="rem-chk-"]').forEach(chk=>{
+      if(!chk.checked) return;
+      const idx   = chk.dataset.idx;
+      const cant  = Number(document.getElementById('rem-cant-'+idx)?.value||0);
+      const precio= Number(chk.dataset.precio||0);
+      if(cant <= 0) return;
+      totalItemsVal += cant * precio;
+      itemsChecked.push({
+        _itemId:   chk.dataset.itemid,   // ID_ELEMENTO (UUID del ítem de COT)
+        _itemNum:  chk.dataset.itemnum||'', // número de ítem (ITEM)
+        _desc:     chk.dataset.desc,
+        _precio:   precio,
+        _cant:     cant,
+      });
+    });
+
+    // Si hay ítems y el Valor Total estaba en 0, auto-completar
+    if(itemsChecked.length && (Number(data.VALOR_TOTAL)||0)===0){
+      data.VALOR_TOTAL = totalItemsVal;
     }
-    // Mutación optimista en DB local
+
+    // ── Crear / actualizar la remisión y obtener su ID_PEDIDO ──
+    let remIdPedido = exist ? ((DB.remisiones||[]).find(x=>String(x.REMISION)===String(exist))?.ID_PEDIDO||'') : '';
+    let remNum = exist;
+
+    if(!exist){
+      // nextRemId para obtener el correlativo
+      const nextRes = await POST('nextRemId', {});
+      if(nextRes?.nextId) data.REMISION = String(nextRes.nextId);
+      remNum = data.REMISION;
+    }
+
+    // Mutación optimista local
     if(!exist){ DB.remisiones=[{...data},...(DB.remisiones||[])]; }
     else if(DB.remisiones){
       const idx=DB.remisiones.findIndex(x=>String(x.REMISION)===String(data.REMISION||exist)||String(x.ID_PEDIDO)===String(data.ID_PEDIDO||exist));
       if(idx>=0) DB.remisiones[idx]={...DB.remisiones[idx],...data};
     }
-    toast('✅ Remisión '+(exist?'actualizada':'creada')+(data.REMISION?' — REM-'+data.REMISION:''));
+
     closeModal();
-    POST_BG(exist?'updateRemision':'createRemision', data);
+
+    // POST con respuesta para obtener el ID_PEDIDO (UUID) que genera el GAS
+    try{
+      const res = await POST_SILENT(exist?'updateRemision':'createRemision', data);
+      remIdPedido = res?.ID_PEDIDO || res?.idPedido || remIdPedido;
+    }catch(e2){
+      toast('⚠️ Error guardando remisión: '+e2.message,'error');
+      return;
+    }
+
+    // ── Guardar cada ítem seleccionado con los nombres exactos de la Sheet ──
+    if(itemsChecked.length){
+      DB.elementosRemision = null;
+      const fechaRem = gv('r_fecha') || hoy;
+      for(const it of itemsChecked){
+        const elData = {
+          ID_PEDIDO:      remIdPedido,       // UUID propio (lo genera GAS con prefijo ELR)
+          ID_REMISION:    remIdPedido,       // UUID de la remisión padre — col C Sheet
+          ID_ELEMENTO:    it._itemId,
+          COTIZACION:     cotNum,
+          ITEM:           it._itemNum||it._itemId,
+          DESCRIPCION:    it._desc,
+          UNIDADES:       it._cant,
+          'FECHA DE CRE': fechaRem,
+          PRECIO_UNITARIO: it._precio,
+          SUBTOTAL:       it._cant * it._precio,
+          // Legacy
+          REMISION_ID:    remIdPedido,
+          ITEM_ID:        it._itemId,
+          OP_ID:          it._itemId,
+          CANT:           it._cant,
+        };
+        POST_BG('createElemRemision', elData, (err)=>{
+          toast('⚠️ Error guardando ítem: '+err.message,'error');
+        });
+      }
+      toast(`✅ REM-${remNum} creada con ${itemsChecked.length} ítem(s)`);
+    } else {
+      toast('✅ Remisión '+(exist?'actualizada':'creada')+(remNum?' — REM-'+remNum:''));
+    }
+
     _autoSync(['remisiones'], remisiones);
   }catch(e){toast(e.message,'error');}
 }
@@ -11397,7 +11764,7 @@ function formElemRem(remId){
 
   // Filtrar ítems de esa cotización (si existe la vinculación)
   const itemsFiltrados=cotId
-    ? (DB.items||[]).filter(it=>String(it.COTIZACION||'')=== String(cotId))
+    ? (DB.items||[]).filter(it=>String(it.COTIZACION||'')===String(cotId)||String(it.ID_PEDIDO||'')===String(cotId))
     : (DB.items||[]);
 
   // Para cada ítem, calcular cuántas unidades ya fueron remisionadas
@@ -11481,21 +11848,42 @@ function calcSubtotalRem(){
 
 async function saveElemRem(remId){
   const cant=gn('er3'),precio=gn('er4');
-  const itemId=gv('er0')||document.getElementById('er1sel')?.value||'';
+  const itemId=gv('er0');
+  if(!itemId){ toast('Selecciona un ítem primero','error'); return; }
+  if(!cant||cant<=0){ toast('La cantidad debe ser mayor a 0','error'); return; }
+
+  // Obtener datos de la remisión y del ítem para llenar columnas correctamente
+  const rem=(DB.remisiones||[]).find(x=>String(x.REMISION)===String(remId)||String(x.ID_PEDIDO)===String(remId));
+  const remIdPedido = rem?.ID_PEDIDO||'';
+  const cotNum      = rem?.COTIZACION||rem?.COT_ID||'';
+  const itObj=(DB.items||[]).find(x=>String(x.ID_ITEM||x.OP_ID||'')===String(itemId));
+  const itemNum = itObj?.ITEM||itObj?.OP_ID||itemId;
+  const hoy = new Date().toISOString().slice(0,10);
+
   const data={
-    REMISION_ID:remId,
-    OP_ID:itemId,
-    ITEM_ID:itemId,
-    DESCRIPCION:gv('er2'),
-    CANT:cant,
+    // Columnas exactas de remision_detalle
+    ID_PEDIDO:      remIdPedido,      // UUID propio del elemento (lo genera GAS)
+    ID_REMISION:    remIdPedido,      // UUID de la remisión padre (col C en Sheet)
+    ID_ELEMENTO:    itemId,
+    COTIZACION:     cotNum,
+    ITEM:           itemNum,
+    DESCRIPCION:    gv('er2'),
+    UNIDADES:       cant,
+    'FECHA DE CRE': hoy,
     PRECIO_UNITARIO:precio,
-    SUBTOTAL:cant*precio
+    SUBTOTAL:       cant*precio,
+    // Legacy por compatibilidad
+    REMISION_ID:    remIdPedido,
+    ITEM_ID:        itemId,
+    OP_ID:          itemId,
+    CANT:           cant,
   };
   try{
     await POST('createElemRemision',data);
     toast('Elemento agregado ✓');
     closeModal();
-    _autoSync(['remisiones'], () => detailRem(remId));
+    DB.elementosRemision = null;
+    _autoSync(['remisiones'], () => detailRem(remId, remIdPedido));
   }catch(e){toast(e.message,'error');}
 }
 
@@ -15129,6 +15517,24 @@ async function generarPDFCotizacion(cotId) {
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>COT-${cotId} — ${c.Empresa||''}</title>
   ${docCSS()}
+  <style>
+    @media print {
+      .footer-wedm { position:fixed; bottom:0; left:0; right:0; }
+    }
+    .footer-wedm {
+      text-align:center;
+      padding:8px 20px 6px;
+      border-top:1.5px solid #1a3a6b;
+      margin-top:30px;
+    }
+    .footer-wedm p {
+      font-size:8.5px;
+      color:#1a3a6b;
+      font-style:italic;
+      letter-spacing:0.4px;
+      margin:0;
+    }
+  </style>
   </head><body>
 
   <!-- BOTÓN IMPRIMIR (se oculta al imprimir) -->
@@ -15268,29 +15674,51 @@ async function generarPDFCotizacion(cotId) {
 // ══════════════════════════════════════════════════════════════
 //   PDF REMISIÓN
 // ══════════════════════════════════════════════════════════════
-async function generarPDFRemision(remId) {
+async function generarPDFRemision(remId, remUUID='') {
   if(!DB.remisiones) await load('remisiones','getRemisiones');
   const r = (DB.remisiones||[]).find(x=>String(x.REMISION)===String(remId)||String(x.ID_PEDIDO)===String(remId));
   if(!r){ toast('Remisión no encontrada','error'); return; }
 
-  // Cargar elementos de remisión
-  let elems = [];
-  try{ elems = await GET('getElemByRemision', remId); }catch(e){}
+  // Usar UUID de la remisión para filtrar (igual que detailRem)
+  const uuid = remUUID || r.ID_PEDIDO || r.ID_REMISION_UUID || '';
 
-  const hoy  = new Date().toLocaleDateString('es-CO',{day:'2-digit',month:'2-digit',year:'numeric'});
-  const total = Number(r.VALOR_TOTAL||0) || elems.reduce((s,e)=>s+Number(e.SUBTOTAL||0),0);
+  // Datos de la cotización vinculada
+  // Buscar en cotizaciones por cualquier referencia que tenga la remisión
+  const rawCotRef = r.COTIZACION||r.COT_ID||'';
+  const cot = (DB.cotizaciones||[]).find(x=>
+    String(x.COTIZACION||'')===String(rawCotRef) ||
+    String(x.ID_COT||'')===String(rawCotRef) ||
+    String(x.ID_PEDIDO||'')===String(rawCotRef)
+  );
+  // Número correlativo real de la COT — siempre desde DB.cotizaciones
+  const cotNum = cot ? String(cot.COTIZACION||'') : '';
 
+  // Cargar elementos desde cache
+  if(!DB.elementosRemision) DB.elementosRemision = await GET('getElementosRemision');
+  const numStr  = String(remId);
+  const uuidStr = String(uuid);
+  const elems = (DB.elementosRemision||[]).filter(e=>{
+    const eUUID = String(e.ID_REMISION||e.ID_REMISION_UUID||e.REMISION_ID||'');
+    if(uuidStr && eUUID && eUUID===uuidStr) return true;
+    if(eUUID===numStr) return true;
+    if(String(e.REMISION||'')===numStr) return true;
+    return false;
+  });
+
+  // Buscar OP vinculada a la COT (por número real)
+  const opVinc = (DB.produccion||[]).filter(x=>String(x.COT||'')===String(cotNum));
+  const opNums = [...new Set(opVinc.map(x=>x.OP).filter(Boolean))].join(', ');
+
+  const hoy = new Date().toLocaleDateString('es-CO',{day:'2-digit',month:'2-digit',year:'numeric'});
+
+  // Filas de elementos — sin valores monetarios
   const elemRows = elems.length ? elems.map((e,i)=>`
     <tr class="${i%2===1?'azul-row':''}">
-      <td class="center borde">${i+1}</td>
-      <td class="center borde">${e.OP_ID||'—'}</td>
-      <td class="center borde">${e.ITEM_ID||'—'}</td>
+      <td class="center borde">${e.ITEM||e.ITEM_ID||e.ID_ELEMENTO||'—'}</td>
       <td class="borde">${e.DESCRIPCION||'—'}</td>
-      <td class="center borde">${e.CANT||1}</td>
-      <td class="right borde mono">$${Number(e.PRECIO_UNITARIO||0).toLocaleString('es-CO')}</td>
-      <td class="right borde mono negrita">$${Number(e.SUBTOTAL||0).toLocaleString('es-CO')}</td>
+      <td class="center borde">${e.UNIDADES||e.CANT||'—'}</td>
     </tr>`).join('') :
-    `<tr><td colspan="7" style="text-align:center;padding:20px;color:#888;border:1px solid #999">Sin elementos registrados</td></tr>`;
+    `<tr><td colspan="3" style="text-align:center;padding:20px;color:#888;border:1px solid #999">Sin elementos registrados</td></tr>`;
 
   const html = `<!DOCTYPE html><html lang="es"><head>
   <meta charset="UTF-8">
@@ -15322,15 +15750,17 @@ async function generarPDFRemision(remId) {
       </td>
       <td style="width:45%;vertical-align:top">
         <table style="font-size:9.5px;width:100%">
-          <tr><td style="color:#1a3a6b;font-weight:700;width:90px">FECHA:</td><td>${fmtDate(r.FECHA)||hoy}</td></tr>
-          <tr><td style="color:#1a3a6b;font-weight:700">SEÑORES:</td><td>${r.EMPRESA||'—'}</td></tr>
-          <tr><td style="color:#1a3a6b;font-weight:700">COT Ref.:</td><td>${r.COT_ID||'—'}</td></tr>
-          <tr><td style="color:#1a3a6b;font-weight:700">ESTADO:</td><td>${r.ESTADO||'—'}</td></tr>
+          <tr><td style="color:#1a3a6b;font-weight:700;width:90px">FECHA:</td><td>${fmtDate(r['FECHA EMISION COT.']||r['FECHA']||r.FECHA)||hoy}</td></tr>
+          <tr><td style="color:#1a3a6b;font-weight:700">SEÑORES:</td><td>${r.EMPRESA||cot?.EMPRESA||cot?.Empresa||'—'}</td></tr>
+          <tr><td style="color:#1a3a6b;font-weight:700">NIT:</td><td>${r.NIT||cot?.Nit||cot?.NIT||'—'}</td></tr>
+          <tr><td style="color:#1a3a6b;font-weight:700">COT Ref.:</td><td>${cotNum?'COT-'+cotNum:'—'}</td></tr>
+          ${opNums?`<tr><td style="color:#1a3a6b;font-weight:700">OP:</td><td>${opNums}</td></tr>`:''}
+          ${r['ORDEN DE COMPRA']?`<tr><td style="color:#1a3a6b;font-weight:700">O.C. Cliente:</td><td>${r['ORDEN DE COMPRA']}</td></tr>`:''}
         </table>
         <table style="margin-top:10px;font-size:9.5px;width:100%;border-collapse:collapse">
           <tr>
             <td class="azul borde-azul" style="padding:5px 10px">DESCRIPCIÓN:</td>
-            <td class="borde-azul negrita" style="padding:5px 10px">${r.DESCRIPCION||'—'}</td>
+            <td class="borde-azul negrita" style="padding:5px 10px">${r['DESCRIPCION DEL PROYECTO']||r.DESCRIPCION||cot?.['DESCRIPCION DEL PROYECTO']||cot?.DESCRIPCION||'—'}</td>
           </tr>
         </table>
       </td>
@@ -15349,56 +15779,51 @@ async function generarPDFRemision(remId) {
   <table style="margin-bottom:4px;border-collapse:collapse">
     <thead>
       <tr class="azul">
-        <th class="borde center" style="width:5%">#</th>
-        <th class="borde center" style="width:9%">OP</th>
-        <th class="borde center" style="width:9%">ITEM</th>
-        <th class="borde" style="width:45%">DESCRIPCIÓN</th>
-        <th class="borde center" style="width:7%">CANT</th>
-        <th class="borde right" style="width:12%">V. UNIT</th>
-        <th class="borde right" style="width:13%">V. TOTAL</th>
+        <th class="borde center" style="width:12%">ÍTEM</th>
+        <th class="borde" style="width:73%">DESCRIPCIÓN</th>
+        <th class="borde center" style="width:15%">CANT</th>
       </tr>
     </thead>
     <tbody>
       ${elemRows}
-      ${elems.length<3?Array(Math.max(0,3-elems.length)).fill('<tr><td class="borde" colspan="7" style="height:22px"></td></tr>').join(''):''}
+      ${elems.length<3?Array(Math.max(0,3-elems.length)).fill('<tr><td class="borde" colspan="3" style="height:22px"></td></tr>').join(''):''}
     </tbody>
   </table>
 
-  <!-- TOTAL -->
-  <table style="margin-bottom:16px;border-collapse:collapse">
-    <tr>
-      <td style="width:73%"></td>
-      <td class="total-row borde right" style="width:14%;font-size:11px;padding:8px">TOTAL</td>
-      <td class="total-row borde right mono" style="width:13%;font-size:11px;padding:8px">$${total.toLocaleString('es-CO')}</td>
-    </tr>
-  </table>
+  <!-- TOTAL oculto — remisión no muestra valores -->
 
-  ${r.OBSERVACIONES?`<p style="font-size:9px;margin-bottom:16px"><b>OBSERVACIONES:</b> ${r.OBSERVACIONES}</p>`:''}
+  ${r['OBSERVACIONES ESPECIALES']||r.OBSERVACIONES?`<p style="font-size:9px;margin-bottom:12px;color:#444"><b>OBSERVACIONES:</b> ${r['OBSERVACIONES ESPECIALES']||r.OBSERVACIONES}</p>`:''}
 
   <!-- FIRMAS -->
-  <table style="margin-top:30px;border-collapse:collapse">
+  <table style="margin-top:16px;border-collapse:collapse;width:100%">
     <tr>
       <td style="width:33%;text-align:center;padding:0 10px">
-        <div style="border-top:1px solid #1a3a6b;margin-bottom:4px"></div>
-        <div style="font-size:9px;font-weight:700">ENTREGADO POR</div>
+        <div style="border-top:1.5px solid #1a3a6b;margin-bottom:4px"></div>
+        <div style="font-size:9px;font-weight:700;color:#1a3a6b">ENTREGADO POR</div>
         <div style="font-size:8.5px;color:#555;margin-top:2px">Grupo WEDM</div>
       </td>
       <td style="width:33%;text-align:center;padding:0 10px">
-        <div style="border-top:1px solid #1a3a6b;margin-bottom:4px"></div>
-        <div style="font-size:9px;font-weight:700">RECIBIDO POR</div>
+        <div style="border-top:1.5px solid #1a3a6b;margin-bottom:4px"></div>
+        <div style="font-size:9px;font-weight:700;color:#1a3a6b">RECIBIDO POR</div>
         <div style="font-size:8.5px;color:#555;margin-top:2px">Nombre y firma</div>
       </td>
       <td style="width:34%;text-align:center;padding:0 10px">
-        <div style="border-top:1px solid #1a3a6b;margin-bottom:4px"></div>
-        <div style="font-size:9px;font-weight:700">FECHA RECIBIDO</div>
+        <div style="border-top:1.5px solid #1a3a6b;margin-bottom:4px"></div>
+        <div style="font-size:9px;font-weight:700;color:#1a3a6b">FECHA RECIBIDO</div>
         <div style="font-size:8.5px;color:#555;margin-top:2px">&nbsp;</div>
       </td>
     </tr>
   </table>
 
+  <div class="footer-wedm">
+    <p>✦ &nbsp;En <strong>GRUPO WEDM</strong> transformamos cada pieza en una solución de precisión &mdash; comprometidos con la calidad y el éxito de tus proyectos.&nbsp; ✦</p>
+  </div>
+
   </body></html>`;
 
-  _abrirDocParaImprimir(html, `REM-${remId}.pdf`);
+  const clienteSlug = (r.EMPRESA||cot?.EMPRESA||'').replace(/[^a-zA-Z0-9]/g,'_').replace(/_+/g,'_').replace(/^_|_$/g,'').toUpperCase().slice(0,30);
+  const pdfName = `REM_${remId}-${clienteSlug}.pdf`;
+  _abrirDocParaImprimir(html, pdfName);
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -15431,9 +15856,9 @@ async function _resolveDetailImages(idqr) {
     return;
   }
   
-  // Si no está en caché → pedir al servidor
+  // Si no está en caché → pedir solo la imagen de esta OP
   try {
-    const data = await GET('getControlProduccion', idqr);
+    const data = await GET('getImagenOP', '', {idqr});
     if (data && data.IMAGEN_B64) {
       _imgCache.set(idqr, data.IMAGEN_B64);
       const opDB = (DB.produccion || []).find(o => o.IDQR === idqr);
@@ -15486,7 +15911,6 @@ function _thumbHtml(idqr, imgB64, size=44) {
 const _imgCache = new Map(); // IDQR → base64 url
 
 let _lazyObserver = null;
-let _lazyFetchPending = false;
 function _getLazyObserver() {
   if (_lazyObserver) return _lazyObserver;
   _lazyObserver = new IntersectionObserver((entries) => {
@@ -15513,23 +15937,16 @@ function _getLazyObserver() {
         return;
       }
 
-      // 3) No en caché ni en DB → refrescar produccion completo (una sola vez)
-      if (!_lazyFetchPending) {
-        _lazyFetchPending = true;
-        GET('getControlProduccion').then(rows => {
-          if (!Array.isArray(rows)) return;
-          // Actualizar DB con imágenes
-          rows.forEach(r => {
-            if (!r.IMAGEN_B64) return;
-            const opDB = (DB.produccion || []).find(o => o.IDQR === r.IDQR);
-            if (opDB) opDB.IMAGEN_B64 = r.IMAGEN_B64;
-            _imgCache.set(r.IDQR, r.IMAGEN_B64);
-          });
-          // Re-disparar lazy init para que resuelva todos los imgs pendientes
-          _lazyFetchPending = false;
-          _doInitLazy();
-        }).catch(() => { _lazyFetchPending = false; });
-      }
+      // 3) No en caché ni en DB con imagen → pedir solo la imagen de esta OP
+      GET('getImagenOP', '', {idqr}).then(data => {
+        if (data && data.IMAGEN_B64) {
+          _imgCache.set(idqr, data.IMAGEN_B64);
+          const opDB = (DB.produccion || []).find(o => o.IDQR === idqr);
+          if (opDB) opDB.IMAGEN_B64 = data.IMAGEN_B64;
+          img.src = data.IMAGEN_B64;
+          img.classList.add('loaded');
+        }
+      }).catch(() => {});
     });
   }, {
     rootMargin: '200px 0px', // pre-cargar 200px antes de entrar al viewport
@@ -15567,12 +15984,17 @@ function _doInitLazy() {
 }
 
 function _openOpImg(idqr) {
+  const cached = _imgCache.get(idqr);
+  if (cached) { window.open(cached, '_blank'); return; }
   const op = (DB.produccion || []).find(o => o.IDQR === idqr);
-  if (op && op.IMAGEN_B64) {
-    window.open(op.IMAGEN_B64, '_blank');
-  } else if (_imgCache.has(idqr)) {
-    window.open(_imgCache.get(idqr), '_blank');
-  }
+  if (op && op.IMAGEN_B64) { window.open(op.IMAGEN_B64, '_blank'); return; }
+  // Cargar desde servidor si no está disponible aún
+  GET('getImagenOP', '', {idqr}).then(data => {
+    if (data && data.IMAGEN_B64) {
+      _imgCache.set(idqr, data.IMAGEN_B64);
+      window.open(data.IMAGEN_B64, '_blank');
+    }
+  }).catch(() => {});
 }
 
 // lazy thumbnails se inicializan explícitamente tras render de produccion/diseño
@@ -17493,6 +17915,7 @@ function _adminSincronizarRoles() {
     }
   });
 }
+
 
 // ── Render principal del módulo ───────────────────────────────
 async function adminUsuarios() {
