@@ -1470,6 +1470,7 @@ const FAB_ACTIONS = {
   items:()=>formItem({}),
 };
 let _navFromPopstate = false; // bandera para evitar doble push
+let _navFromNav = false;
 let _detailOpen = false;
 
 const ACTION_TO_KEY = {
@@ -1812,21 +1813,32 @@ function diasTag(d){
   if(n<5) return `<span style="color:var(--warn);font-weight:700">${n}d</span>`;
   return `<span style="color:var(--accent)">${n}d</span>`;
 }
+// Normaliza estados que vienen del Sheet en masculino → femenino correcto
+function _normEstado(e){
+  const fix = {
+    'APROBADO':'APROBADA','RECHAZADO':'RECHAZADA','ANULADO':'ANULADA',
+    'FACTURADO':'FACTURADA','CANCELADO':'CANCELADO'
+  };
+  return fix[String(e||'').toUpperCase().trim()] || e;
+}
 function bEst(e){
+  const v = _normEstado(e);
   const m={'APROBADA':'verde','EN ESPERA':'naranja','EN PROCESO':'azul',
-    'RECHAZADA':'rojo','FACTURADA':'gris','ANULADA':'rojo',
+    'RECHAZADA':'rojo','RECHAZADO':'rojo','FACTURADA':'gris','ANULADA':'rojo',
     'TERMINADO':'verde','ENTREGADO':'azul','PENDIENTE MP':'naranja',
     'PENDIENTE DISEÑO':'warn','PENDIENTE MP Y DISEÑO':'warn',
-    'PENDIENTE DESPACHO':'azul','EN PROCESO':'azul',
-    'BORRADOR':'gris','ENVIADA':'azul','RECIBIDA':'verde','PAUSADO':'gris','CANCELADO':'rojo'};
-  return `<span class="badge ${m[e]||'gris'}">${e||'—'}</span>`;
+    'PENDIENTE DESPACHO':'azul',
+    'BORRADOR':'gris','ENVIADA':'azul','RECIBIDA':'verde','PAUSADO':'gris',
+    'CANCELADO':'rojo','CANCELADA':'rojo'};
+  return `<span class="badge ${m[v]||'gris'}">${v||'—'}</span>`;
 }
 
 // Badge de estado COT clickeable — muestra popover de cambio de estado
 // tieneOP=true → solo lectura (el estado lo maneja la OP)
-const COT_ESTADOS_EDIT = ['EN ESPERA','APROBADA','ANULADA'];
+const COT_ESTADOS_EDIT = ['EN ESPERA','APROBADA','RECHAZADA','CANCELADO','ANULADA'];
 function bEstCot(cotId, estadoActual, tieneOP){
-  const m={'APROBADA':'verde','EN ESPERA':'naranja','ANULADA':'rojo'};
+  estadoActual = _normEstado(estadoActual);
+  const m={'APROBADA':'verde','EN ESPERA':'naranja','ANULADA':'rojo','RECHAZADA':'rojo'};
   const cls = m[estadoActual]||'gris';
   if(tieneOP){
     // Solo lectura: el estado se alimenta de la OP vinculada
@@ -2016,8 +2028,9 @@ function closeDetail(){
   _detailOpen = false;
   document.getElementById('dp').classList.remove('open');
   document.getElementById('content').style.overflow='';
-  // Si se cierra programáticamente (no por popstate), sacar el estado de detalle
-  if(wasOpen && !_navFromPopstate){
+  // Solo hacer history.back() si el cierre viene del usuario (botón X o swipe)
+  // NO cuando viene de nav() — eso causaría que el browser vuelva al módulo anterior
+  if(wasOpen && !_navFromPopstate && !_navFromNav){
     history.back();
   }
 }
@@ -2221,33 +2234,59 @@ function _applySearchDOM(q) {
     _updateFilterCount(shown, total);
   });
 }
+function _getColVal(obj, col){
+  // Buscar campo exacto primero
+  if(col in obj) return obj[col] ?? '';
+  // Búsqueda flexible: case-insensitive, sin espacios/tildes
+  const norm = s => String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,'');
+  const colN = norm(col);
+  const key = Object.keys(obj).find(k => norm(k) === colN);
+  return key ? (obj[key] ?? '') : '';
+}
 function sortData(mod, data) {
   const s = _SORT[mod];
   if (!s || !s.col) return data;
   return [...data].sort((a, b) => {
-    let va = a[s.col] ?? '';
-    let vb = b[s.col] ?? '';
-    // Detectar número
+    let va = _getColVal(a, s.col);
+    let vb = _getColVal(b, s.col);
+    // Número
     const na = Number(String(va).replace(/[^0-9.-]/g, ''));
     const nb = Number(String(vb).replace(/[^0-9.-]/g, ''));
-    if (!isNaN(na) && !isNaN(nb) && String(va) !== '' && String(vb) !== '') {
+    if (!isNaN(na) && !isNaN(nb) && String(va).trim() !== '' && String(vb).trim() !== '') {
       return s.dir === 'asc' ? na - nb : nb - na;
     }
-    // Detectar fecha
+    // Fecha
     const da = new Date(va), db = new Date(vb);
-    if (!isNaN(da) && !isNaN(db)) {
+    if (!isNaN(da.getTime()) && !isNaN(db.getTime()) && String(va).includes('-')) {
       return s.dir === 'asc' ? da - db : db - da;
     }
     // String
     const sa = String(va).toLowerCase(), sb = String(vb).toLowerCase();
-    return s.dir === 'asc' ? sa.localeCompare(sb) : sb.localeCompare(sa);
+    return s.dir === 'asc' ? sa.localeCompare(sb,'es') : sb.localeCompare(sa,'es');
   });
 }
 function thSort(mod, col, label) {
   const s = _SORT[mod] || {};
-  const cls = s.col === col ? (s.dir === 'asc' ? 'sort-asc' : 'sort-desc') : '';
-  return `<th class="${cls}" onclick="sortTable('${mod}','${col}')">${label}</th>`;
+  const isActive = s.col === col;
+  const cls = isActive ? (s.dir === 'asc' ? 'sort-asc' : 'sort-desc') : '';
+  const arrow = isActive ? (s.dir === 'asc' ? ' ▲' : ' ▼') : ' ↕';
+  const arrowStyle = isActive ? 'color:#60a5fa' : 'color:rgba(255,255,255,.3)';
+  return `<th class="${cls}" onclick="sortTable('${mod}','${col}')" style="cursor:pointer;user-select:none">
+    ${label}<span style="${arrowStyle};font-size:10px;margin-left:3px">${arrow}</span>
+  </th>`;
 }
+
+// Listener global: cualquier <th> dentro de .data-tbl que tenga data-sort activa el sort
+document.addEventListener('click', function(e){
+  const th = e.target.closest('.data-tbl thead th');
+  if(!th) return;
+  // Si ya tiene onclick propio (thSort), dejarlo actuar
+  if(th.getAttribute('onclick')) return;
+  // Inferir módulo desde el contenido actual de MOD
+  const col = th.textContent.trim().replace(/[↕▲▼]/g,'').trim();
+  if(!col || col === '') return;
+  try{ sortTable(MOD, col); }catch(e){}
+});
 function viewToggleBtns(mod) {
   const v = getView(mod);
   const isProduccion = mod === 'produccion';
@@ -2558,10 +2597,14 @@ function nav(m){
   const fab=document.getElementById('fab');
   if(fab) fab.style.display = FAB_ACTIONS[m] ? 'flex' : 'none';
   closeSidebar();
+  // Cerrar detalle SIN history.back() — usamos replaceState para limpiar la URL
+  _navFromNav = true;
   closeDetail();
+  _navFromNav = false;
   if(!_navFromPopstate){
+    // replaceState siempre: no acumular entradas en el historial al navegar entre módulos
     if(m === 'dashboard') history.replaceState({mod:'dashboard'}, '', '#dashboard');
-    else history.pushState({mod:m}, '', '#'+m);
+    else history.replaceState({mod:m}, '', '#'+m);
   }
   const mods={dashboard,cotizaciones,clientes,items,procesos,materiales,servicios};
   if(mods[m]) mods[m]();
@@ -3307,8 +3350,12 @@ async function dashboard(){
         };
         Object.entries(MAP).forEach(([gasKey, dbKey]) => {
           if (Array.isArray(initData[gasKey])) {
-            DB[dbKey] = initData[gasKey];
-            cacheSet(dbKey, initData[gasKey]);
+            // Normalizar ESTADO de cotizaciones al entrar (GAS puede devolver APROBADO en masculino)
+            const datos = dbKey === 'cotizaciones'
+              ? initData[gasKey].map(c => c.ESTADO ? {...c, ESTADO: _normEstado(c.ESTADO)} : c)
+              : initData[gasKey];
+            DB[dbKey] = datos;
+            cacheSet(dbKey, datos);
           }
         });
         if (initData.kpis) cacheSet('__kpis__', initData.kpis);
@@ -3468,7 +3515,10 @@ async function dashboard(){
 async function cotizaciones(){
   loading();
   try{
-    if(!DB.cotizaciones) DB.cotizaciones = await GET('getCotizaciones', '', {rango:RANGO_STATE.cotizaciones||'1m'});
+    if(!DB.cotizaciones){
+      const _rawCots = await GET('getCotizaciones', '', {rango:RANGO_STATE.cotizaciones||'1m'});
+      DB.cotizaciones = (_rawCots||[]).map(c=>c.ESTADO?{...c,ESTADO:_normEstado(c.ESTADO)}:c);
+    }
     if(!DB.clientes)     await load('clientes','getClientes');
     updateBadges();
 
@@ -3606,15 +3656,103 @@ async function _doEstadoCot(cotId, nuevoEstado){
     toast('Error: '+e.message,'err');
   }
 }
+
+// Genera el HTML de la tabla de OPs (sin pushState ni side-effects de detailCot)
+function _renderOpsTable(opsArr, cotId){
+  if(!opsArr.length) return '<p style="font-size:12px;color:var(--muted);padding:6px 0">Sin órdenes de producción vinculadas</p>';
+  const rows = opsArr.map((op,_opIdx)=>{
+    const pct = Number(op['%AVANCE'])||0;
+    const procActual = calcProcActual(op);
+    const semColor = pct>=80?'var(--accent)':pct>=40?'var(--gold)':'var(--danger)';
+    const OP_EST = ['PENDIENTE MP','EN PROCESO','PAUSADO','TERMINADO','ENTREGADO'];
+    const iE = OP_EST.indexOf(op.ESTADO);
+    const miniBar = OP_EST.map((e,i)=>{
+      const bg = i<iE?'var(--accent)':i===iE?'var(--gold)':'var(--border)';
+      return '<div style="flex:1;height:4px;background:'+bg+';border-radius:2px"></div>';
+    }).join('');
+    const _opKey = (op.IDQR||op.OP)+'|'+(op.TIPO||'')+'|'+(op.ITEM||'');
+    const _isGar = String(op.TIPO||'').startsWith('GR');
+    return `<tr onclick="detailOP('${_opKey}')" style="cursor:pointer${_isGar?';background:rgba(220,38,38,.04)':''}">
+      <td style="color:var(--accent);font-weight:700">OP-${op.OP}</td>
+      <td>${bTipo(op.TIPO)||'—'}</td>
+      <td><div style="display:flex;gap:2px;width:80px">${miniBar}</div>
+          <div style="font-size:10px;color:${semColor};font-weight:700">${pct}%</div></td>
+      <td class="td-center">${op.ITEM||'—'}</td>
+      <td style="max-width:160px">${op.DESCRIPCION||'—'}</td>
+      <td>${bEst(op.ESTADO)}</td>
+      <td><div style="display:flex;align-items:center;gap:5px">
+        <div style="width:50px;height:5px;background:var(--border);border-radius:3px;overflow:hidden">
+          <div style="width:${pct}%;height:100%;background:${semColor}"></div></div>
+        <span style="font-family:var(--mono);font-size:11px">${pct}%</span></div></td>
+      <td class="td-num">${diasTag(op['DÍAS ENTREGA'])}</td>
+      <td>${fmtDate(op['FECHA INICIO'])}</td>
+      <td>${fmtDate(op['FECHA PACTADA'])}</td>
+      <td>${op.DISEÑADOR||'—'}</td>
+      <td style="color:var(--gold);font-weight:600;max-width:140px">${procActual}</td>
+    </tr>`;
+  }).join('');
+  return `<div style="display:flex;justify-content:flex-end;margin-bottom:8px">
+    <button class="btn btn-ghost btn-sm" onclick="recargarOPsCot('${cotId}')" style="font-size:11px">🔄 Recargar OPs</button>
+  </div>
+  <div class="tbl-wrap" style="max-height:none">
+  <table class="data-tbl" style="min-width:600px">
+    <thead><tr>
+      <th>OP</th><th>Tipo</th><th>Semáforo</th><th>Item</th><th>Descripción</th>
+      <th>Estado</th><th>Avance</th><th>Días Ent.</th>
+      <th>F.Inicio</th><th>F.Pactada</th><th>Diseñador</th><th>Proceso Actual</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table></div>`;
+}
+
+// Recarga las OPs de una COT específica desde el servidor y re-renderiza
+async function recargarOPsCot(cotId){
+  toast('⏳ Recargando OPs...');
+  try{
+    const opsFrescas = await GET('getControlProduccion', cotId, {});
+    if(Array.isArray(opsFrescas)){
+      DB.produccion = [
+        ...(DB.produccion||[]).filter(x=>String(x.COT)!==String(cotId)&&String(x.COTIZACION)!==String(cotId)),
+        ...opsFrescas
+      ];
+      toast(`✅ ${opsFrescas.length} OPs cargadas`);
+      detailCot(cotId);
+    }
+  }catch(e){ toast('❌ '+e.message,'error'); }
+}
+
 async function detailCot(id){
   // Abrir panel inmediatamente con lo que ya hay en caché
   const c=(DB.cotizaciones||[]).find(x=>String(x.COTIZACION)===String(id)||String(x.ID_PEDIDO)===String(id)); if(!c) return;
 
-  // Items y produccion desde caché (sin esperar si ya están)
+  // Items y produccion desde caché — renderiza INMEDIATAMENTE sin esperar red
   const its_cache = (DB.items||[]).filter(x=>String(x.COTIZACION)===String(id)||String(x.ID_PEDIDO)===String(id));
   const ops = (DB.produccion||[]).filter(x=>String(x.COT)===String(id)||String(x.COTIZACION)===String(id));
-  const aprobada = c.ESTADO==='APROBADA';
+  const aprobada = _normEstado(c.ESTADO)==='APROBADA';
   const tieneOP  = ops.length>0;
+
+  // Fetch en background — actualiza SOLO el panel de OPs sin tocar el historial
+  const _cotIdBg = id;
+  setTimeout(()=>{
+    GET('getControlProduccion', _cotIdBg, {}).then(opsFrescas=>{
+      if(!Array.isArray(opsFrescas) || !opsFrescas.length) return;
+      const opsFilt = opsFrescas.filter(x=>String(x.COT)===String(_cotIdBg)||String(x.COTIZACION)===String(_cotIdBg));
+      if(opsFilt.length === ops.length) return; // sin cambios
+      // Merge silencioso en cache
+      DB.produccion = [
+        ...(DB.produccion||[]).filter(x=>String(x.COT)!==String(_cotIdBg)&&String(x.COTIZACION)!==String(_cotIdBg)),
+        ...opsFilt
+      ];
+      // Actualizar SOLO el contenido del panel de OPs y el contador del tab
+      // SIN llamar detailCot() — eso haría pushState y rompería la navegación
+      const panelOps = document.querySelector('.dp-tabpanel[data-panel="ops"]');
+      const tabOps   = document.querySelector('.dp-tab[data-tab="ops"]');
+      if(!panelOps) return; // panel no visible, nada que hacer
+      if(tabOps) tabOps.textContent = '🏭 OPs ('+opsFilt.length+')';
+      // Regenerar solo el HTML de la tabla de OPs
+      panelOps.innerHTML = '<div class="dp-section">' + _renderOpsTable(opsFilt, _cotIdBg) + '</div>';
+    }).catch(()=>{});
+  }, 1000);
 
   // Botón crear OP (solo si: aprobada + sin OP + al menos 1 item tiene diseñador)
   const _tieneDisenador = its_cache.some(it=>it.DISEÑADOR);
@@ -3702,13 +3840,13 @@ async function detailCot(id){
     <div class="tbl-wrap" style="max-height:none">
     <table class="data-tbl" style="min-width:600px">
       <thead><tr>
-        <th>OP</th><th>Semáforo Avance</th><th>Item</th><th>Descripción</th>
+        <th>OP</th><th>Tipo</th><th>Semáforo Avance</th><th>Item</th><th>Descripción</th>
         <th>Estado</th><th>Avance</th><th>Días Ent.</th>
         <th>F.Inicio</th><th>F.Pactada</th>
-        <th>Diseñador</th><th>Proceso Actual</th><th>Rutas</th>
+        <th>Diseñador</th><th>Proceso Actual</th>
       </tr></thead>
       <tbody>
-        ${ops.map(op=>{
+        ${ops.map((op,_opIdx)=>{
           const pct = Number(op['%AVANCE'])||0;
           const procActual = calcProcActual(op);
           const semColor = pct>=80?'var(--accent)':pct>=40?'var(--gold)':'var(--danger)';
@@ -3718,14 +3856,18 @@ async function detailCot(id){
             const bg = i<iE?'var(--accent)':i===iE?'var(--gold)':'var(--border)';
             return '<div style="flex:1;height:4px;background:'+bg+';border-radius:2px"></div>';
           }).join('');
-          return `<tr onclick="detailOP('${op.IDQR||op.OP}')" style="cursor:pointer">
+          // Clave única: IDQR|TIPO|ITEM — distingue OP normal vs garantía (mismo IDQR, mismo ITEM, TIPO distinto)
+          const _opKey = (op.IDQR||op.OP) + '|' + (op.TIPO||'') + '|' + (op.ITEM||'');
+          const _isGar = String(op.TIPO||'').startsWith('GR');
+          return `<tr onclick="detailOP('${_opKey}')" style="cursor:pointer${_isGar?';background:rgba(220,38,38,.04)':''}" title="${op.DESCRIPCION||''}">
             <td style="color:var(--accent);font-weight:700">OP-${op.OP}</td>
+            <td>${bTipo(op.TIPO)||'—'}</td>
             <td>
               <div style="display:flex;gap:2px;width:80px">${miniBar}</div>
               <div style="font-size:10px;color:${semColor};font-weight:700">${pct}%</div>
             </td>
             <td class="td-center">${op.ITEM||'—'}</td>
-            <td style="max-width:180px">${op.DESCRIPCION||'—'}</td>
+            <td style="max-width:160px">${op.DESCRIPCION||'—'}</td>
             <td>${bEst(op.ESTADO)}</td>
             <td>
               <div style="display:flex;align-items:center;gap:5px">
@@ -3740,9 +3882,6 @@ async function detailCot(id){
             <td>${fmtDate(op['FECHA PACTADA'])}</td>
             <td>${op.DISEÑADOR||'—'}</td>
             <td style="color:var(--gold);font-weight:600;max-width:140px">${procActual}</td>
-            <td style="font-size:10px;color:var(--muted);max-width:150px">
-              ${[op['RUTA MQ1'],op['RUTA MQ2'],op['RUTA MQ3']].filter(Boolean).join(' → ')||'—'}
-            </td>
           </tr>`;
         }).join('')}
       </tbody>
@@ -3914,7 +4053,15 @@ async function detailCot(id){
     </div>
 
     <div class="dp-tabpanel" data-panel="ops">
-      <div class="dp-section">${opsHtml}</div>
+      <div class="dp-section">
+        <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
+          <button class="btn btn-ghost btn-sm" onclick="recargarOPsCot('${id}')"
+            style="font-size:11px;gap:4px">
+            🔄 Recargar OPs
+          </button>
+        </div>
+        ${opsHtml}
+      </div>
     </div>
 
     <!-- PANEL FMAE — carga dinámica al activar tab -->
@@ -4074,11 +4221,11 @@ async function formCot(c={}){
       <div style="margin-bottom:14px">
         <label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;font-weight:700;display:block;margin-bottom:8px">Estado</label>
         <div class="btn-group-row" id="est-btns">
-          ${['EN ESPERA','APROBADA','RECHAZADO','CANCELADO'].map(s=>`
-            <button class="btn-seg ${(c.ESTADO||'EN ESPERA')===s?'active':''}"
+          ${['EN ESPERA','APROBADA','RECHAZADA','CANCELADO'].map(s=>`
+            <button class="btn-seg ${_normEstado(c.ESTADO||'EN ESPERA')===s?'active':''}"
               onclick="selectSeg('est-btns','${s}','f6')">${s}</button>`).join('')}
         </div>
-        <input type="hidden" id="f6" value="${c.ESTADO||'EN ESPERA'}">
+        <input type="hidden" id="f6" value="${_normEstado(c.ESTADO||'EN ESPERA')}">
       </div>
       <div class="form-grid">
         <div class="field span2"><label>Observaciones Especiales</label>
@@ -4306,11 +4453,24 @@ async function modalCrearOP(cotId, soloItemId){
   }
 }
 async function detailOP(id){
-  // IDQR es la llave única por fila/ítem (misma OP puede tener varios ítems, cada uno con su propia imagen/plano).
-  // Se busca primero por IDQR; el fallback por OP/ID_OP es solo compatibilidad con llamadas viejas
-  // y puede traer el ítem equivocado si la OP tiene más de una fila — por eso siempre se debe pasar IDQR cuando exista.
-  let op=(DB.produccion||[]).find(x=>String(x.IDQR)===String(id));
-  if(!op) op=(DB.produccion||[]).find(x=>String(x.OP)===String(id)||String(x.ID_OP)===String(id));
+  // Key triple "IDQR|TIPO|ITEM" — distingue todas las combinaciones posibles
+  // incluyendo garantías (mismo IDQR y ITEM, TIPO=GR)
+  let op = null;
+  if(String(id).includes('|')){
+    const parts  = String(id).split('|');
+    const idqrP  = parts[0];
+    const tipoP  = parts[1];
+    const itemP  = parts[2] !== undefined ? parts[2] : null;
+    op = (DB.produccion||[]).find(x=>
+      String(x.IDQR||x.OP) === idqrP &&
+      String(x.TIPO||'')    === tipoP &&
+      (itemP === null || String(x.ITEM||'') === itemP)
+    );
+  }
+  // Fallback 1: IDQR exacto (sin key compuesta)
+  if(!op) op = (DB.produccion||[]).find(x=>x.IDQR && String(x.IDQR)===String(id));
+  // Fallback 2: número de OP
+  if(!op) op = (DB.produccion||[]).find(x=>String(x.OP)===String(id)||String(x.ID_OP)===String(id));
   if(!op){ toast('OP no encontrada: '+id,'error'); return; }
   const cot=cotInfo(op.COT);
   // Items vinculados: por COT + ITEM number (sin esperar si ya están en cache)
@@ -4621,29 +4781,35 @@ async function items(){
         <table class="data-tbl">
           <thead><tr>
             ${thSort('items','ITEM','Item')}
-            <th>COT</th>
+            ${thSort('items','COTIZACION','COT')}
+            <th>Empresa</th>
             <th>OP</th>
-            ${thSort('items','DESCRIPCION','Descripción')}
+            ${thSort('items','DESCRIPCION ITEM','Descripción')}
             ${thSort('items','ESTADO_PROD','Estado')}
-            ${thSort('items','CANT','Cant')}
-            ${thSort('items','PRECIO SIN IVA','Precio')}
+            ${thSort('items','UNIDADES','Cant')}
+            ${thSort('items','PRECIO UNITARIO','Precio Unit.')}
+            ${thSort('items','PRECIO X ITEM','Precio×Item')}
             ${thSort('items','DISEÑADOR','Diseñador')}
-            ${thSort('items','DIAS_ENTREGA','Días Entrega')}
           </tr></thead>
           <tbody>
             ${sorted.length ? sorted.map(it=>{
               const cot=cotInfo(it.COTIZACION);
               const op=(DB.produccion||[]).find(x=>String(x.COT)===String(it.COTIZACION)&&String(x.ITEM)===String(it.ITEM));
               return `<tr onclick="detailItem('${it.ID_ITEM}')">
-                <td><span style="color:var(--accent);font-weight:700">Item ${it.ITEM||'—'}</span></td>
-                <td>${cot?`COT-${cot.COTIZACION} · ${cot.EMPRESA}`:'—'}</td>
-                <td>${op?`OP-${op.OP}`:'—'}</td>
-                <td style="max-width:220px">${it.DESCRIPCION||'Sin descripción'}</td>
-                <td>${bEst(it.ESTADO_PROD)}</td>
-                <td class="td-num">${it.CANT||0}</td>
-                <td class="td-num">${fmt(it['PRECIO SIN IVA']||it['PRECIO UNITARIO'])}</td>
+                <td style="font-weight:700;color:var(--accent)">Item ${it.ITEM||'—'}</td>
+                <td style="font-family:var(--mono);font-size:11px;color:var(--accent);cursor:pointer;font-weight:700"
+                  onclick="event.stopPropagation();detailCot('${it.COTIZACION||''}')"
+                  title="Abrir COT-${it.COTIZACION||''}">
+                  COT-${it.COTIZACION||'—'}
+                </td>
+                <td style="max-width:150px;font-size:12px">${cot?cot.Empresa||cot.EMPRESA:'—'}</td>
+                <td style="color:var(--info);font-size:11px">${op?'OP-'+op.OP:'—'}</td>
+                <td style="max-width:200px">${it['DESCRIPCION ITEM']||it.DESCRIPCION||'Sin descripción'}</td>
+                <td>${bEst(it.ESTADO_PROD||'—')}</td>
+                <td class="td-num">${it.UNIDADES||it.CANT||0}</td>
+                <td class="td-num">${fmt(it['PRECIO UNITARIO']||it['PRECIO SIN IVA'])}</td>
+                <td class="td-num" style="color:var(--gold);font-weight:700">${fmt(it['PRECIO X ITEM']||(Number(it['PRECIO UNITARIO']||0)*(it.UNIDADES||1)))}</td>
                 <td>${it.DISEÑADOR||'—'}</td>
-                <td>${diasTag(it.DIAS_ENTREGA)}</td>
               </tr>`;
             }).join('') : '<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--muted)">Sin resultados</td></tr>'}
           </tbody>
@@ -5057,15 +5223,29 @@ async function crearGarantia(itemId, opIdqr){
       window._garPendingImg = null;
     }
 
-    await POST('bulkCreateOP', { rows:[opRow], itemUpdates:[], cotUpdate:null });
+    // Usar createOP directo (no bulkCreateOP) — bulkCreateOP puede rechazar
+    // filas con el mismo número de OP por su validación anti-duplicados.
+    // createOP agrega la fila sin validar número duplicado (la garantía lo necesita).
+    const resGar = await POST('createOP', opRow);
 
-    // Mutación optimista en cache local
+    // Mutación optimista en cache local con IDQR real si el GAS lo devuelve
     if(!DB.produccion) DB.produccion=[];
-    DB.produccion.push({...opRow, IDQR:'gar_'+Date.now()});
+    const idqrReal = resGar?.IDQR || resGar?.idqr || ('gar_'+Date.now());
+    DB.produccion.push({...opRow, IDQR: idqrReal});
 
     toast(`✅ Garantía creada — OP-${op.OP} · ${it['DESCRIPCION ITEM']||''} [GARANTÍA]`,'ok');
     closeModal();
+    // Recargar producción del servidor para que aparezca la garantía con su IDQR real
+    try{
+      // Usar rango amplio para asegurar que la garantía recién creada aparece
+      DB.produccion = await GET('getControlProduccion','',{rango:'todo'});
+      cacheSet('produccion', DB.produccion);
+    }catch(e){ console.warn('Sync produccion post-garantía:', e); }
+    // Refrescar el detalle del ítem y la cotización
     detailItem(itemId);
+    // También actualizar el detalle de la COT si está abierto
+    const cotId = it.COTIZACION||it.ID_PEDIDO||'';
+    setTimeout(()=>{ if(cotId) detailCot(cotId); }, 300);
   }catch(e){
     toast('❌ '+e.message,'error');
     if(btn){ btn.disabled=false; btn.textContent='🔴 Confirmar Garantía'; }
@@ -5107,7 +5287,7 @@ function detailItem(id){
   // a producción) — de lo contrario los ítems que se agreguen después nunca
   // podrían sumarse a la OP existente. APROBADA y EN PROCESO son los dos
   // estados válidos para crear/agregar OP.
-  const cotAprobada = !!(cot && (cot.ESTADO === 'APROBADA' || cot.ESTADO === 'EN PROCESO'));
+  const cotAprobada = !!(cot && (_normEstado(cot.ESTADO) === 'APROBADA' || cot.ESTADO === 'EN PROCESO'));
   const pct = op ? Number(op['%AVANCE'] || 0) : Number(it.AVANCE_PCT || 0);
 
   // ── Timeline de estado de producción del ítem (toma el estado real de la OP si existe) ──
@@ -5954,52 +6134,246 @@ async function produccion(){
 async function materiales(){
   loading();
   if(!DB.materiales) DB.materiales = await GET('getMateriales');
-  const all = DB.materiales || [];
-  setContent(moduleBanner('🧱','Materiales','Catálogo de materiales (solo lectura)','','linear-gradient(135deg,#374151,#6b7280)')
+  const all = sortData('materiales', DB.materiales||[]);
+  const btnAdd = `<button class="btn btn-primary btn-sm" onclick="formMaterial()">＋ Nuevo</button>`;
+  setContent(moduleBanner('🧱','Materiales','Catálogo de materiales',btnAdd,'linear-gradient(135deg,#374151,#6b7280)')
   + `<div class="tbl-wrap"><table class="data-tbl"><thead><tr>
-    <th>Material</th><th>Descripción</th><th>Unidad</th><th>Precio Ref.</th>
+    ${thSort('materiales','MATERIAL','Material')}
+    ${thSort('materiales','DESCRIPCION','Descripción')}
+    ${thSort('materiales','Densidad g/mm3','Densidad g/mm³')}
+    ${thSort('materiales','PRECIO KG','Precio/kg')}
+    <th></th>
   </tr></thead><tbody>
     ${all.length ? all.map(m=>`<tr>
       <td style="font-weight:700;color:var(--accent)">${m.MATERIAL||'—'}</td>
       <td>${m.DESCRIPCION||m.DESCRIPCION_MAT||'—'}</td>
-      <td>${m.UNIDAD||'—'}</td>
-      <td class="td-num">${m['PRECIO REF']||m.PRECIO||m.COSTO?fmt(m['PRECIO REF']||m.PRECIO||m.COSTO):'—'}</td>
-    </tr>`).join('') : '<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--muted)">Sin materiales</td></tr>'}
+      <td class="td-num">${m['Densidad g/mm3']||'—'}</td>
+      <td class="td-num">${m['PRECIO KG']?fmt(m['PRECIO KG']):'—'}</td>
+      <td onclick="event.stopPropagation()" style="white-space:nowrap">
+        <button class="btn btn-ghost btn-sm" onclick="formMaterial(${JSON.stringify(m).replace(/"/g,'&quot;')})">✏️</button>
+        <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="deleteMaterial('${m.ID_MATERIAL||m.MATERIAL}')">🗑</button>
+      </td>
+    </tr>`).join('') : '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--muted)">Sin materiales</td></tr>'}
   </tbody></table></div>`);
+}
+
+function formMaterial(m={}){
+  const isNew=!m.ID_MATERIAL&&!m.MATERIAL;
+  openModal(isNew?'Nuevo Material':'Editar Material',`
+    <div class="form-grid">
+      <div class="field span2"><label>Material ★</label>
+        <input id="mat-nm" value="${m.MATERIAL||''}" placeholder="ej. SAE 4140, Aluminio 6061…"></div>
+      <div class="field span2"><label>Descripción</label>
+        <input id="mat-desc" value="${m.DESCRIPCION||m.DESCRIPCION_MAT||''}"></div>
+      <div class="field"><label>Densidad (g/mm³)</label>
+        <input type="number" id="mat-dens" value="${m['Densidad g/mm3']||''}" step="0.0001" placeholder="0.00785"></div>
+      <div class="field"><label>Precio / kg ($)</label>
+        <input type="number" id="mat-pkg" value="${m['PRECIO KG']||''}" placeholder="0"></div>
+    </div>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+     <button class="btn btn-primary" onclick="saveMaterial('${m.ID_MATERIAL||m.MATERIAL||''}')">
+       ${isNew?'✓ Crear':'✓ Guardar'}</button>`);
+}
+
+async function saveMaterial(exist){
+  const nm   = document.getElementById('mat-nm')?.value?.trim();
+  const desc = document.getElementById('mat-desc')?.value?.trim();
+  const dens = document.getElementById('mat-dens')?.value?.trim();
+  const pkg  = document.getElementById('mat-pkg')?.value?.trim();
+  if(!nm){ toast('El nombre del material es requerido','error'); return; }
+  const data = { MATERIAL:nm, DESCRIPCION:desc, 'Densidad g/mm3':Number(dens)||0, 'PRECIO KG':Number(pkg)||0 };
+  if(exist) data.ID_MATERIAL = exist;
+  const btn=document.querySelector('#modal-foot .btn-primary');
+  if(btn){ btn.disabled=true; btn.textContent='Guardando…'; }
+  try{
+    if(exist){ POST_BG('updateMaterial',data); }
+    else { await POST('createMaterial',data); }
+    if(!DB.materiales) DB.materiales=[];
+    if(exist){
+      const idx=DB.materiales.findIndex(x=>String(x.ID_MATERIAL||x.MATERIAL)===String(exist));
+      if(idx>=0) DB.materiales[idx]={...DB.materiales[idx],...data};
+      else DB.materiales.push(data);
+    } else { DB.materiales.push({...data,ID_MATERIAL:'tmp_'+Date.now()}); }
+    toast(exist?'✅ Material actualizado':'✅ Material creado');
+    closeModal(); materiales();
+  }catch(e){ toast('❌ '+e.message,'error'); if(btn){btn.disabled=false;btn.textContent='✓ Guardar';} }
+}
+
+async function deleteMaterial(id){
+  if(!confirm('¿Eliminar este material?')) return;
+  DB.materiales=(DB.materiales||[]).filter(x=>String(x.ID_MATERIAL||x.MATERIAL)!==String(id));
+  POST_BG('deleteMaterial',{ID_MATERIAL:id});
+  toast('🗑 Eliminado'); materiales();
 }
 
 async function servicios(){
   loading();
   if(!DB.servicios) DB.servicios = await GET('getServicios');
-  const all = DB.servicios || [];
-  setContent(moduleBanner('🛠️','Servicios Externos','Catálogo de servicios (solo lectura)','','linear-gradient(135deg,#374151,#6b7280)')
+  const all = sortData('servicios', DB.servicios||[]);
+  const btnAdd = `<button class="btn btn-primary btn-sm" onclick="formServicio()">＋ Nuevo</button>`;
+  setContent(moduleBanner('🛠️','Servicios Externos','Catálogo de servicios',btnAdd,'linear-gradient(135deg,#374151,#6b7280)')
   + `<div class="tbl-wrap"><table class="data-tbl"><thead><tr>
-    <th>Servicio</th><th>Descripción</th><th>Unidad</th><th>Precio Ref.</th>
+    ${thSort('servicios','SERVICIO EXTERNO','Servicio')}
+    ${thSort('servicios','DESCRIPCION','Descripción')}
+    ${thSort('servicios','DIAS','Días')}
+    ${thSort('servicios','COSTO KG','Costo/kg')}
+    ${thSort('servicios','COSTO <= 2 KG','≤2 kg')}
+    ${thSort('servicios','COSTO <= 10 KG','≤10 kg')}
+    <th></th>
   </tr></thead><tbody>
     ${all.length ? all.map(s=>`<tr>
       <td style="font-weight:700;color:var(--accent)">${s['SERVICIO EXTERNO']||s.SERVICIO||'—'}</td>
       <td>${s.DESCRIPCION||'—'}</td>
-      <td>${s.UNIDAD||'—'}</td>
-      <td class="td-num">${s.PRECIO||s.COSTO?fmt(s.PRECIO||s.COSTO):'—'}</td>
-    </tr>`).join('') : '<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--muted)">Sin servicios</td></tr>'}
+      <td class="td-num">${s.DIAS||'—'}</td>
+      <td class="td-num">${s['COSTO KG']?fmt(s['COSTO KG']):'—'}</td>
+      <td class="td-num">${s['COSTO <= 2 KG']?fmt(s['COSTO <= 2 KG']):'—'}</td>
+      <td class="td-num">${s['COSTO <= 10 KG']?fmt(s['COSTO <= 10 KG']):'—'}</td>
+      <td onclick="event.stopPropagation()" style="white-space:nowrap">
+        <button class="btn btn-ghost btn-sm" onclick="formServicio(${JSON.stringify(s).replace(/"/g,'&quot;')})">✏️</button>
+        <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="deleteServicio('${s.ID_SVC||s['SERVICIO EXTERNO']||s.SERVICIO}')">🗑</button>
+      </td>
+    </tr>`).join('') : '<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--muted)">Sin servicios</td></tr>'}
   </tbody></table></div>`);
+}
+
+function formServicio(s={}){
+  const nm = s['SERVICIO EXTERNO']||s.SERVICIO||'';
+  const isNew = !s.ID_SVC && !nm;
+  openModal(isNew?'Nuevo Servicio Externo':'Editar Servicio',`
+    <div class="form-grid">
+      <div class="field span2"><label>Servicio ★</label>
+        <input id="svc-nm" value="${nm}" placeholder="ej. Tratamiento Térmico, Galvanizado…"></div>
+      <div class="field span2"><label>Descripción</label>
+        <input id="svc-desc" value="${s.DESCRIPCION||''}"></div>
+      <div class="field"><label>Días entrega</label>
+        <input type="number" id="svc-dias" value="${s.DIAS||''}" placeholder="0"></div>
+      <div class="field"><label>Costo / kg ($)</label>
+        <input type="number" id="svc-ckg" value="${s['COSTO KG']||''}" placeholder="0"></div>
+      <div class="field"><label>Costo ≤ 2 kg ($)</label>
+        <input type="number" id="svc-c2" value="${s['COSTO <= 2 KG']||''}" placeholder="0"></div>
+      <div class="field"><label>Costo ≤ 10 kg ($)</label>
+        <input type="number" id="svc-c10" value="${s['COSTO <= 10 KG']||''}" placeholder="0"></div>
+    </div>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+     <button class="btn btn-primary" onclick="saveServicio('${s.ID_SVC||nm||''}')">
+       ${isNew?'✓ Crear':'✓ Guardar'}</button>`);
+}
+
+async function saveServicio(exist){
+  const nm  = document.getElementById('svc-nm')?.value?.trim();
+  if(!nm){ toast('El nombre del servicio es requerido','error'); return; }
+  const data = {
+    'SERVICIO EXTERNO': nm,
+    DESCRIPCION: document.getElementById('svc-desc')?.value?.trim()||'',
+    DIAS: Number(document.getElementById('svc-dias')?.value||0),
+    'COSTO KG': Number(document.getElementById('svc-ckg')?.value||0),
+    'COSTO <= 2 KG': Number(document.getElementById('svc-c2')?.value||0),
+    'COSTO <= 10 KG': Number(document.getElementById('svc-c10')?.value||0),
+  };
+  if(exist) data.ID_SVC = exist;
+  const btn=document.querySelector('#modal-foot .btn-primary');
+  if(btn){ btn.disabled=true; btn.textContent='Guardando…'; }
+  try{
+    if(exist){ POST_BG('updateServicio',data); }
+    else { await POST('createServicio',data); }
+    if(!DB.servicios) DB.servicios=[];
+    if(exist){
+      const idx=DB.servicios.findIndex(x=>String(x.ID_SVC||x['SERVICIO EXTERNO'])===String(exist));
+      if(idx>=0) DB.servicios[idx]={...DB.servicios[idx],...data};
+      else DB.servicios.push(data);
+    } else { DB.servicios.push({...data,ID_SVC:'tmp_'+Date.now()}); }
+    toast(exist?'✅ Servicio actualizado':'✅ Servicio creado');
+    closeModal(); servicios();
+  }catch(e){ toast('❌ '+e.message,'error'); if(btn){btn.disabled=false;btn.textContent='✓ Guardar';} }
+}
+
+async function deleteServicio(id){
+  if(!confirm('¿Eliminar este servicio?')) return;
+  DB.servicios=(DB.servicios||[]).filter(x=>String(x.ID_SVC||x['SERVICIO EXTERNO']||x.SERVICIO)!==String(id));
+  POST_BG('deleteServicio',{ID_SVC:id});
+  toast('🗑 Eliminado'); servicios();
 }
 
 async function procesos(){
   loading();
   if(!DB.procesos) DB.procesos = await GET('getProcesos');
-  const all = DB.procesos || [];
-  setContent(moduleBanner('⚙️','Procesos / Máquinas','Catálogo de procesos (solo lectura)','','linear-gradient(135deg,#374151,#6b7280)')
+  const all = sortData('procesos', DB.procesos||[]);
+  const btnAdd = `<button class="btn btn-primary btn-sm" onclick="formProceso()">＋ Nuevo</button>`;
+  setContent(moduleBanner('⚙️','Procesos / Máquinas','Catálogo de procesos y tarifas',btnAdd,'linear-gradient(135deg,#374151,#6b7280)')
   + `<div class="tbl-wrap"><table class="data-tbl"><thead><tr>
-    <th>Proceso</th><th>Descripción</th><th>Unidad</th><th>Precio Ref.</th>
+    ${thSort('procesos','PROCESO','Proceso / Máquina')}
+    ${thSort('procesos','DESCRIPCION','Descripción')}
+    ${thSort('procesos','CUADRANTE','Cuadrante')}
+    ${thSort('procesos','TARIFA_HR','Tarifa/hr')}
+    <th></th>
   </tr></thead><tbody>
     ${all.length ? all.map(p=>`<tr>
-      <td style="font-weight:700;color:var(--accent)">${p.PROCESO||'—'}</td>
+      <td style="font-weight:700;color:var(--accent)">${p.PROCESO||p.NOMBRE_MAQUINA||'—'}</td>
       <td>${p.DESCRIPCION||'—'}</td>
-      <td>${p.UNIDAD||'—'}</td>
-      <td class="td-num">${p.PRECIO||p.COSTO?fmt(p.PRECIO||p.COSTO):'—'}</td>
-    </tr>`).join('') : '<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--muted)">Sin procesos</td></tr>'}
+      <td><span style="background:var(--card2);border-radius:6px;padding:2px 8px;font-size:11px">${p.CUADRANTE||'—'}</span></td>
+      <td class="td-num">${p.TARIFA_HR||p['TARIFA / HR']?fmt(p.TARIFA_HR||p['TARIFA / HR']):'—'}</td>
+      <td onclick="event.stopPropagation()" style="white-space:nowrap">
+        <button class="btn btn-ghost btn-sm" onclick="formProceso(${JSON.stringify(p).replace(/"/g,'&quot;')})">✏️</button>
+        <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="deleteProceso('${p.ID_PROCESO||p.PROCESO}')">🗑</button>
+      </td>
+    </tr>`).join('') : '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--muted)">Sin procesos</td></tr>'}
   </tbody></table></div>`);
+}
+
+function formProceso(p={}){
+  const nm = p.PROCESO||p.NOMBRE_MAQUINA||'';
+  const isNew = !p.ID_PROCESO && !nm;
+  const cuadrantes = ['GENERAL','MECANIZADO','EROSION','SOLDADURA','TRATAMIENTO','EXTERNO'];
+  openModal(isNew?'Nuevo Proceso / Máquina':'Editar Proceso',`
+    <div class="form-grid">
+      <div class="field span2"><label>Proceso / Máquina ★</label>
+        <input id="prc-nm" value="${nm}" placeholder="ej. TORNO, FRESADORA, CENTRO DE MECANIZADO…"></div>
+      <div class="field span2"><label>Descripción</label>
+        <input id="prc-desc" value="${p.DESCRIPCION||''}"></div>
+      <div class="field"><label>Cuadrante</label>
+        <select id="prc-cuad">
+          ${cuadrantes.map(c=>`<option ${(p.CUADRANTE||'')=== c?'selected':''}>${c}</option>`).join('')}
+        </select></div>
+      <div class="field"><label>Tarifa / hora ($)</label>
+        <input type="number" id="prc-tarifa" value="${p.TARIFA_HR||p['TARIFA / HR']||''}" placeholder="0"></div>
+    </div>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+     <button class="btn btn-primary" onclick="saveProceso('${p.ID_PROCESO||nm||''}')">
+       ${isNew?'✓ Crear':'✓ Guardar'}</button>`);
+}
+
+async function saveProceso(exist){
+  const nm = document.getElementById('prc-nm')?.value?.trim();
+  if(!nm){ toast('El nombre del proceso es requerido','error'); return; }
+  const data = {
+    PROCESO: nm, NOMBRE_MAQUINA: nm,
+    DESCRIPCION: document.getElementById('prc-desc')?.value?.trim()||'',
+    CUADRANTE: document.getElementById('prc-cuad')?.value||'GENERAL',
+    'TARIFA / HR': Number(document.getElementById('prc-tarifa')?.value||0),
+    TARIFA_HR:    Number(document.getElementById('prc-tarifa')?.value||0),
+  };
+  if(exist) data.ID_PROCESO = exist;
+  const btn=document.querySelector('#modal-foot .btn-primary');
+  if(btn){ btn.disabled=true; btn.textContent='Guardando…'; }
+  try{
+    if(exist){ POST_BG('updateProceso',data); }
+    else { await POST('createProceso',data); }
+    if(!DB.procesos) DB.procesos=[];
+    if(exist){
+      const idx=DB.procesos.findIndex(x=>String(x.ID_PROCESO||x.PROCESO)===String(exist));
+      if(idx>=0) DB.procesos[idx]={...DB.procesos[idx],...data};
+      else DB.procesos.push(data);
+    } else { DB.procesos.push({...data,ID_PROCESO:'tmp_'+Date.now()}); }
+    toast(exist?'✅ Proceso actualizado':'✅ Proceso creado');
+    closeModal(); procesos();
+  }catch(e){ toast('❌ '+e.message,'error'); if(btn){btn.disabled=false;btn.textContent='✓ Guardar';} }
+}
+
+async function deleteProceso(id){
+  if(!confirm('¿Eliminar este proceso?')) return;
+  DB.procesos=(DB.procesos||[]).filter(x=>String(x.ID_PROCESO||x.PROCESO)!==String(id));
+  POST_BG('deleteProceso',{ID_PROCESO:id});
+  toast('🗑 Eliminado'); procesos();
 }
 
 
@@ -6282,57 +6656,159 @@ function _renderHojaRutaPanel(panel){
   if(!panel) return;
   const cotId = _getCotIdFromPanel(panel);
   const c = (DB.cotizaciones||[]).find(x=>String(x.COTIZACION)===String(cotId)||String(x.ID_PEDIDO)===String(cotId));
-  const opsCot=(DB.produccion||[]).filter(o=>
-    String(o.COTIZACION||o.ID_PEDIDO||'')===String(c?.ID_PEDIDO||cotId)
-    || String(o.COTIZACION||'')===String(cotId)
+
+  // Buscar OPs: campo COT es el real en Control Producción (no COTIZACION)
+  const opsCot = (DB.produccion||[]).filter(o=>
+    String(o.COT||'') === String(cotId) ||
+    String(o.COTIZACION||'') === String(cotId) ||
+    String(o.ID_PEDIDO||'') === String(c?.ID_PEDIDO||cotId)
   );
 
-  if(!opsCot.length){
-    panel.innerHTML='<div class="dp-section"><p style="font-size:12px;color:var(--muted)">No hay OPs para esta cotización. Crea una OP primero.</p></div>';
+  // Ítems de la COT (siempre disponibles, con o sin OP)
+  const itemsCot = (DB.items||[]).filter(x=>
+    String(x.COTIZACION)===String(cotId)||String(x.ID_PEDIDO)===String(cotId)
+  ).sort((a,b)=>(Number(a.ITEM)||0)-(Number(b.ITEM)||0));
+
+  // ── Si hay OPs: mostrar Hoja de Ruta por OP ──────────────────
+  if(opsCot.length){
+    const html = opsCot.map(op=>{
+      let hr={};
+      try{ hr=JSON.parse(op.HOJA_RUTA_JSON||'{}'); }catch(e){}
+      const procs=(hr.procesos||[]).filter(p=>p.maquina);
+
+      // Si la HR no tiene procesos aún, construirla desde los PROCESO N del ítem
+      let procHtml;
+      if(procs.length){
+        procHtml = procs.map((p,i)=>`
+          <div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--surface);border-radius:8px;font-size:12px;margin-bottom:4px;border:1px solid var(--border)">
+            <span style="background:var(--accent2);color:#fff;border-radius:6px;padding:2px 8px;font-weight:700;font-size:10px;flex-shrink:0">${i+1}</span>
+            <span style="font-weight:600;flex:1">${p.maquina}</span>
+            ${p.cota?`<span style="color:var(--muted);font-size:10px">Cota: ${p.cota}</span>`:''}
+            ${p.tEst?`<span style="color:var(--muted);font-size:10px;font-family:var(--mono)">${p.tEst}h</span>`:''}
+          </div>`).join('');
+      } else {
+        // Construir desde procesos del ítem vinculado
+        const itVinc = itemsCot.find(x=>String(x.ITEM)===String(op.ITEM));
+        const rutasItem = [];
+        for(let n=1;n<=10;n++){
+          const proc = itVinc?.['PROCESO '+n]||op['RUTA MQ'+n]||op['RUTA_MQ'+n]||'';
+          const hrs  = Number(itVinc?.['TIEMPO PRO '+n+' (horas)']||0);
+          if(proc) rutasItem.push({maquina:proc, tEst:hrs||''});
+        }
+        procHtml = rutasItem.length
+          ? rutasItem.map((p,i)=>`
+            <div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--surface);border-radius:8px;font-size:12px;margin-bottom:4px;border:1px solid var(--border)">
+              <span style="background:var(--accent2);color:#fff;border-radius:6px;padding:2px 8px;font-weight:700;font-size:10px;flex-shrink:0">${i+1}</span>
+              <span style="font-weight:600;flex:1">${p.maquina}</span>
+              ${p.tEst?`<span style="color:var(--muted);font-size:10px;font-family:var(--mono)">${p.tEst}h</span>`:''}
+            </div>`).join('')
+          : '<p style="font-size:11px;color:var(--muted);padding:4px 0">Sin procesos definidos — edita el ítem (pestaña Procesos) o usa ✏️ Editar HR</p>';
+      }
+
+      return `<div style="background:var(--card2);border-radius:12px;padding:14px;margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div>
+            <div style="font-weight:700;font-size:14px">OP-${op.OP} · Ítem ${op.ITEM}</div>
+            <div style="font-size:11px;color:var(--muted)">${op.DESCRIPCION||op['DESCRIPCION ITEM']||''}</div>
+          </div>
+          <div style="display:flex;gap:6px" id="hr-btns-${op.IDQR||op.OP}"></div>
+        </div>
+        ${procHtml}
+      </div>`;
+    }).join('');
+
+    panel.innerHTML=`<div class="dp-section">${html}</div>`;
+
+    opsCot.forEach(op=>{
+      const div=document.getElementById('hr-btns-'+(op.IDQR||op.OP));
+      if(!div) return;
+      const b1=document.createElement('button');
+      b1.className='btn btn-ghost btn-sm';
+      b1.textContent='✏️ Editar HR';
+      b1.onclick=()=>qaHojaRuta(op.IDQR||op.OP);
+      const b2=document.createElement('button');
+      b2.className='btn btn-ghost btn-sm';
+      b2.textContent='🖨️ PDF';
+      b2.onclick=()=>generarPDFHojaRuta(op.IDQR||op.OP);
+      div.appendChild(b1);
+      div.appendChild(b2);
+    });
     return;
   }
 
-  const html = opsCot.map(op=>{
-    let hr={};
-    try{ hr=JSON.parse(op.HOJA_RUTA_JSON||'{}'); }catch(e){}
-    const procs=(hr.procesos||[]).filter(p=>p.maquina);
-    const procHtml = procs.length
-      ? procs.map((p,i)=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:var(--surface,#fff);border-radius:8px;font-size:11px;margin-bottom:4px">
-          <span style="background:var(--accent2,#1d4ed8);color:#fff;border-radius:6px;padding:2px 8px;font-weight:700;font-size:10px">${i+1}</span>
-          <span style="font-weight:600;flex:1">${p.maquina}</span>
-          ${p.cota?`<span style="color:var(--muted)">Cota: ${p.cota}</span>`:''}
-          ${p.tEst?`<span style="color:var(--muted)">${p.tEst}h</span>`:''}
-        </div>`).join('')
-      : '<p style="font-size:11px;color:var(--muted)">Sin procesos — toca Editar</p>';
-    return `<div style="background:var(--card2);border-radius:12px;padding:14px;margin-bottom:12px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-        <div>
-          <div style="font-weight:700;font-size:14px">OP-${op.OP} · Ítem ${op.ITEM}</div>
-          <div style="font-size:11px;color:var(--muted)">${op['DESCRIPCION ITEM']||op.DESCRIPCION||''}</div>
-        </div>
-        <div style="display:flex;gap:6px" id="hr-btns-${op.IDQR}"></div>
-      </div>
-      ${procHtml}
-    </div>`;
-  }).join('');
+  // ── Sin OPs: mostrar procesos desde los ítems (vista previa de la HR) ──
+  if(!itemsCot.length){
+    panel.innerHTML=`<div class="dp-section"><p style="font-size:12px;color:var(--muted);text-align:center;padding:20px 0">
+      Sin ítems con procesos. Agrega procesos a los ítems en la pestaña ⚙️ Procesos del wizard.
+    </p></div>`;
+    return;
+  }
 
-  panel.innerHTML=`<div class="dp-section">${html}</div>`;
-
-  // Agregar botones con addEventListener para evitar comillas anidadas
-  opsCot.forEach(op=>{
-    const div=document.getElementById('hr-btns-'+op.IDQR);
-    if(!div) return;
-    const b1=document.createElement('button');
-    b1.className='btn btn-ghost btn-sm';
-    b1.textContent='✏️ Editar';
-    b1.onclick=()=>qaHojaRuta(op.IDQR);
-    const b2=document.createElement('button');
-    b2.className='btn btn-ghost btn-sm';
-    b2.textContent='🖨️ PDF';
-    b2.onclick=()=>generarPDFHojaRuta(op.IDQR);
-    div.appendChild(b1);
-    div.appendChild(b2);
+  const itemsConProc = itemsCot.filter(it=>{
+    for(let n=1;n<=10;n++) if(it['PROCESO '+n]) return true;
+    return false;
   });
+
+  if(!itemsConProc.length){
+    panel.innerHTML=`<div class="dp-section">
+      <div style="background:rgba(37,99,235,.06);border:1px solid rgba(37,99,235,.2);border-radius:10px;padding:14px;text-align:center">
+        <div style="font-size:22px;margin-bottom:6px">⚙️</div>
+        <div style="font-size:13px;font-weight:700;color:var(--accent);margin-bottom:4px">Sin procesos definidos</div>
+        <div style="font-size:11px;color:var(--muted)">
+          Edita cada ítem → pestaña ⚙️ Procesos para definir la ruta de maquinado.<br>
+          La Hoja de Ruta se genera automáticamente desde los procesos del ítem.
+        </div>
+      </div>
+      <div style="margin-top:14px">
+        ${itemsCot.map(it=>{
+          const safeId=String(it.ID_ITEM||'').replace(/'/g,"\'");
+          return `<div style="background:var(--card2);border-radius:10px;padding:10px 12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">
+            <div>
+              <div style="font-weight:600;font-size:13px">Ítem ${it.ITEM} — ${it['DESCRIPCION ITEM']||'Sin descripción'}</div>
+              <div style="font-size:11px;color:var(--muted)">Sin procesos</div>
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="closeDetail();setTimeout(()=>{formItem(DB.items.find(x=>x.ID_ITEM==='${safeId}')||{});setTimeout(()=>wizItemTab(3),350)},200)">
+              ⚙️ Agregar procesos
+            </button>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+    return;
+  }
+
+  // Mostrar procesos de cada ítem como vista previa de la Hoja de Ruta
+  panel.innerHTML = `<div class="dp-section">
+    <div style="background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.25);border-radius:10px;padding:10px 12px;margin-bottom:14px;font-size:11px;color:var(--warn)">
+      ℹ️ Vista previa desde procesos del ítem — la Hoja de Ruta oficial se crea al generar la OP
+    </div>
+    ${itemsConProc.map(it=>{
+      const safeId=String(it.ID_ITEM||'').replace(/'/g,"\'");
+      const rutas=[];
+      for(let n=1;n<=10;n++){
+        const proc=it['PROCESO '+n]||'';
+        const hrs=Number(it['TIEMPO PRO '+n+' (horas)']||0);
+        if(proc) rutas.push({maquina:proc, tEst:hrs});
+      }
+      return `<div style="background:var(--card2);border-radius:12px;padding:14px;margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div>
+            <div style="font-weight:700;font-size:14px">Ítem ${it.ITEM}</div>
+            <div style="font-size:11px;color:var(--muted)">${it['DESCRIPCION ITEM']||''}</div>
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="closeDetail();setTimeout(()=>{formItem(DB.items.find(x=>x.ID_ITEM==='${safeId}')||{});setTimeout(()=>wizItemTab(3),350)},200)">
+            ✏️ Editar procesos
+          </button>
+        </div>
+        ${rutas.map((p,i)=>`
+          <div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--surface);border-radius:8px;font-size:12px;margin-bottom:4px;border:1px solid var(--border)">
+            <span style="background:var(--accent2);color:#fff;border-radius:6px;padding:2px 8px;font-weight:700;font-size:10px;flex-shrink:0">${i+1}</span>
+            <span style="font-weight:600;flex:1">${p.maquina}</span>
+            ${p.tEst?`<span style="color:var(--muted);font-size:10px;font-family:var(--mono)">${p.tEst}h</span>`:''}
+          </div>`).join('')}
+      </div>`;
+    }).join('')}
+  </div>`;
 }
 
 async function duplicarCot(id){
@@ -6866,7 +7342,7 @@ async function saveCot(exist){
     CIUDAD:                      gv('f4'),
     Ciudad:                      gv('f4'),
     ASESOR:                      gv('f5'),
-    ESTADO:                      gv('f6'),
+    ESTADO:                      _normEstado(gv('f6')),
     'DESCRIPCION DEL PROYECTO':  richGet('f7-rich'),
     'PRECIO SIN IVA':            sinIva,
     IVA:                         iva,
@@ -6997,6 +7473,59 @@ async function uploadToImgbb(file){
   if(!json.success) throw new Error(json.error?.message || 'Error subiendo a imgbb');
   return { url: json.data.url, thumbUrl: json.data.thumb?.url || json.data.url, deleteUrl: json.data.delete_url };
 }
+
+
+// ── Constantes QA / Hoja de Ruta (portadas desde ERP completo) ─
+const QA_MAX_CHARS = 250000;
+const QA_ESTADOS = ['PENDIENTE MP','EN PROCESO','PAUSADO','TERMINADO','ENTREGADO'];
+const QA_LIBERACION_NOMBRES = ['C.POSADA','F.GIRALDO','J.GARCIA'];
+const QA_RESPONSABLE_LIB_KEYS = ['LIBERACION','RESPONSABLE LIBERACION','RESPONSABLE LIBERACIÓN','LIBERADO POR','RESPONSABLE_LIBERACION'];
+const QA_SEMAFORO_OPTS = ['CANCELADO','EN PROCESO','PAUSADO','TRABAJO EXTERNO'];
+const QA_SEMAFORO_COLOR = {
+  'CANCELADO':'var(--danger)', 'EN PROCESO':'var(--accent)',
+  'PAUSADO':'var(--warn)', 'TRABAJO EXTERNO':'var(--info)'
+};
+const QA_ETAPAS = [
+  { id:'diseno',    doneKeys:['INGENIERIA Y PLANEACIÓN','ING_PLANEACION'],
+    dateKeys:['FECHA ENTREGA\nPLANEACIÓN\nDD/MM/AA'],
+    label:'Diseño OK', icon:'📐', doneLabel:'Diseño ✓', doneIcon:'✅',
+    nombreLargo:'Diseño / Ingeniería y Planeación' },
+  { id:'mp',        doneKeys:['MP\nINSUMOS','MP INSUMOS'],
+    dateKeys:['FECHA ENTREGA\nDD/MM/AA','FECHA ENTREGA MP'],
+    label:'MP Insumos', icon:'🧱', doneLabel:'MP Insumos ✓', doneIcon:'✅',
+    nombreLargo:'MP / Insumos' },
+  { id:'servicio',  doneKeys:['SERVICIO EXTERNO'],
+    dateKeys:['FECHA ENTREGA\nDD/MM/AA2','FECHA ENTREGA SVC'],
+    label:'Servicio Externo', icon:'🚚', doneLabel:'Servicio Ext. ✓', doneIcon:'✅',
+    nombreLargo:'Servicio Externo' },
+  { id:'entrega',   doneKeys:['ENTREGA DE PRODUCCIÓN','ENTREGA DE PRODUCCION'],
+    dateKeys:['FECHA ENTREGA\nDD/MM/AA3','FECHA ENTREGA PROD2'],
+    label:'Entrega Prod.', icon:'📦', doneLabel:'Entrega ✓', doneIcon:'✅',
+    nombreLargo:'Entrega de Producción' },
+  { id:'calidad',   doneKeys:['CALIDAD'],
+    dateKeys:['FECHA \nCALIDAD\nDD/MM/AA','FECHA CALIDAD'],
+    label:'Calidad', icon:'🔍', doneLabel:'Calidad ✓', doneIcon:'✅',
+    nombreLargo:'Calidad' },
+  { id:'liberacion',doneKeys:['LIBERACION'],
+    dateKeys:['FECHA DE DESPACHO'],
+    label:'Liberación', icon:'🚀', doneLabel:'Liberado ✓', doneIcon:'✅',
+    nombreLargo:'Liberación / Despacho' },
+];
+
+
+const HR_SECS_DEFAULT = [
+  { id:'foto',      label:'Foto de la pieza',         icon:'📷', active:true  },
+  { id:'plano',     label:'Plano / croquis',           icon:'📐', active:true  },
+  { id:'materiales',label:'Materiales',                icon:'🔩', active:true  },
+  { id:'procesos',  label:'Secuencia de procesos',     icon:'⚙️', active:true, locked:true },
+  { id:'obs',       label:'Observaciones ingeniero',   icon:'📝', active:true  },
+  { id:'firmas',    label:'Firmas de aprobación',      icon:'✍️', active:true  },
+  { id:'termico',   label:'Tratamiento térmico',       icon:'🔥', active:false },
+  { id:'dimcrit',   label:'Control dimensional crítico',icon:'📏', active:false },
+];
+const HR_MAQUINAS = ['BANCO','FRESADORA','TORNO','CENTRO DE MECANIZADO',
+  'RECTIFICADORA PLANA','EDM','HILO','SOLDADURA','INGENIERIA',
+  'TRATAMIENTO TERMICO','SERVICIO EXTERNO'];
 
 function qaFindOP(idqr){
   // IDQR es la llave única por fila/ítem en CONTROL PRODUCCIÓN.
@@ -9021,8 +9550,8 @@ function resetFilters(mod) {
   if (panel) panel.classList.remove('open');
   const btn = document.getElementById('ftb-'+mod);
   if (btn) btn.classList.remove('active');
-  const mods = { cotizaciones, produccion, clientes, remisiones, materiales, servicios, procesos, items };
-  if (mods[mod]) mods[mod]();
+  const mods = { cotizaciones, clientes, materiales, servicios, procesos, items };
+  if (mods[mod]) mods[mod](); else refreshCurrent();
 }
 
 function _toggleFilterSelects(mod) {
@@ -9037,8 +9566,8 @@ function toggleView(mod) {
   // Si está en lista-prod vuelve a tabla; si está en tabla va a cards; si está en cards va a tabla
   const curr = getView(mod);
   _VIEW[mod] = curr === 'lista-prod' ? 'table' : curr === 'table' ? 'cards' : 'table';
-  const mods = { cotizaciones, produccion, clientes, remisiones, materiales, servicios, procesos, items,
-                 'diseño': () => renderDiseno(_disTab), compras };
+  const mods = { cotizaciones, produccion, clientes, materiales, servicios, procesos, items,
+                 'diseño': () => renderDiseno ? renderDiseno(_disTab) : null };
   if (mods[mod]) mods[mod]();
 }
 
@@ -9049,8 +9578,8 @@ function sortTable(mod, col) {
   } else {
     _SORT[mod] = { col, dir: 'asc' };
   }
-  const mods = { cotizaciones, produccion, clientes, remisiones, materiales, servicios, procesos, items };
-  if (mods[mod]) mods[mod]();
+  const mods = { cotizaciones, clientes, materiales, servicios, procesos, items };
+  if (mods[mod]) mods[mod](); else refreshCurrent();
 }
 
 function getPrecioUnitItem(it){
