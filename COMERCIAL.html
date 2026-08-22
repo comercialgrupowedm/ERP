@@ -1523,6 +1523,8 @@ function hideBusy(){
   if(_busyCount === 0 && _busyProg) { _busyProg.done(''); _busyProg = null; }
 }
 
+const _prog = { active: false, _t: null };
+
 function _progress({ icon='⏳', label='Procesando…', steps=[], color=null }={}) {
   const bar    = document.getElementById('prog-bar-top-fill');
   const toast  = document.getElementById('prog-toast');
@@ -2447,6 +2449,10 @@ const TIPOS_COT = {
     color: '#7c3aed',
     desc: 'Proyectos de varias piezas que requieren un Ensamble.\n\nCREA OP: 👷 Comercial - cotización nueva.\nCONTROL DE MEDIDAS Ó CALIDAD: Funcionalidad.\n¿QUIEN HACE QA?: Operario.\n¿QUIEN LIBERA?: 👷 Inspector de Calidad y/o ingenieria.\n\nLEAD TIME: 0 - 45 DÍAS'
   },
+  'GR. Garantia': {
+    color: '#dc2626',
+    desc: 'OP de garantía sobre un trabajo anterior. Se fabrica sin costo para el cliente.\n\nCREA OP: 👷 Comercial - garantía sobre ítem existente.\nCONTROL DE MEDIDAS Ó CALIDAD: Medidas Críticas.\n¿QUIEN HACE QA?: Operario.\n¿QUIEN LIBERA?: 👷 Inspector de Calidad.\n\nPRECIO CLIENTE: $0 — solo se registran tiempos y costos internos.\nLEAD TIME: Urgente'
+  },
 };
 
 const TIPO_KEYS = Object.keys(TIPOS_COT);
@@ -2588,8 +2594,484 @@ function wizTab(prefix, idx){
     .forEach((s,i)=> s.style.display = i===idx ? '' : 'none');
 }
 
-// Alias específico para el wizard de ítems
-function wizItemTab(idx){ wizTab('wiz-item', idx); }
+// ── ITEM WIZARD — footer dinámico + navegación completa ────────
+const ITEM_WIZ_LAST_STEP = 5;
+
+function itemFooterHtml(idx, it, isNew){
+  let html = `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>`;
+  if(idx > 0) html += `<button class="btn btn-ghost" onclick="wizItemTab(${idx-1})">← Anterior</button>`;
+  if(idx < ITEM_WIZ_LAST_STEP){
+    html += `<button class="btn btn-primary" onclick="wizItemTab(${idx+1})">Siguiente →</button>`;
+  } else {
+    html += `<button class="btn btn-primary" onclick="saveItem('${it.ID_ITEM||''}','${it.COTIZACION||it.ID_PEDIDO||''}')">
+       ${isNew ? '✓ Guardar Item' : '✓ Actualizar'}</button>`;
+  }
+  return html;
+}
+
+// Navega entre pasos del wizard de Ítem y actualiza el footer para que el
+// botón Guardar solo aparezca en el último paso (Archivos).
+function wizItemTab(idx){
+  wizTab('wiz-item', idx);
+  const mb   = document.getElementById('modal-body');
+  const it   = { ID_ITEM: mb?.dataset.itemExist||'', COTIZACION: mb?.dataset.itemCot||'', ID_PEDIDO: mb?.dataset.itemPedId||'' };
+  const isNew = mb?.dataset.itemNew === '1';
+  document.getElementById('modal-foot').innerHTML = itemFooterHtml(idx, it, isNew);
+  if(idx === 4) setTimeout(() => _checkMargenUrgencia(true), 80);
+  if(idx === 5) _itRegistrarPaste();
+  setTimeout(() => {
+    const step  = document.getElementById('wiz-item-' + idx);
+    const first = step?.querySelector('input,select');
+    if(first) first.focus();
+  }, 50);
+}
+
+// Enter dentro del wizard pasa al siguiente paso o guarda en el último
+document.addEventListener('keydown', e => {
+  if(e.key !== 'Enter') return;
+  const t = e.target;
+  if(!t || !t.closest || !t.closest('#wiz-item-tabs, [id^="wiz-item-"]')) return;
+  if(t.tagName === 'TEXTAREA') return;
+  e.preventDefault();
+  const activeIdx = [...document.querySelectorAll('#wiz-item-tabs .wiz-tab')].findIndex(x => x.classList.contains('active'));
+  if(activeIdx < 0) return;
+  if(activeIdx < ITEM_WIZ_LAST_STEP) wizItemTab(activeIdx + 1);
+  else document.querySelector('#modal-foot .btn-primary')?.click();
+});
+
+// ── Selección de Material desde lista ──────────────────────────
+function onSelectMat(idx){
+  const txt  = document.getElementById('mat'+idx+'-text');
+  const hid  = document.getElementById('mat'+idx);
+  const val  = txt?.value||'';
+  // Buscar el material en DB
+  const mat  = (DB.materiales||[]).find(m => (m.MATERIAL||'').toLowerCase() === val.toLowerCase());
+  if(hid) hid.value = mat ? (mat.MATERIAL||val) : val;
+  const extra   = document.getElementById('mat'+idx+'-extra');
+  const especial = document.getElementById('mat'+idx+'-especial');
+  if(val.toUpperCase() === 'ESPECIAL'){
+    if(hid) hid.value = 'ESPECIAL';
+    toggleMatEspecial(idx);
+    return;
+  }
+  if(especial) especial.style.display = 'none';
+  if(!mat){ if(extra) extra.style.display = 'none'; return; }
+  if(extra) extra.style.display = 'block';
+  const s = (id, v) => { const e = document.getElementById(id); if(e) e.textContent = v; };
+  s('mat'+idx+'-dens', mat['Densidad g/mm3']||'—');
+  s('mat'+idx+'-pkg',  '$'+Number(mat['PRECIO KG']||0).toLocaleString('es-CO'));
+  calcCostMat(idx);
+}
+
+// ── Selección de Servicio Externo ───────────────────────────────
+function onSelectSvc(idx){
+  const txt = document.getElementById('svc'+idx+'-text');
+  const hid = document.getElementById('svc'+idx);
+  const val = txt?.value||'';
+  const svc = (DB.servicios||[]).find(s => {
+    const nm = s.SERVICIO_EXTERNO ?? s['SERVICIO EXTERNO'] ?? s.NOMBRE ?? '';
+    return nm.toLowerCase() === val.toLowerCase();
+  });
+  if(hid) hid.value = val;
+  const extra = document.getElementById('svc'+idx+'-extra');
+  if(!svc){ if(extra) extra.style.display = 'none'; return; }
+  if(extra) extra.style.display = 'block';
+  const costoKg  = Number(svc.COSTO_KG ?? svc['COSTO KG'] ?? svc.PRECIO ?? 0);
+  const costo2   = Number(svc.COSTO_MENOR_2KG ?? svc['COSTO <= 2 KG'] ?? 0);
+  const costo10  = Number(svc.COSTO_MENOR_10KG ?? svc['COSTO <= 10 KG'] ?? 0);
+  const s = (id, v) => { const e = document.getElementById(id); if(e) e.textContent = v; };
+  s('svc'+idx+'-dias', svc.DIAS||'—');
+  s('svc'+idx+'-pkg',  costoKg ? '$'+costoKg.toLocaleString('es-CO') : '—');
+  s('svc'+idx+'-p2',   costo2  ? '$'+costo2.toLocaleString('es-CO')  : '—');
+  s('svc'+idx+'-p10',  costo10 ? '$'+costo10.toLocaleString('es-CO') : '—');
+  const diasEl = document.getElementById('svc'+idx+'d');
+  if(diasEl && !Number(diasEl.value) && svc.DIAS) diasEl.value = svc.DIAS;
+  const costEl = document.getElementById('svc'+idx+'c');
+  if(costEl && !Number(costEl.value)){
+    const base = costo2 || costoKg;
+    if(base) costEl.value = base;
+  }
+  recalcItem();
+}
+
+// ── Material ESPECIAL: toggle bloque precio manual ──────────────
+function toggleMatEspecial(idx){
+  const sel      = document.getElementById('mat'+idx);
+  const txtEl    = document.getElementById('mat'+idx+'-text');
+  const val      = sel?.value || txtEl?.value || '';
+  const esEsp    = val.toUpperCase() === 'ESPECIAL';
+  const espBlock = document.getElementById('mat'+idx+'-especial');
+  const normBlock = document.getElementById('mat'+idx+'-extra');
+  if(espBlock)  espBlock.style.display  = esEsp ? '' : 'none';
+  if(normBlock) normBlock.style.display = (val && !esEsp) ? 'block' : 'none';
+  if(esEsp && sel) sel.value = 'ESPECIAL';
+  if(esEsp) syncMatEspecial(idx);
+}
+
+// ── Pegar imagen desde portapapeles usando Clipboard API ───────
+async function _itPegarPortapapeles(kind) {
+  const statId = kind === 'imagen' ? 'it-img-status' : 'it-plan-status';
+  const stat = document.getElementById(statId);
+  try {
+    if (!navigator.clipboard || !navigator.clipboard.read) {
+      // Fallback: forzar foco y esperar Ctrl+V del usuario
+      if (stat) stat.textContent = '⌨️ Presiona Ctrl+V ahora para pegar la imagen';
+      // Registrar un paste listener temporal muy visible
+      const handler = async (e) => {
+        const items = (e.clipboardData || e.originalEvent?.clipboardData)?.items;
+        if (!items) return;
+        for (const item of items) {
+          if (item.type.startsWith('image/')) {
+            e.preventDefault();
+            const file = item.getAsFile();
+            if (file) {
+              _itSetFile(file, kind);
+              if (stat) stat.textContent = '✅ Imagen capturada — guardará al presionar Guardar';
+            }
+            break;
+          }
+        }
+        document.removeEventListener('paste', handler);
+      };
+      document.addEventListener('paste', handler);
+      // Auto-limpiar si no pega en 10s
+      setTimeout(() => {
+        document.removeEventListener('paste', handler);
+        if (stat && stat.textContent.includes('Presiona')) stat.textContent = '';
+      }, 10000);
+      return;
+    }
+    // Clipboard API disponible (Chrome/Edge)
+    if (stat) stat.textContent = '⏳ Leyendo portapapeles...';
+    const items = await navigator.clipboard.read();
+    let found = false;
+    for (const item of items) {
+      const imgType = item.types.find(t => t.startsWith('image/'));
+      if (imgType) {
+        const blob = await item.getType(imgType);
+        const ext = imgType.split('/')[1] || 'png';
+        const file = new File([blob], 'imagen_pegada.' + ext, { type: imgType });
+        _itSetFile(file, kind);
+        if (stat) stat.textContent = '✅ Imagen capturada — guardará al presionar Guardar';
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      if (stat) stat.textContent = '⚠️ No hay imagen en el portapapeles. Copia una imagen primero.';
+      setTimeout(() => { if (stat) stat.textContent = ''; }, 4000);
+    }
+  } catch (e) {
+    // El usuario rechazó el permiso o no hay nada — fallback a Ctrl+V
+    if (stat) stat.textContent = '⌨️ Permiso denegado. Presiona Ctrl+V para pegar la imagen';
+    const handler = async (ev) => {
+      const items = (ev.clipboardData || ev.originalEvent?.clipboardData)?.items;
+      if (!items) return;
+      for (const item of items) {
+        if (item.type.startsWith('image/')) {
+          ev.preventDefault();
+          const file = item.getAsFile();
+          if (file) {
+            _itSetFile(file, kind);
+            if (stat) stat.textContent = '✅ Imagen capturada';
+          }
+          break;
+        }
+      }
+      document.removeEventListener('paste', handler);
+    };
+    document.addEventListener('paste', handler);
+    setTimeout(() => {
+      document.removeEventListener('paste', handler);
+      if (stat && stat.textContent.includes('Presiona')) stat.textContent = '';
+    }, 10000);
+  }
+}
+
+// ── Paste handler para archivos del ítem (pestaña Archivos) ────
+function _itRegistrarPaste(){
+  if(window._itPasteHandler) document.removeEventListener('paste', window._itPasteHandler);
+  window._itPasteHandler = async (e) => {
+    const items = (e.clipboardData || e.originalEvent?.clipboardData)?.items;
+    if(!items) return;
+    for(const item of items){
+      if(item.type.startsWith('image/')){
+        e.preventDefault();
+        const file = item.getAsFile();
+        if(file) _itSetFile(file, 'imagen');
+        break;
+      }
+    }
+  };
+  document.addEventListener('paste', window._itPasteHandler);
+}
+
+// Limpiar paste handler al cerrar modal
+(()=>{
+  const _orig = window.closeModal;
+  window.closeModal = function(e){
+    if(window._itPasteHandler){
+      document.removeEventListener('paste', window._itPasteHandler);
+      window._itPasteHandler = null;
+    }
+    window._itPendingImg  = null;
+    window._itPendingPlan = null;
+    if(_orig) _orig(e);
+  };
+})();
+
+// ── Subir archivos pendientes antes de guardar el ítem ─────────
+async function _itSubirArchivosPendientes(cotId){
+  const mbData = document.getElementById('modal-body')?.dataset;
+  const refId  = mbData?.itemExist || cotId || 'item_'+Date.now();
+  let imgUrl  = document.getElementById('it-img-url')?.value  || '';
+  let imgNom  = document.getElementById('it-img-nom')?.value  || '';
+  let planUrl = document.getElementById('it-plan-url')?.value || '';
+  let planNom = document.getElementById('it-plan-nom')?.value || '';
+  if(window._itPendingImg){
+    try{
+      const stat = document.getElementById('it-img-status');
+      if(stat) stat.textContent = '⏳ Subiendo imagen...';
+      const { url } = await uploadToImgbb(window._itPendingImg);
+      imgUrl = url; imgNom = window._itPendingImg.name;
+      if(stat) stat.textContent = '✅ Imagen subida';
+      window._itPendingImg = null;
+    }catch(e){ toast('⚠️ No se pudo subir la imagen: '+e.message,'error'); }
+  }
+  if(window._itPendingPlan){
+    try{
+      const stat = document.getElementById('it-plan-status');
+      if(stat) stat.textContent = '⏳ Subiendo plano a Drive...';
+      const base64 = await new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload  = () => res(r.result.split(',')[1]);
+        r.onerror = () => rej(new Error('Error leyendo el archivo'));
+        r.readAsDataURL(window._itPendingPlan);
+      });
+      const result = await POST_ARCH('uploadFile',{
+        base64, mimeType: window._itPendingPlan.type||'application/octet-stream',
+        fileName: window._itPendingPlan.name, idqr: String(refId),
+      });
+      planUrl = result.url; planNom = window._itPendingPlan.name;
+      if(stat) stat.textContent = '✅ Plano subido a Drive';
+      window._itPendingPlan = null;
+    }catch(e){ toast('⚠️ No se pudo subir el plano: '+e.message,'error'); }
+  }
+  return { imgUrl, imgNom, planUrl, planNom };
+}
+
+// ── renderDescImages: muestra thumbs de imágenes incrustadas ───
+function renderDescImages(){
+  const el = document.getElementById('i4');
+  if(!el) return;
+  // Las imágenes ya están inline en el contenteditable — nada extra que hacer
+}
+
+// ── GUARDAR ÍTEM ───────────────────────────────────────────────
+async function saveItem(exist, cotId){
+  const cant = gn('i3') || 1;
+
+  // Materiales (hasta 5)
+  const matRows = [];
+  document.querySelectorAll('.mat-row').forEach((_, i) => {
+    const hid = document.getElementById('mat'+i);
+    const matVal = hid?.value || '';
+    const esEspecial = matVal === 'ESPECIAL';
+    if(esEspecial){
+      matRows.push({
+        nombre:'ESPECIAL', geo:'', diametro:0, espesor:0, largo:0, ancho:0, volumen:0,
+        costo:  Number(document.getElementById('mat'+i+'costesp')?.value||0),
+        cantTotal: Number(document.getElementById('mat'+i+'qtyesp')?.value||0),
+        densidad:0, peso:0, esEspecial:true,
+        descEsp: document.getElementById('mat'+i+'descesp')?.value||'',
+        costEsp: Number(document.getElementById('mat'+i+'costesp')?.value||0),
+      }); return;
+    }
+    const matInfo = matVal ? (DB.materiales||[]).find(m => String(m.MATERIAL||'') === String(matVal)) : null;
+    const geo   = document.getElementById('geo'+i+'val')?.value || 'Cilindro';
+    const dim1  = Number(document.getElementById('mat'+i+'dia')?.value || 0);
+    const largo = Number(document.getElementById('mat'+i+'lar')?.value || 0);
+    const ancho = Number(document.getElementById('mat'+i+'anc')?.value || 0);
+    let volMM3 = 0;
+    if(geo === 'Cilindro'){ const r = dim1/2; volMM3 = Math.PI*r*r*largo; }
+    else { volMM3 = dim1*largo*ancho; }
+    const volTotal = volMM3 * cant;
+    matRows.push({
+      nombre: matVal||'', geo, diametro: geo==='Cilindro'?dim1:0, espesor: geo==='Platina'?dim1:0,
+      largo, ancho, volumen: Math.round(volTotal), peso:0,
+      costo: Number(document.getElementById('mat'+i+'cost')?.value||0),
+      cantTotal: (()=>{ const el=document.getElementById('mat'+i+'qty'); return el?parseFloat(el.textContent)||0:0; })(),
+      densidad: Number(matInfo?.['Densidad g/mm3']||0), esEspecial:false, descEsp:'', costEsp:0,
+    });
+  });
+  matRows.forEach(m => { if(!m.esEspecial) m.peso = Number((m.densidad*m.volumen/1000).toFixed(4)); });
+
+  // Servicios externos (hasta 3)
+  const svcRows = [];
+  document.querySelectorAll('.svc-row').forEach((_, i) => {
+    const hid = document.getElementById('svc'+i);
+    svcRows.push({
+      nombre: hid?.value||'',
+      dias:   Number(document.getElementById('svc'+i+'d')?.value||0),
+      costo:  Number(document.getElementById('svc'+i+'c')?.value||0),
+      dureza: document.getElementById('svc'+i+'dur')?.value||'',
+      desc:   document.getElementById('svc'+i+'desc')?.value||'',
+    });
+  });
+
+  // Procesos de maquinado (hasta 10)
+  const prcRows = [];
+  document.querySelectorAll('.prc-row').forEach((_, i) => {
+    const hid = document.getElementById('prc'+i);
+    const nombrePrc = hid?.value || '';
+    const extra = document.getElementById('prc'+i+'-extra');
+    let tarifa = Number(extra?.dataset?.tarifa||0);
+    if(!tarifa && nombrePrc){
+      const prcDB = (DB.procesos||[]).find(p => (p.PROCESO||p.NOMBRE_MAQUINA||'') === nombrePrc);
+      tarifa = Number(prcDB?.TARIFA_HR || prcDB?.['TARIFA / HR'] || prcDB?.COSTO_HORA || 0);
+    }
+    prcRows.push({
+      nombre: nombrePrc, tarifa,
+      tiempo: Number(document.getElementById('prc'+i+'t')?.value||0),
+      costo:  Number(document.getElementById('prc'+i+'cost')?.value||0),
+      diasSe: document.getElementById('prc'+i+'diasse')?.value||'',
+      descOtros: document.getElementById('prc'+i+'descotros')?.value||'',
+      esHilo: nombrePrc.toUpperCase() === 'EROSIONADORA DE HILO',
+      peri:   Number(document.getElementById('prc'+i+'peri')?.value||0),
+      esp:    Number(document.getElementById('prc'+i+'esp')?.value||0),
+      matHilo: document.getElementById('prc'+i+'matval')?.value||'',
+      costoManual: Number(document.getElementById('prc'+i+'-manual')?.value||0),
+      modoManual:  document.getElementById('prc'+i+'-modo')?.value||'unidad',
+    });
+  });
+
+  const precioUnit = Number(document.getElementById('ipunit')?.value||0);
+  const cotRef = (DB.cotizaciones||[]).find(x => String(x.COTIZACION)===String(cotId) || String(x.ID_PEDIDO)===String(cotId));
+
+  const data = {
+    ID_ITEM:   exist || undefined,
+    ID_PEDIDO: cotRef?.ID_PEDIDO || cotId || '',
+    COTIZACION: cotRef?.COTIZACION || cotRef?.ID_COT || cotId || '',
+    TIPO:   cotRef?.TIPO||'', ASESOR: cotRef?.ASESOR||'',
+    'DESCRIPCION DEL PROYECTO': cotRef?.['DESCRIPCION DEL PROYECTO']||'',
+    EMPRESA: cotRef?.EMPRESA || cotRef?.Empresa || '',
+    CIUDAD:  cotRef?.CIUDAD||'',
+    'FECHA EMISION COT.': cotRef?.['FECHA EMISION COT.']||'',
+    'FECHA ENTREGA PACTADA': cotRef?.['FECHA ENTREGA PACTADA']||'',
+    ITEM:  gn('i2'),
+    'COT-ITEM': (cotId||'')+'-'+gn('i2'),
+    UNIDADES: cant,
+    'DESCRIPCION ITEM': richGet('i4'),
+    IMAGENES_DESCRIPCION: '',
+    DISEÑO: gv('idis'),
+    'HORAS DISEÑO (Horas)': gn('ihrdis'),
+    'COSTO HORAS DISEÑO (costo total)': gn('icdis'),
+    'COSTO FLETE (Costo total)': gn('iflete'),
+    MinutosManual: gn('imm'),
+    'MARGEN (%)': gn('imargen'),
+    'PRECIO UNITARIO': precioUnit,
+    'PRECIO X ITEM':   precioUnit * cant,
+    'PRECIO SIN IVA':  precioUnit,
+    'COSTO UNITARIO':  Number(document.getElementById('i5')?.value||0),
+    'COSTO TOTAL':     Number(document.getElementById('i5')?.value||0) * (cant||1),
+    ITEM_SALT:'', MATE_SALT:'', seleccionar:'', PLANO:'',
+  };
+
+  // Materiales 1..5 → columnas Sheet
+  for(let n = 1; n <= 5; n++){
+    const m = matRows[n-1]||{nombre:'',geo:'',diametro:0,espesor:0,largo:0,ancho:0,volumen:0,peso:0,costo:0,cantTotal:0,esEspecial:false,descEsp:'',costEsp:0};
+    const geomKey = n===1 ? 'GEOMETRIA 1' : `GEOMETRIA ${n} (mm)`;
+    data[`MATERIAL ${n}`]              = m.nombre||'';
+    data[geomKey]                      = m.geo||'';
+    data[`DIAMETRO ${n} (mm)`]         = m.diametro||0;
+    data[`LARGO ${n} (mm)`]            = m.largo||0;
+    data[`ANCHO ${n} (mm)`]            = m.ancho||0;
+    data[`ESPESOR ${n} (mm)`]          = m.espesor||0;
+    data[`VOLUMEN MAT ${n} (mm³)`]     = m.volumen||0;
+    data[`PESO MAT ${n} (kg)`]         = m.peso||0;
+    data[`COSTO MAT ${n}`]             = m.costo||0;
+    data[`COSTO MAT ${n} ESP`]         = m.esEspecial ? (m.costEsp||m.costo||0) : 0;
+    data[`DESCRIPCION MAT ESP ${n}`]   = m.esEspecial ? (m.descEsp||'') : '';
+    data[`CANTIDAD TOTAL MATERIAL ${n}`] = m.cantTotal||0;
+  }
+
+  // Servicios 1..3
+  for(let n = 1; n <= 3; n++){
+    const s = svcRows[n-1]||{nombre:'',dias:0,costo:0,dureza:'',desc:''};
+    data[`SERVICIO EXTERNO ${n}`]                  = s.nombre||'';
+    data[`DIAS SERVICIO E ${n}`]                   = s.dias||0;
+    data[`COSTO SERVICIO E ${n} (costo total)`]    = s.costo||0;
+    data[`DUREZA ${n}`]                            = s.dureza||'';
+    data[`DESCRIPCION OTROS ${n}`]                 = s.desc||'';
+  }
+
+  // Procesos 1..10
+  for(let n = 1; n <= 10; n++){
+    const p = prcRows[n-1]||{nombre:'',tarifa:0,tiempo:0,costo:0,diasSe:'',descOtros:''};
+    data[`PROCESO ${n}`]            = p.nombre||'';
+    data[`TARIFA PRO ${n}`]         = p.tarifa||0;
+    data[`TIEMPO PRO ${n} (horas)`] = Number(((p.tiempo||0)*cant).toFixed(4));
+    data[`COSTO PRO ${n}`]          = p.costo||0;
+    data[`DIAS SE ${n}`]            = p.diasSe||'';
+    data[`DESCRIPCION OTROS P${n}`] = p.descOtros||'';
+    data['RUTA_MQ'+n]               = p.nombre||'';
+  }
+
+  // Hilo: columnas globales del item
+  const hiloRow = [...prcRows].reverse().find(p => p.esHilo && (p.peri||p.esp));
+  data['Perimetro'] = hiloRow?.peri || 0;
+  data['Espesor']   = hiloRow?.esp  || 0;
+  data['Material']  = hiloRow?.matHilo || '';
+
+  // Subir archivos pendientes
+  try{
+    const { imgUrl, imgNom, planUrl, planNom } = await _itSubirArchivosPendientes(cotId);
+    if(imgUrl)  { data.IMAGEN_URL = imgUrl;  data.IMAGEN_NOMBRE = imgNom; }
+    if(planUrl) { data.PLANO_URL  = planUrl; data.PLANO_NOMBRE  = planNom; }
+  }catch(e){ console.warn('_itSubirArchivosPendientes:', e); }
+
+  // Mutación optimista local
+  if(!DB.items || !DB.items.length) DB.items = [];
+  if(exist){
+    const ix = DB.items.findIndex(x => String(x.ID_ITEM) === String(exist));
+    if(ix >= 0) DB.items[ix] = {...DB.items[ix], ...data};
+    else DB.items.push(data);
+  } else {
+    DB.items.push({...data, ID_ITEM:'tmp_'+Date.now()});
+  }
+
+  toast(exist ? '✅ Ítem actualizado' : '✅ Ítem creado');
+  closeModal();
+
+  // Persistir en GAS
+  let saved = null;
+  if(!exist){
+    try{ saved = await POST('createItem', data); }
+    catch(e){ toast('❌ Error guardando ítem: '+e.message, 'error'); return; }
+  } else {
+    POST_BG('updateItem', data);
+    saved = { ok: true };
+  }
+
+  try{
+    if(!DB.items || !DB.items.length) DB.items = [];
+    if(exist){
+      const idx = DB.items.findIndex(x => String(x.ID_ITEM) === String(exist));
+      if(idx >= 0) DB.items[idx] = {...DB.items[idx], ...data};
+      else DB.items.push(data);
+    } else {
+      const newId = (saved && (saved.ID_ITEM || saved.id)) || data.ID_ITEM || ('tmp_'+Date.now());
+      DB.items.push({...data, ID_ITEM: newId});
+    }
+    if(cotId) await recalcularTotalesCot(cotId);
+    if(cotId) detailCot(cotId);
+    else items();
+    setTimeout(async () => {
+      try{ DB.items = await GET('getItems','',{rango:RANGO_STATE.elementos||'1m'}); }
+      catch(e){ console.warn('Sync bg items:', e); }
+    }, 2000);
+  }catch(e){ toast(e.message, 'error'); }
+}
 
 // ── ON TIPO COT ───────────────────────────────────────────────────
 // Actualiza el bloque de descripción cuando cambia el tipo en formCot
@@ -4196,6 +4678,401 @@ async function items(){
     updateFilterCount('items', sorted.length, all.length);
   }catch(e){setContent(`<div class="empty"><div class="empty-icon">⚠️</div><p>${e.message}</p></div>`);}
 }
+// ═══════════════════════════════════════════════════════════════
+// VER OP INLINE — muestra resumen de la OP dentro del panel del ítem
+// ═══════════════════════════════════════════════════════════════
+function itemVerOPInline(idqr){
+  let op = (DB.produccion||[]).find(x=>String(x.IDQR)===String(idqr));
+  if(!op) op = (DB.produccion||[]).find(x=>String(x.OP)===String(idqr));
+  if(!op){ toast('OP no encontrada','error'); return; }
+
+  // Toggle: si ya está abierto lo cierra
+  const existing = document.getElementById('op-inline-panel');
+  if(existing){ existing.remove(); return; }
+
+  const pct  = Number(op['%AVANCE']||0);
+  const est  = op.ESTADO||'—';
+  const ITEM_STEPS = [
+    {label:'Pendiente MP', key:'PENDIENTE MP'},
+    {label:'En Proceso',   key:'EN PROCESO'},
+    {label:'Terminado',    key:'TERMINADO'},
+    {label:'Entregado',    key:'ENTREGADO'},
+  ];
+  const stepIdx = ITEM_STEPS.findIndex(s=>s.key===est);
+
+  // Rutas de maquinado
+  const rutas = [];
+  for(let n=1;n<=10;n++){
+    const r=op['RUTA MQ'+n]||op['RUTA_MQ'+n]||'';
+    if(r) rutas.push(r);
+  }
+
+  // Materiales desde el ítem vinculado
+  const itVinc = (DB.items||[]).find(x=>
+    String(x.COTIZACION)===String(op.COT) && String(x.ITEM)===String(op.ITEM)
+  );
+  const mats = [];
+  for(let n=1;n<=5;n++){
+    const nm = itVinc?.['MATERIAL '+n]||'';
+    if(nm) mats.push(nm + (itVinc?.['PESO MAT '+n+' (kg)']?' · '+Number(itVinc['PESO MAT '+n+' (kg)']).toFixed(2)+'kg':''));
+  }
+  const svcs = [];
+  for(let n=1;n<=3;n++){
+    const nm = itVinc?.['SERVICIO EXTERNO '+n]||'';
+    if(nm) svcs.push(nm);
+  }
+
+  const fechaP = op['FECHA PACTADA']||'';
+  const hoy=new Date(); hoy.setHours(0,0,0,0);
+  let diasR=null, colorP='var(--muted)';
+  if(fechaP){
+    const fp=new Date(fechaP.includes('T')?fechaP:fechaP+'T00:00:00');
+    diasR=Math.round((fp-hoy)/86400000);
+    colorP=diasR<0?'var(--danger)':diasR<5?'var(--warn)':'var(--accent)';
+  }
+
+  const panel = document.createElement('div');
+  panel.id = 'op-inline-panel';
+  panel.style.cssText='background:var(--card2);border-radius:14px;padding:16px;margin:14px 0 4px;border:1.5px solid var(--accent);animation:fadeIn .18s ease';
+
+  panel.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div>
+        <div style="font-size:16px;font-weight:800;color:var(--accent)">OP-${op.OP||idqr}</div>
+        <div style="font-size:11px;color:var(--muted)">${op.DESCRIPCION||op['DESCRIPCION ITEM']||''}</div>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center">
+        ${bEst(est)}
+        <button onclick="document.getElementById('op-inline-panel').remove()"
+          style="background:var(--card);border:1px solid var(--border);border-radius:8px;width:28px;height:28px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center">✕</button>
+      </div>
+    </div>
+
+    <!-- Mini timeline -->
+    <div style="display:flex;gap:4px;margin-bottom:14px;overflow-x:auto;padding-bottom:4px">
+      ${ITEM_STEPS.map((s,i)=>`
+        <div style="flex:1;min-width:64px;text-align:center">
+          <div style="width:24px;height:24px;border-radius:50%;margin:0 auto 3px;
+            background:${i<=stepIdx?'var(--accent)':'var(--border)'};
+            display:flex;align-items:center;justify-content:center;
+            font-size:11px;color:${i<=stepIdx?'#fff':'var(--muted)'}">
+            ${i<=stepIdx?'✓':i+1}
+          </div>
+          <div style="font-size:9px;color:${i<=stepIdx?'var(--accent)':'var(--muted)'};font-weight:${i===stepIdx?700:400};line-height:1.2">${s.label}</div>
+        </div>`).join('')}
+    </div>
+
+    <!-- Avance -->
+    <div style="margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:4px">
+        <span>Avance</span><span style="font-weight:700;color:var(--accent)">${pct}%</span>
+      </div>
+      <div style="height:6px;background:var(--border);border-radius:4px;overflow:hidden">
+        <div style="height:100%;width:${pct}%;background:var(--accent);border-radius:4px;transition:width .4s"></div>
+      </div>
+    </div>
+
+    <!-- Fechas -->
+    <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:11px;margin-bottom:12px">
+      ${op['FECHA INICIO']?`<span>🗓 Inicio: <strong>${fmtDate(op['FECHA INICIO'])}</strong></span>`:''}
+      ${fechaP?`<span>⏳ Pactada: <strong style="color:${colorP}">${fmtDate(fechaP)}${diasR!=null?' ('+diasTag(diasR)+')':''}</strong></span>`:''}
+      ${op.DISEÑADOR?`<span>✏️ <strong>${op.DISEÑADOR}</strong></span>`:''}
+    </div>
+
+    <!-- Rutas -->
+    ${rutas.length?`
+    <div style="margin-bottom:10px">
+      <div style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">⚙️ Ruta de Maquinado</div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px">
+        ${rutas.map((r,i)=>`<span style="background:var(--accent);color:#fff;border-radius:6px;padding:2px 8px;font-size:10px;font-weight:700">${i+1}. ${r}</span>`).join('')}
+      </div>
+    </div>`:''}
+
+    <!-- Materiales -->
+    ${mats.length?`
+    <div style="margin-bottom:10px">
+      <div style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">🧱 Materiales</div>
+      ${mats.map(m=>`<div style="font-size:11px;padding:2px 0">• ${m}</div>`).join('')}
+    </div>`:''}
+
+    <!-- Servicios -->
+    ${svcs.length?`
+    <div style="margin-bottom:10px">
+      <div style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">🛠 Servicios Externos</div>
+      ${svcs.map(s=>`<div style="font-size:11px;padding:2px 0">• ${s}</div>`).join('')}
+    </div>`:''}
+
+    <button class="btn btn-ghost btn-sm" style="width:100%;margin-top:4px" onclick="detailOP('${String(idqr).replace(/'/g,"\'")}')">
+      Ver OP completa ↗
+    </button>
+  `;
+
+  // Insertar después del grid de acciones
+  const grid = document.querySelector('.cot-action-grid');
+  if(grid) grid.after(panel);
+  else document.querySelector('.dp-body')?.prepend(panel);
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// GARANTÍA — crea OP tipo GR. Garantia desde un ítem existente
+// ═══════════════════════════════════════════════════════════════
+// ── Helpers de evidencia fotográfica para Garantía ─────────────
+window._garPendingImg = null;
+
+function garSetImagen(file){
+  if(!file) return;
+  window._garPendingImg = file;
+  const prev  = document.getElementById('gar-img-preview');
+  const thumb = document.getElementById('gar-img-thumb');
+  const name  = document.getElementById('gar-img-name');
+  const stat  = document.getElementById('gar-img-status');
+  const drop  = document.getElementById('gar-img-drop');
+  if(thumb){ thumb.src = URL.createObjectURL(file); }
+  if(name)  name.textContent  = `📎 ${file.name} (${(file.size/1024).toFixed(1)} KB)`;
+  if(prev)  prev.style.display = '';
+  if(stat)  stat.textContent  = '✅ Imagen lista — se subirá al confirmar';
+  if(drop)  drop.style.borderColor = 'var(--accent)';
+}
+
+async function garPegarImagen(){
+  const stat = document.getElementById('gar-img-status');
+  try{
+    if(!navigator.clipboard?.read){
+      if(stat) stat.textContent='⌨️ Presiona Ctrl+V para pegar la imagen';
+      const h=(e)=>{
+        const items=(e.clipboardData||e.originalEvent?.clipboardData)?.items;
+        if(!items) return;
+        for(const item of items){
+          if(item.type.startsWith('image/')){
+            e.preventDefault();
+            garSetImagen(item.getAsFile());
+            break;
+          }
+        }
+        document.removeEventListener('paste',h);
+      };
+      document.addEventListener('paste',h);
+      setTimeout(()=>document.removeEventListener('paste',h),10000);
+      return;
+    }
+    if(stat) stat.textContent='⏳ Leyendo portapapeles...';
+    const items = await navigator.clipboard.read();
+    let found=false;
+    for(const item of items){
+      const imgType=item.types.find(t=>t.startsWith('image/'));
+      if(imgType){
+        const blob=await item.getType(imgType);
+        const ext=imgType.split('/')[1]||'png';
+        garSetImagen(new File([blob],'evidencia.'+ext,{type:imgType}));
+        found=true; break;
+      }
+    }
+    if(!found){
+      if(stat) stat.textContent='⚠️ No hay imagen en el portapapeles';
+      setTimeout(()=>{ if(stat) stat.textContent=''; },3000);
+    }
+  }catch(e){
+    if(stat) stat.textContent='⌨️ Presiona Ctrl+V para pegar';
+    setTimeout(()=>{ if(stat && stat.textContent.includes('Presiona')) stat.textContent=''; },8000);
+  }
+}
+
+function garAbrirCamara(){
+  // En móvil: el input con capture="environment" abre la cámara directamente
+  const inp = document.getElementById('gar-img-file');
+  if(inp) inp.click();
+}
+
+function confirmarGarantia(itemId){
+  const it = (DB.items||[]).find(x=>String(x.ID_ITEM)===String(itemId));
+  if(!it){ toast('Ítem no encontrado','error'); return; }
+
+  // La OP original — se copia exactamente con la misma OP, COT e ITEM
+  const op = (DB.produccion||[]).find(x=>
+    String(x.COT)===String(it.COTIZACION) && String(x.ITEM)===String(it.ITEM)
+  );
+  if(!op){ toast('No se encontró la OP vinculada a este ítem','error'); return; }
+
+  openModal('🔴 Crear Garantía',`
+    <div style="background:rgba(220,38,38,.06);border:1.5px solid #dc2626;border-radius:12px;padding:16px;margin-bottom:16px">
+      <div style="font-size:13px;font-weight:800;color:#dc2626;margin-bottom:8px">⚠️ Confirmar Garantía</div>
+      <div style="font-size:12px;color:var(--text);line-height:1.7">
+        Se creará una fila de garantía en Control Producción copiando la
+        <strong>OP-${op.OP}</strong> · COT-${it.COTIZACION} · Ítem ${it.ITEM}<br>
+        <em style="color:var(--muted);font-size:11px">${it['DESCRIPCION ITEM']||'—'}</em>
+      </div>
+      <ul style="font-size:11px;color:var(--muted);margin-top:10px;padding-left:16px;line-height:2.2">
+        <li>✅ Misma OP, COT, Ítem y ruta de maquinado</li>
+        <li>✅ Se copian materiales, tiempos y servicios con sus costos</li>
+        <li>🔴 Tipo cambia a <strong>GR. Garantia</strong></li>
+        <li>🚫 <strong>Precio al cliente = $0</strong> (garantía sin cargo)</li>
+        <li>📋 Estado: <strong>PENDIENTE MP</strong> — inicia el flujo desde cero</li>
+      </ul>
+    </div>
+    <div class="form-grid">
+      <div class="field span2"><label>Causa / Observaciones de la garantía ★</label>
+        <textarea id="gar-obs" rows="3" placeholder="ej. Pieza fuera de tolerancia en diámetro, reproceso por falla en maquinado…"></textarea>
+      </div>
+      <div class="field"><label>Lead time (días)</label>
+        <input type="number" id="gar-lt" value="${op['DÍAS ENTREGA']||5}" min="1">
+      </div>
+      <div class="field"><label>Cant. unidades</label>
+        <input type="number" id="gar-cant" value="${it.UNIDADES||it.CANT||1}" min="1">
+      </div>
+      <div class="field span2">
+        <label>📷 Evidencia fotográfica <span style="color:var(--muted);font-size:10px">(opcional)</span></label>
+        <div id="gar-img-drop" style="
+          border:2px dashed var(--border);border-radius:10px;padding:12px;
+          text-align:center;background:var(--card2);transition:border-color .15s">
+          <div style="font-size:22px;margin-bottom:6px">📷</div>
+          <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:6px">
+            <button type="button" onclick="document.getElementById('gar-img-file').click()"
+              style="background:var(--accent);color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer">
+              📁 Seleccionar foto
+            </button>
+            <button type="button" onclick="garPegarImagen()"
+              style="background:var(--surface);color:var(--accent);border:1.5px solid var(--accent);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer">
+              📋 Pegar imagen
+            </button>
+            <button type="button" onclick="garAbrirCamara()"
+              style="background:var(--surface);color:var(--muted);border:1.5px solid var(--border);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer">
+              📸 Cámara
+            </button>
+          </div>
+          <div style="font-size:10px;color:var(--muted)">PNG, JPG — se sube a imgbb junto con la garantía</div>
+          <input type="file" id="gar-img-file" accept="image/*" capture="environment"
+            style="position:absolute;opacity:0;width:0;height:0"
+            onchange="garSetImagen(this.files[0])">
+        </div>
+        <div id="gar-img-status" style="font-size:11px;color:var(--muted);text-align:center;min-height:14px;margin-top:4px"></div>
+        <div id="gar-img-preview" style="display:none;margin-top:8px;text-align:center">
+          <img id="gar-img-thumb" style="max-width:100%;max-height:160px;border-radius:8px;border:1px solid var(--border);object-fit:contain">
+          <div style="font-size:11px;color:var(--muted);margin-top:4px" id="gar-img-name"></div>
+        </div>
+      </div>
+    </div>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+     <button class="btn btn-primary" style="background:#dc2626;border-color:#dc2626"
+       onclick="crearGarantia('${String(itemId).replace(/'/g,"\'")}','${String(op.IDQR||op.OP).replace(/'/g,"\'")}')">
+       🔴 Confirmar Garantía
+     </button>`
+  );
+}
+
+async function crearGarantia(itemId, opIdqr){
+  const it = (DB.items||[]).find(x=>String(x.ID_ITEM)===String(itemId));
+  if(!it){ toast('Ítem no encontrado','error'); return; }
+
+  // Buscar la OP original por IDQR o OP
+  let op = (DB.produccion||[]).find(x=>String(x.IDQR)===String(opIdqr));
+  if(!op) op = (DB.produccion||[]).find(x=>String(x.OP)===String(opIdqr));
+  if(!op){ toast('OP original no encontrada','error'); return; }
+
+  const obs  = document.getElementById('gar-obs')?.value?.trim();
+  const lt   = Number(document.getElementById('gar-lt')?.value||5);
+  const cant = Number(document.getElementById('gar-cant')?.value||1);
+  if(!obs){ toast('Describe la causa de la garantía','error'); return; }
+
+  const fi   = new Date().toISOString().slice(0,10);
+  const fp   = addDias(fi, lt);
+  const fep  = addDias(fp, -1);
+  const semana = getWeekNumber(new Date(fi));
+  const anio   = new Date(fi).getFullYear();
+
+  // Copiar la OP original completamente, solo cambiar los campos de garantía
+  const opRow = {
+    // ── Todo igual que la OP original ──────────────────────────
+    ...op,
+    // ── Campos que cambian para la garantía ─────────────────────
+    TIPO:        'GR',
+    CANT:        cant,
+    'PRECIO SIN IVA':    0,      // sin costo al cliente
+    'PRECIO X ITEM':     0,
+    // Fechas frescas — inicia desde hoy
+    'FECHA INICIO':               fi,
+    'FECHA PACTADA':              fp,
+    'FECHA ENTREGA PRODUCCION':   fep,
+    'DÍAS ENTREGA':               lt,
+    SEMANA:      semana,
+    AÑO:         anio,
+    // Descripción con tag [GARANTÍA]
+    DESCRIPCION: (op.DESCRIPCION||it['DESCRIPCION ITEM']||it.DESCRIPCION||'') + '  [GARANTÍA]',
+    // Observaciones
+    OBSERVACIONES: obs,
+    'OBSERVACIONES DE VALIDACIÓN': obs,
+    // Resetear estado — empieza desde cero
+    ESTADO:      'PENDIENTE MP',
+    'SEMAFORO AVANCE': 'EN PROCESO',
+    '%AVANCE':   0,
+    IDQR:        '',   // el GAS asignará uno nuevo
+    // Checklist vacío — debe recorrer todas las etapas de nuevo
+    'INGENIERIA Y PLANEACIÓN': 'FALSE',
+    'INGENIERIA Y PLANEACION FECHA': '',
+    'MP INSUMOS': 'FALSE',
+    'FECHA ENTREGA MP': '',
+    'SERVICIO EXTERNO': 'FALSE',
+    'FECHA ENTREGA SVC': '',
+    'ENTREGA DE PRODUCCIÓN': 'FALSE',
+    'FECHA ENTREGA PROD2': '',
+    CALIDAD: 'FALSE',
+    'FECHA CALIDAD': '',
+    LIBERACION: '',
+    REPROCESOS: '',
+    DESPACHO: 'FALSE',
+    'FECHA DE DESPACHO': '',
+    // Horas reales — a cero (es una nueva ejecución)
+    'BANCO R':0,'FRESADORA R':0,'TORNO R':0,'CENTRO DE MECANIZADO R':0,
+    'RECTIFICADORA PLANA R':0,'EDM R':0,'EROSIONADORA DE HILO R':0,
+    'SOLDADURA R':0,'TRATAMIENTO R':0,'INGENIERIA R':0,'TOTAL HRS R':0,
+    'BANCO Real':0,'FRESADORA Real':0,'TORNO Real':0,'CENTRO DE MECANIZADO Real':0,
+    'RECTIFICADORA PLANA Real':0,'EDM Real':0,'EROSIONADORA DE HILO Real':0,
+    'SOLDADURA Real':0,'TOTAL HRS Real':0,'DIFERENCIA HORAS REALES':0,
+    'HORAS RESTANTES':0,'HORAS RESTANTES NUMERO':0,'HORAS EN NUMERO':0,
+    // Porcentajes por máquina — a cero
+    'BANCO %':0,'FRESADORA %':0,'TORNO %':0,'CENTRO DE MECANIZADO %':0,
+    'RECTIFICADORA PLANA %':0,'EDM %':0,'EROSIONADORA DE HILO %':0,
+    'SOLDADURA %':0,'INGENIERIA %':0,
+  };
+
+  const btn = document.querySelector('#modal-foot .btn-primary');
+  if(btn){ btn.disabled=true; btn.textContent='⏳ Creando garantía…'; }
+
+  try{
+    // Subir evidencia fotográfica si hay una imagen pendiente
+    if(window._garPendingImg){
+      const stat = document.getElementById('gar-img-status');
+      if(stat) stat.textContent = '⏳ Subiendo evidencia a imgbb…';
+      try{
+        const { url } = await uploadToImgbb(window._garPendingImg);
+        opRow.IMAGEN_B64 = url;
+        opRow.REGISTRO_FOTOGRAFICO = url;
+        opRow.IMAGEN_NOMBRE = window._garPendingImg.name;
+        if(stat) stat.textContent = '✅ Evidencia subida';
+      }catch(eImg){
+        console.warn('No se pudo subir la evidencia:', eImg);
+        // No bloquear la creación si falla la imagen
+        toast('⚠️ La garantía se crea sin evidencia (error al subir imagen)','error');
+      }
+      window._garPendingImg = null;
+    }
+
+    await POST('bulkCreateOP', { rows:[opRow], itemUpdates:[], cotUpdate:null });
+
+    // Mutación optimista en cache local
+    if(!DB.produccion) DB.produccion=[];
+    DB.produccion.push({...opRow, IDQR:'gar_'+Date.now()});
+
+    toast(`✅ Garantía creada — OP-${op.OP} · ${it['DESCRIPCION ITEM']||''} [GARANTÍA]`,'ok');
+    closeModal();
+    detailItem(itemId);
+  }catch(e){
+    toast('❌ '+e.message,'error');
+    if(btn){ btn.disabled=false; btn.textContent='🔴 Confirmar Garantía'; }
+  }
+}
+
+
 function detailItem(id){
   const it = (DB.items || []).find(x => String(x.ID_ITEM) === String(id));
   if(!it) return;
@@ -4342,8 +5219,8 @@ function detailItem(id){
         <span class="cot-action-lbl">Ver Cotización</span>
       </button>`:''}
       ${op?`
-      <button class="cot-action-btn" onclick="detailOP('${String(op.IDQR||op.OP).replace(/'/g,"\\'")}')">
-        <span class="cot-action-ic" style="background:#2e7d32">🏭</span>
+      <button class="cot-action-btn" onclick="itemVerOPInline('${String(op.IDQR||op.OP).replace(/'/g,"\\'")}')" id="btn-ver-op-${safeId}">
+        <span class="cot-action-ic" style="background:#1565c0">🏭</span>
         <span class="cot-action-lbl">Ver OP</span>
       </button>` : cotAprobada ? `
       <button class="cot-action-btn" onclick="modalCrearOP('${safeCot}','${safeId}')">
@@ -4353,6 +5230,11 @@ function detailItem(id){
       <button class="cot-action-btn" style="opacity:.4;cursor:not-allowed" onclick="toast('Aprueba la cotización antes de crear la OP','error')" title="La cotización debe estar APROBADA">
         <span class="cot-action-ic" style="background:#555">🏭</span>
         <span class="cot-action-lbl">Crear OP</span>
+      </button>` : ''}
+      ${op?`
+      <button class="cot-action-btn" onclick="confirmarGarantia('${safeId}')">
+        <span class="cot-action-ic" style="background:#dc2626">🔴</span>
+        <span class="cot-action-lbl">Garantía</span>
       </button>` : ''}
       ${cot?`
       <button class="cot-action-btn" onclick="qaFmea('${safeCot}')">
@@ -4716,16 +5598,24 @@ const svcOpts = (DB.servicios || []).map(s => {
           <div style="font-size:11px;color:var(--muted);margin-top:4px" id="it-img-name">${it.IMAGEN_NOMBRE||''}</div>
         </div>
         <div id="it-img-drop" style="
-          border:2px dashed var(--border);border-radius:12px;padding:20px 14px;
-          text-align:center;cursor:pointer;transition:border-color .15s,background .15s;
+          border:2px dashed var(--border);border-radius:12px;padding:14px;
+          text-align:center;transition:border-color .15s,background .15s;
           background:var(--card2)"
-          onclick="document.getElementById('it-img-input').click()"
           ondragover="event.preventDefault();this.style.borderColor='var(--accent)';this.style.background='rgba(37,99,235,.05)'"
           ondragleave="this.style.borderColor='';this.style.background='var(--card2)'"
           ondrop="event.preventDefault();this.style.borderColor='';this.style.background='var(--card2)';_itHandleDrop(event,'imagen')">
-          <div style="font-size:26px;margin-bottom:4px">🖼️</div>
-          <div style="font-size:13px;font-weight:600;color:var(--text)">Haz clic, arrastra o pega (Ctrl+V)</div>
-          <div style="font-size:11px;color:var(--muted);margin-top:3px">PNG, JPG, WEBP — se sube a imgbb</div>
+          <div style="font-size:26px;margin-bottom:6px">🖼️</div>
+          <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:8px">
+            <button type="button" onclick="document.getElementById('it-img-input').click()"
+              style="background:var(--accent);color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer">
+              📁 Seleccionar archivo
+            </button>
+            <button type="button" onclick="_itPegarPortapapeles('imagen')"
+              style="background:var(--surface);color:var(--accent);border:1.5px solid var(--accent);border-radius:8px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer">
+              📋 Pegar imagen
+            </button>
+          </div>
+          <div style="font-size:11px;color:var(--muted)">o arrastra aquí · PNG, JPG, WEBP — se sube a imgbb</div>
           <input type="file" id="it-img-input" accept="image/*"
             style="position:absolute;opacity:0;width:0;height:0"
             onchange="_itSetFile(this.files[0],'imagen')">
@@ -4756,16 +5646,20 @@ const svcOpts = (DB.servicios || []).map(s => {
           </div>
         </div>
         <div id="it-plan-drop" style="
-          border:2px dashed var(--border);border-radius:12px;padding:20px 14px;
-          text-align:center;cursor:pointer;transition:border-color .15s,background .15s;
+          border:2px dashed var(--border);border-radius:12px;padding:14px;
+          text-align:center;transition:border-color .15s,background .15s;
           background:var(--card2)"
-          onclick="document.getElementById('it-plan-input').click()"
           ondragover="event.preventDefault();this.style.borderColor='var(--accent)';this.style.background='rgba(37,99,235,.05)'"
           ondragleave="this.style.borderColor='';this.style.background='var(--card2)'"
           ondrop="event.preventDefault();this.style.borderColor='';this.style.background='var(--card2)';_itHandleDrop(event,'plano')">
-          <div style="font-size:26px;margin-bottom:4px">📄</div>
-          <div style="font-size:13px;font-weight:600;color:var(--text)">Haz clic o arrastra el plano</div>
-          <div style="font-size:11px;color:var(--muted);margin-top:3px">PDF · DWG · DXF · STEP · SolidWorks · ZIP · cualquier tipo</div>
+          <div style="font-size:26px;margin-bottom:6px">📄</div>
+          <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:8px">
+            <button type="button" onclick="document.getElementById('it-plan-input').click()"
+              style="background:var(--accent);color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer">
+              📁 Seleccionar plano
+            </button>
+          </div>
+          <div style="font-size:11px;color:var(--muted)">o arrastra aquí · PDF · DWG · DXF · STEP · SolidWorks · ZIP · cualquier tipo</div>
           <input type="file" id="it-plan-input" accept="*/*"
             style="position:absolute;opacity:0;width:0;height:0"
             onchange="_itSetFile(this.files[0],'plano')">
@@ -4799,6 +5693,28 @@ const svcOpts = (DB.servicios || []).map(s => {
     if(_ipunit && _precioGuardado > 0 && !isNew){
       _ipunit._manual = true;
       _ipunit.value = _precioGuardado;
+    }
+    // Al editar ítem existente: proteger los costos de materiales guardados
+    // para que calcCostMat() no los sobreescriba al primer recalcItem()
+    if(!isNew){
+      for(let _mi = 0; _mi < 5; _mi++){
+        const _costEl = document.getElementById('mat'+_mi+'cost');
+        const _costoGuardado = Number(it['COSTO MAT '+(_mi+1)] ?? 0);
+        if(_costEl && _costoGuardado > 0){
+          _costEl._manual = true;
+          _costEl.value = _costoGuardado;
+        }
+        // También actualizar los displays de densidad/peso si el material está cargado
+        const _matVal = document.getElementById('mat'+_mi)?.value||'';
+        if(_matVal && _matVal !== 'ESPECIAL'){
+          const _matDB = (DB.materiales||[]).find(m=>m.MATERIAL===_matVal);
+          if(_matDB){
+            const _s = (id,v)=>{ const e=document.getElementById(id); if(e) e.textContent=v; };
+            _s('mat'+_mi+'-dens', (_matDB['Densidad g/mm3']||0).toString());
+            _s('mat'+_mi+'-pkg',  '$'+Number(_matDB['PRECIO KG']||0).toLocaleString('es-CO'));
+          }
+        }
+      }
     }
     // Limpiar archivos pendientes al abrir un modal nuevo
     window._itPendingImg  = null;
@@ -6182,28 +7098,34 @@ function qaFileModal(opId, kind){
           onclick="window.open('${existUrl}','_blank')">
       </div>` : ''}
       <div id="qa-drop-zone" style="
-        border:2px dashed var(--border);border-radius:12px;padding:24px 16px;
-        text-align:center;cursor:pointer;transition:border-color .15s,background .15s;
+        border:2px dashed var(--border);border-radius:12px;padding:16px 14px;
+        text-align:center;transition:border-color .15s,background .15s;
         background:var(--card2);position:relative;"
-        onclick="document.getElementById('qa-file-input').click()"
         ondragover="event.preventDefault();this.style.borderColor='var(--accent)';this.style.background='rgba(37,99,235,.05)'"
         ondragleave="this.style.borderColor='';this.style.background='var(--card2)'"
         ondrop="event.preventDefault();this.style.borderColor='';this.style.background='var(--card2)';qaHandleFileDrop(event,'${kind}')">
-        <div style="font-size:28px;margin-bottom:6px">${kind==='imagen'?'🖼️':'📄'}</div>
-        <div style="font-size:13px;font-weight:600;color:var(--text)">
-          ${kind==='imagen'
-            ? 'Haz clic, arrastra o pega una imagen (Ctrl+V)'
-            : 'Haz clic o arrastra el archivo'}
+        <div style="font-size:28px;margin-bottom:8px">${kind==='imagen'?'🖼️':'📄'}</div>
+        <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:10px">
+          <button type="button" onclick="document.getElementById('qa-file-input').click()"
+            style="background:var(--accent);color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer">
+            📁 ${kind==='imagen' ? 'Seleccionar imagen' : 'Seleccionar archivo'}
+          </button>
+          ${kind==='imagen' ? `
+          <button type="button" onclick="qaPegarPortapapeles()"
+            style="background:var(--surface);color:var(--accent);border:1.5px solid var(--accent);border-radius:8px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer">
+            📋 Pegar imagen
+          </button>` : ''}
         </div>
-        <div style="font-size:11px;color:var(--muted);margin-top:4px">
+        <div style="font-size:11px;color:var(--muted)">
           ${kind==='imagen'
-            ? 'PNG, JPG, WEBP — se sube a imgbb (sin límite de tamaño)'
-            : 'PDF · DWG · DXF · STEP · SolidWorks · ZIP · PNG · JPG… cualquier tipo'}
+            ? 'o arrastra aquí · PNG, JPG, WEBP — se sube a imgbb'
+            : 'o arrastra aquí · PDF · DWG · DXF · STEP · SolidWorks · ZIP · cualquier tipo'}
         </div>
         <input type="file" id="qa-file-input" accept="${cfg.accept}"
-          style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%"
+          style="position:absolute;opacity:0;width:0;height:0"
           onchange="qaPreviewFile(this,'${kind}')">
       </div>
+      <div id="qa-file-status" style="font-size:11px;color:var(--muted);text-align:center;min-height:16px;margin-top:4px"></div>
       <div id="qa-file-preview" style="display:none;border-radius:10px;overflow:hidden;border:1px solid var(--border);text-align:center">
         <img id="qa-preview-img" src="" alt="preview"
           style="max-width:100%;max-height:200px;object-fit:contain;display:block;margin:0 auto">
@@ -6235,6 +7157,40 @@ function qaFileModal(opId, kind){
       document.removeEventListener('paste', pasteHandler);
       if(origClose) origClose();
     };
+  }
+}
+
+// Pegar imagen de OP desde portapapeles con Clipboard API
+async function qaPegarPortapapeles(){
+  const stat = document.getElementById('qa-file-status');
+  try {
+    if(!navigator.clipboard || !navigator.clipboard.read){
+      if(stat) stat.textContent = '⌨️ Presiona Ctrl+V para pegar la imagen';
+      setTimeout(()=>{ if(stat && stat.textContent.includes('Presiona')) stat.textContent=''; }, 8000);
+      return;
+    }
+    if(stat) stat.textContent = '⏳ Leyendo portapapeles...';
+    const items = await navigator.clipboard.read();
+    let found = false;
+    for(const item of items){
+      const imgType = item.types.find(t => t.startsWith('image/'));
+      if(imgType){
+        const blob = await item.getType(imgType);
+        const ext = imgType.split('/')[1] || 'png';
+        const file = new File([blob], 'imagen_pegada.'+ext, { type: imgType });
+        qaSetPreviewFile(file, 'imagen');
+        if(stat) stat.textContent = '✅ Imagen pegada — presiona Guardar';
+        found = true;
+        break;
+      }
+    }
+    if(!found){
+      if(stat) stat.textContent = '⚠️ No hay imagen en el portapapeles. Copia una imagen primero.';
+      setTimeout(()=>{ if(stat) stat.textContent=''; }, 4000);
+    }
+  } catch(e) {
+    if(stat) stat.textContent = '⌨️ Permiso denegado. Presiona Ctrl+V para pegar';
+    setTimeout(()=>{ if(stat && stat.textContent.includes('Presiona')) stat.textContent=''; }, 8000);
   }
 }
 
@@ -7323,7 +8279,7 @@ function buildMatRow(idx, it){
         <div class="field"><label>Geometría</label>
           <div class="btn-group-row" id="geo${idx}-btns">
             ${['Cilindro','Platina'].map(g=>`<button type="button" class="btn-seg ${(m.geo||'Cilindro')===g?'active':''}"
-              onclick="selectSeg('geo${idx}-btns','${g}','geo${idx}val');toggleMatDims(${idx});calcCostMat(${idx})">${g}</button>`).join('')}
+              onclick="selectSeg('geo${idx}-btns','${g}','geo${idx}val');toggleMatDims(${idx});calcCostMat(${idx},true)">${g}</button>`).join('')}
           </div>
           <input type="hidden" id="geo${idx}val" value="${m.geo||'Cilindro'}">
         </div>
@@ -7331,7 +8287,7 @@ function buildMatRow(idx, it){
           <label id="mat${idx}-dim1-label">${m.geo==='Platina'?'Espesor / Alto (mm)':'Diámetro (mm)'}</label>
           <div class="spin-row">
             <button type="button" class="spin-btn" onclick="spinField('mat${idx}dia',-5)">−</button>
-            <input type="number" id="mat${idx}dia" value="${m.dim1||''}" placeholder="0" oninput="calcCostMat(${idx})">
+            <input type="number" id="mat${idx}dia" value="${m.dim1||''}" placeholder="0" oninput="calcCostMat(${idx},true)">
             <button type="button" class="spin-btn" onclick="spinField('mat${idx}dia',5)">+</button>
           </div>
         </div>
@@ -7339,7 +8295,7 @@ function buildMatRow(idx, it){
           <label>Largo (mm)</label>
           <div class="spin-row">
             <button type="button" class="spin-btn" onclick="spinField('mat${idx}lar',-5)">−</button>
-            <input type="number" id="mat${idx}lar" value="${m.lar||''}" placeholder="0" oninput="calcCostMat(${idx})">
+            <input type="number" id="mat${idx}lar" value="${m.lar||''}" placeholder="0" oninput="calcCostMat(${idx},true)">
             <button type="button" class="spin-btn" onclick="spinField('mat${idx}lar',5)">+</button>
           </div>
         </div>
@@ -7347,7 +8303,7 @@ function buildMatRow(idx, it){
           <label>Ancho (mm) — Platina</label>
           <div class="spin-row">
             <button type="button" class="spin-btn" onclick="spinField('mat${idx}anc',-5)">−</button>
-            <input type="number" id="mat${idx}anc" value="${m.anc||''}" placeholder="0" oninput="calcCostMat(${idx})">
+            <input type="number" id="mat${idx}anc" value="${m.anc||''}" placeholder="0" oninput="calcCostMat(${idx},true)">
             <button type="button" class="spin-btn" onclick="spinField('mat${idx}anc',5)">+</button>
           </div>
         </div>
@@ -7356,9 +8312,9 @@ function buildMatRow(idx, it){
           <div style="display:flex;align-items:center;gap:8px">
             <div class="money-row" style="flex:1">
               <span class="money-sign">$</span>
-              <input type="number" id="mat${idx}cost" value="${m.cost||0}" oninput="recalcItem()">
+              <input type="number" id="mat${idx}cost" value="${m.cost||0}" oninput="this._manual=true;recalcItem()">
             </div>
-            <button type="button" class="btn btn-ghost btn-sm" onclick="calcCostMat(${idx})">⟳</button>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="calcCostMat(${idx},true)">⟳ Recalc</button>
           </div>
         </div>
         <div class="field span2">
@@ -7679,9 +8635,14 @@ function addPrcRow(){
   document.getElementById('prc-rows').insertAdjacentHTML('beforeend',buildPrcRow(idx,{},prcOpts));
 }
 
-function calcCostMat(idx){
+function calcCostMat(idx, forzar=false){
   const sel=document.getElementById('mat'+idx);
   if(!sel||!sel.value||sel.value==='ESPECIAL') return;
+  // Si viene de oninput (cambio manual de dimensión), limpiar flag _manual
+  if(forzar){
+    const ce=document.getElementById('mat'+idx+'cost');
+    if(ce) ce._manual=false;
+  }
   // Leer densidad y precio/kg desde DB (input reemplazó al select con data-*)
   const matDB=(DB.materiales||[]).find(m=>m.MATERIAL===sel.value);
   const densidad=Number(matDB?.['Densidad g/mm3']||0);
@@ -7710,7 +8671,9 @@ function calcCostMat(idx){
   s('mat'+idx+'-peso', pesoKg.toFixed(4)+' kg');
   s('mat'+idx+'qty',   pesoKg.toFixed(4)+' kg');
   const costEl=document.getElementById('mat'+idx+'cost');
-  if(costEl) costEl.value=Math.round(costo);
+  // Respetar precio manual: solo sobreescribir si el usuario no lo ingresó a mano
+  // (mismo patrón que ipunit._manual para el precio unitario)
+  if(costEl && !costEl._manual) costEl.value=Math.round(costo);
   recalcItem();
 }
 
@@ -8101,6 +9064,111 @@ function getPrecioTotalItem(it){
   const pu = getPrecioUnitItem(it);
   const cant = Number(it.CANT || it.CANTIDAD || it.UNIDADES || 1);
   return Number(it['PRECIO X ITEM'] || it.VALOR_TOTAL || it.SUBTOTAL || (pu*cant) || 0);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PESTAÑA ARCHIVOS — COT y ITEM (portado desde ERP completo)
+// ═══════════════════════════════════════════════════════════════
+
+// Panel de archivos a nivel de COTIZACIÓN:
+// muestra ítems CON OP (subir/ver desde OP) e ítems SIN OP (abre wizard ítem paso 5)
+function dpUploadSectionCot(cotId){
+  const ops   = (DB.produccion||[]).filter(x=>String(x.COT)===String(cotId)||String(x.COTIZACION)===String(cotId));
+  const items = (DB.items||[]).filter(x=>String(x.COTIZACION)===String(cotId)||String(x.ID_PEDIDO)===String(cotId));
+  const itemsSinOP = items.filter(it=>!ops.find(op=>String(op.ITEM)===String(it.ITEM)));
+
+  if(!ops.length && !items.length){
+    return `<div class="dp-section"><p style="font-size:12px;color:var(--muted);text-align:center;padding:20px 0">📁 No hay ítems con archivos para esta cotización.</p></div>`;
+  }
+
+  let html = '<div class="dp-section">';
+
+  // Ítems CON OP: muestra botones de la OP (qaSubirPlano / qaSubirImagen)
+  ops.forEach(op => {
+    const idqr   = op.IDQR || op.OP;
+    const safe   = String(idqr).replace(/'/g, "\'");
+    const imgUrl  = op.IMAGEN_B64 || op.REGISTRO_FOTOGRAFICO || '';
+    const planoUrl = op.PLANO_URL || '';
+    const planoNom = op.PLANO_NOMBRE || 'Plano';
+    html += `<div style="background:var(--card2);border-radius:12px;padding:12px 14px;margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="font-weight:700;font-size:13px">OP-${op.OP||idqr} · Ítem ${op.ITEM||''}</div>
+        <button class="btn btn-ghost btn-sm" onclick="detailOP('${safe}')">Ver OP ↗</button>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:${imgUrl?'10px':'0'}">
+        ${planoUrl
+          ? `<a href="${planoUrl}" target="_blank" class="btn btn-ghost btn-sm" style="font-size:11px">${_archIcon(planoNom)} ${planoNom}</a>`
+          : `<button class="btn btn-ghost btn-sm" style="font-size:11px" onclick="qaSubirPlano('${safe}')">📐 Subir plano</button>`}
+        ${imgUrl
+          ? `<button class="btn btn-ghost btn-sm" style="font-size:11px" onclick="window.open('${imgUrl}','_blank')">🖼️ Ver imagen</button>`
+          : `<button class="btn btn-ghost btn-sm" style="font-size:11px" onclick="qaSubirImagen('${safe}')">🖼️ Subir imagen</button>`}
+      </div>
+      ${imgUrl ? `<img src="${imgUrl}" style="max-width:100%;max-height:160px;border-radius:8px;border:1px solid var(--border);object-fit:contain;cursor:pointer" onclick="window.open('${imgUrl}','_blank')">` : ''}
+    </div>`;
+  });
+
+  // Ítems SIN OP: abre wizard del ítem directamente en pestaña Archivos (paso 5)
+  itemsSinOP.forEach(it => {
+    const planoUrl = it.PLANO_URL || it['PLANO_URL'] || '';
+    const planoNom = it.PLANO_NOMBRE || 'Plano';
+    const imgUrl   = it.IMAGEN_URL  || it['IMAGEN_URL'] || it.IMAGEN_B64 || '';
+    const safeId   = String(it.ID_ITEM||'').replace(/'/g, "\'");
+    const itObj    = `DB.items.find(x=>x.ID_ITEM==='${safeId}')||{}`;
+    html += `<div style="background:var(--card2);border-radius:12px;padding:12px 14px;margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="font-weight:700;font-size:13px">Ítem ${it.ITEM||''} <span style="font-weight:400;color:var(--muted);font-size:11px">(sin OP)</span></div>
+        <button class="btn btn-ghost btn-sm" onclick="formItem(${itObj})">✏️ Editar</button>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:${imgUrl?'10px':'0'}">
+        ${planoUrl
+          ? `<a href="${planoUrl}" target="_blank" class="btn btn-ghost btn-sm" style="font-size:11px">${_archIcon(planoNom)} ${planoNom}</a>`
+          : `<button class="btn btn-ghost btn-sm" style="font-size:11px" onclick="closeDetail();setTimeout(()=>{formItem(${itObj});setTimeout(()=>wizItemTab(5),350)},200)">📐 Subir plano</button>`}
+        ${imgUrl
+          ? `<button class="btn btn-ghost btn-sm" style="font-size:11px" onclick="window.open('${imgUrl}','_blank')">🖼️ Ver imagen</button>`
+          : `<button class="btn btn-ghost btn-sm" style="font-size:11px" onclick="closeDetail();setTimeout(()=>{formItem(${itObj});setTimeout(()=>wizItemTab(5),350)},200)">🖼️ Subir imagen</button>`}
+      </div>
+      ${imgUrl ? `<img src="${imgUrl}" style="max-width:100%;max-height:160px;border-radius:8px;border:1px solid var(--border);object-fit:contain;cursor:pointer" onclick="window.open('${imgUrl}','_blank')">` : ''}
+    </div>`;
+  });
+
+  html += '</div>';
+  return html;
+}
+
+// Panel de archivos a nivel de ÍTEM individual
+function dpUploadSectionItem(itemId){
+  const it = (DB.items||[]).find(x=>String(x.ID_ITEM)===String(itemId));
+  if(!it) return '<p style="font-size:12px;color:var(--muted);padding:6px 0">Ítem no encontrado.</p>';
+  const op = (DB.produccion||[]).find(x=>
+    (String(x.COT)===String(it.COTIZACION)||String(x.COTIZACION)===String(it.COTIZACION)) &&
+    String(x.ITEM)===String(it.ITEM)
+  );
+  const planoUrl = it.PLANO_URL || it['PLANO_URL'] || (op&&(op.PLANO_URL||op.PLANO_B64)) || '';
+  const planoNom = it.PLANO_NOMBRE || (op&&op.PLANO_NOMBRE) || 'Plano';
+  const imgUrl   = it.IMAGEN_URL  || it['IMAGEN_URL'] || it.IMAGEN_B64 || (op&&(op.IMAGEN_B64||op.REGISTRO_FOTOGRAFICO)) || '';
+  const safeId   = String(it.ID_ITEM||'').replace(/'/g, "\'");
+  const itObj    = `DB.items.find(x=>x.ID_ITEM==='${safeId}')||{}`;
+  const idqr     = op ? (op.IDQR||op.OP) : null;
+  const safeIdqr = idqr ? String(idqr).replace(/'/g,"'") : '';
+
+  return `<div class="dp-section">
+    <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:10px">
+      📁 Archivos del ítem${op ? ` · OP-${op.OP||idqr}` : ' (sin OP)'}
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:${imgUrl?'12px':'0'}">
+      ${planoUrl
+        ? `<a href="${planoUrl}" target="_blank" class="btn btn-ghost btn-sm" style="font-size:11px">${_archIcon(planoNom)} ${planoNom}</a>`
+        : (op
+          ? `<button class="btn btn-ghost btn-sm" style="font-size:11px" onclick="qaSubirPlano('${safeIdqr}')">📐 Subir plano</button>`
+          : `<button class="btn btn-ghost btn-sm" style="font-size:11px" onclick="closeModal();setTimeout(()=>{formItem(${itObj});setTimeout(()=>wizItemTab(5),350)},200)">📐 Subir plano</button>`)}
+      ${imgUrl
+        ? `<button class="btn btn-ghost btn-sm" style="font-size:11px" onclick="window.open('${imgUrl}','_blank')">🖼️ Ver imagen</button>`
+        : (op
+          ? `<button class="btn btn-ghost btn-sm" style="font-size:11px" onclick="qaSubirImagen('${safeIdqr}')">🖼️ Subir imagen</button>`
+          : `<button class="btn btn-ghost btn-sm" style="font-size:11px" onclick="closeModal();setTimeout(()=>{formItem(${itObj});setTimeout(()=>wizItemTab(5),350)},200)">🖼️ Subir imagen</button>`)}
+    </div>
+    ${imgUrl ? `<img src="${imgUrl}" style="max-width:100%;max-height:200px;border-radius:8px;border:1px solid var(--border);object-fit:contain;cursor:pointer;display:block" onclick="window.open('${imgUrl}','_blank')">` : ''}
+  </div>`;
 }
 
 async function recalcularTotalesCot(cotId){
