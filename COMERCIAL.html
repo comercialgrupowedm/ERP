@@ -1308,10 +1308,23 @@ kbd{
     <div class="nav-section">Clientes</div>
     <div class="nav-item" data-m="clientes"><span class="nav-icon">🏢</span>Clientes</div>
 
-    <div class="nav-section">Consulta (solo lectura)</div>
+    <div class="nav-section">Catálogo</div>
     <div class="nav-item" data-m="materiales"><span class="nav-icon">🧱</span>Materiales</div>
     <div class="nav-item" data-m="servicios"><span class="nav-icon">🛠️</span>Servicios</div>
     <div class="nav-item" data-m="procesos"><span class="nav-icon">⚙️</span>Procesos</div>
+  </div>
+  <div style="padding:14px 16px;border-top:1px solid rgba(255,255,255,.07)">
+    <div id="sidebar-user-info" style="font-size:12px;color:rgba(255,255,255,.45);margin-bottom:8px;line-height:1.4">
+      👤 Cargando…
+    </div>
+    <button onclick="if(confirm('¿Cerrar sesión?'))loginCerrar()"
+      style="width:100%;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,.1);
+      background:rgba(255,255,255,.04);color:rgba(255,255,255,.45);font-size:11px;
+      cursor:pointer;transition:background .15s"
+      onmouseover="this.style.background='rgba(220,38,38,.15)'"
+      onmouseout="this.style.background='rgba(255,255,255,.04)'">
+      🚪 Cerrar sesión
+    </button>
   </div>
 </nav>
 
@@ -1389,7 +1402,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
 //    IMAGENES_DESCRIPCION) del caché para evitar que localStorage se
 //    llene (límite ~5 MB) y corrompa otros datos. Las imágenes se
 //    obtienen siempre desde el servidor.
-const CACHE_TTL = 45 * 60 * 1000; // 45 minutos (sync optimista mantiene DB fresco)
+const CACHE_TTL = 30 * 60 * 1000; // 30 min — el sync al abrir siempre actualiza
 const CACHE_KEY_PREFIX = 'erp_wedm_';
 // Campos pesados que NO se cachean
 const CACHE_EXCLUDE_FIELDS = ['PLANO_B64','IMAGENES_DESCRIPCION','IMAGEN_NOMBRE','PLANO_NOMBRE','HOJA_RUTA_JSON','QA_JSON']; // IMAGEN_B64=URL corta, no excluir
@@ -1838,7 +1851,7 @@ function bEst(e){
 const COT_ESTADOS_EDIT = ['EN ESPERA','APROBADA','RECHAZADA','CANCELADO','ANULADA'];
 function bEstCot(cotId, estadoActual, tieneOP){
   estadoActual = _normEstado(estadoActual);
-  const m={'APROBADA':'verde','EN ESPERA':'naranja','ANULADA':'rojo','RECHAZADA':'rojo'};
+  const m={'APROBADA':'verde','EN ESPERA':'naranja','ANULADA':'rojo','RECHAZADA':'rojo','EN PROCESO':'azul','TERMINADO':'verde','ENTREGADO':'verde','FACTURADA':'gris'};
   const cls = m[estadoActual]||'gris';
   if(tieneOP){
     // Solo lectura: el estado se alimenta de la OP vinculada
@@ -2034,19 +2047,38 @@ function closeDetail(){
     history.back();
   }
 }
+// Indicador visual de sync en curso
+function _showSyncDot(visible){
+  let dot = document.getElementById('sync-dot');
+  if(!dot){
+    dot = document.createElement('div');
+    dot.id = 'sync-dot';
+    dot.title = 'Sincronizando datos…';
+    dot.style.cssText = 'position:fixed;bottom:68px;right:12px;width:8px;height:8px;border-radius:50%;background:#60a5fa;z-index:9998;transition:opacity .3s;box-shadow:0 0 6px #60a5fa';
+    document.body.appendChild(dot);
+  }
+  dot.style.opacity = visible ? '1' : '0';
+}
+
 function updateBadges(){
-  const nc=DB.cotizaciones?.length||0;
-  const no=DB.produccion?.length||0;
+  // Filtrar cotizaciones por asesor si es comercial
+  const _misCots = _esComercial() && _asesorActual()
+    ? (DB.cotizaciones||[]).filter(c=>(c.ASESOR||'').toLowerCase()===_asesorActual().toLowerCase())
+    : (DB.cotizaciones||[]);
+
+  const nc = _misCots.length;
+  const no = DB.produccion?.length||0;
+
   ['b-cot','bb-cot'].forEach(id=>{ const el=document.getElementById(id); if(el){el.textContent=nc;el.style.display=nc?'':'none';} });
   ['b-op','bb-op'].forEach(id=>{ const el=document.getElementById(id); if(el){el.textContent=no;el.style.display=no?'':'none';} });
-  // Badge diseño: items con DISEÑADOR asignado sin materiales pedidos
+
   const alertasDis=(DB.items||[]).filter(it=>it.DISEÑADOR&&it.MP_INSUMOS!=='Y'&&it.ESTADO_PROD==='EN PROCESO').length;
   ['b-dis','bb-dis'].forEach(id=>{ const el=document.getElementById(id); if(el){el.textContent=alertasDis;el.style.display=alertasDis?'':'none';} });
-  // App-grid badges
+
   const abCot=document.getElementById('ab-cot');
   const abOp=document.getElementById('ab-op');
   const abDis=document.getElementById('ab-dis');
-  const cotsEspera=(DB.cotizaciones||[]).filter(c=>c.ESTADO==='EN ESPERA').length;
+  const cotsEspera=_misCots.filter(c=>c.ESTADO==='EN ESPERA').length;
   if(abCot){abCot.textContent=cotsEspera||'';abCot.style.display=cotsEspera?'flex':'none';}
   if(abOp){abOp.textContent=no||'';abOp.style.display=no?'flex':'none';}
   if(abDis){abDis.textContent=alertasDis||'';abDis.style.display=alertasDis?'flex':'none';}
@@ -2498,6 +2530,112 @@ const TIPO_KEYS = Object.keys(TIPOS_COT);
 
 // Colores por tipo para badges
 const TIPO_COLORS = Object.fromEntries(TIPO_KEYS.map(k=>[k, TIPOS_COT[k].color]));
+
+// ═══════════════════════════════════════════════════════════════
+// SESIÓN Y LOGIN
+// ═══════════════════════════════════════════════════════════════
+// Credenciales locales — puedes cambiar las contraseñas aquí
+const USUARIOS_COMERCIAL = [
+  { nombre:'Juan Diego García',  asesor:'Juan Diego García',  pass:'wedm2026', rol:'comercial' },
+  { nombre:'Mauricio García',    asesor:'Mauricio García',    pass:'wedm2026', rol:'comercial' },
+  { nombre:'Gerson Ramos',       asesor:'Gerson Ramos',       pass:'wedm2026', rol:'comercial' },
+  { nombre:'Eduardo Cabal',      asesor:'Eduardo Cabal',      pass:'wedm2026', rol:'comercial' },
+  { nombre:'Felipe Dávalos',     asesor:'Felipe Dávalos',     pass:'wedm2026', rol:'comercial' },
+  { nombre:'Francisco Giraldo',  asesor:'Francisco Giraldo',  pass:'wedm2026', rol:'comercial' },
+  { nombre:'Admin',              asesor:'',                   pass:'wedmadmin', rol:'admin'     },
+];
+
+let _SESSION = JSON.parse(localStorage.getItem('_wedm_session')||'null');
+
+function _esAdmin()     { return _SESSION?.rol === 'admin'; }
+function _esComercial() { return _SESSION?.rol === 'comercial'; }
+function _asesorActual(){ return _SESSION?.asesor || ''; }
+
+function loginCerrar(){
+  localStorage.removeItem('_wedm_session');
+  _SESSION = null;
+  mostrarLogin();
+}
+
+function mostrarLogin(){
+  // Ocultar splash si está visible
+  const spl = document.getElementById('splash');
+  if(spl) spl.classList.add('hidden');
+
+  const overlay = document.getElementById('login-overlay');
+  if(overlay){ overlay.style.display='flex'; return; }
+
+  const div = document.createElement('div');
+  div.id = 'login-overlay';
+  div.style.cssText = `
+    position:fixed;inset:0;z-index:99999;
+    background:linear-gradient(135deg,#0a0e1a 0%,#0f1b3d 60%,#0a1628 100%);
+    display:flex;align-items:center;justify-content:center;flex-direction:column;
+    gap:0;font-family:var(--font-sans,'Inter',sans-serif);
+  `;
+  div.innerHTML = `
+    <div style="text-align:center;margin-bottom:28px">
+      <img src="" id="login-logo" style="width:min(70vw,280px);height:auto;margin-bottom:12px"
+        onerror="this.style.display='none'">
+      <div style="color:#fff;font-size:22px;font-weight:800;letter-spacing:.3px">ERP Comercial</div>
+      <div style="color:#6b7db3;font-size:13px;margin-top:4px">Grupo WEDM</div>
+    </div>
+    <div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);
+      border-radius:20px;padding:28px 24px;width:min(90vw,360px);backdrop-filter:blur(12px)">
+      <div style="color:#e8f0fe;font-size:14px;font-weight:700;margin-bottom:16px">Iniciar sesión</div>
+      <div style="margin-bottom:14px">
+        <select id="login-usuario" style="
+          width:100%;padding:12px 14px;border-radius:10px;
+          background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);
+          color:#fff;font-size:14px;appearance:none;outline:none">
+          <option value="">— Selecciona tu nombre —</option>
+          ${USUARIOS_COMERCIAL.map(u=>`<option value="${u.nombre}">${u.nombre}</option>`).join('')}
+        </select>
+      </div>
+      <div style="margin-bottom:20px;position:relative">
+        <input id="login-pass" type="password" placeholder="Contraseña"
+          style="width:100%;padding:12px 14px;border-radius:10px;box-sizing:border-box;
+          background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);
+          color:#fff;font-size:14px;outline:none"
+          onkeydown="if(event.key==='Enter') doLogin()">
+        <button onclick="const i=document.getElementById('login-pass');i.type=i.type==='password'?'text':'password'"
+          style="position:absolute;right:12px;top:50%;transform:translateY(-50%);
+          background:none;border:none;color:#6b7db3;cursor:pointer;font-size:16px">👁</button>
+      </div>
+      <div id="login-err" style="color:#f87171;font-size:12px;margin-bottom:12px;min-height:16px;text-align:center"></div>
+      <button onclick="doLogin()" style="
+        width:100%;padding:13px;border-radius:10px;border:none;
+        background:linear-gradient(135deg,#1a56db,#1d4ed8);
+        color:#fff;font-size:15px;font-weight:700;cursor:pointer;
+        transition:opacity .15s" onmouseover="this.style.opacity='.9'" onmouseout="this.style.opacity='1'">
+        Entrar →
+      </button>
+    </div>
+    <div style="color:#3a4a6b;font-size:11px;margin-top:24px">© 2026 Grupo WEDM</div>
+  `;
+  document.body.appendChild(div);
+  // Poner el logo si existe
+  const splLogo = document.getElementById('splash-logo-img');
+  if(splLogo?.src) document.getElementById('login-logo').src = splLogo.src;
+  setTimeout(()=>document.getElementById('login-pass')?.focus(), 100);
+}
+
+function doLogin(){
+  const nombre = document.getElementById('login-usuario')?.value?.trim();
+  const pass   = document.getElementById('login-pass')?.value?.trim();
+  const err    = document.getElementById('login-err');
+  if(!nombre){ if(err) err.textContent='Selecciona tu nombre'; return; }
+  if(!pass)  { if(err) err.textContent='Ingresa tu contraseña'; return; }
+  const u = USUARIOS_COMERCIAL.find(x=>x.nombre===nombre && x.pass===pass);
+  if(!u){ if(err) err.textContent='Contraseña incorrecta'; return; }
+  // Sesión válida
+  _SESSION = { nombre:u.nombre, asesor:u.asesor, rol:u.rol, ts:Date.now() };
+  localStorage.setItem('_wedm_session', JSON.stringify(_SESSION));
+  const overlay = document.getElementById('login-overlay');
+  if(overlay) overlay.style.display='none';
+  // Arrancar la app
+  iniciarApp();
+}
 
 const ASESORES = [
   'Juan Diego García',
@@ -3298,6 +3436,168 @@ async function getImagenOP(idqr){
 //   DASHBOARD COMERCIAL
 // ═══════════════════════════════════════════════════════════════
 
+// ── Panel lateral de cotizaciones desde el dashboard ───────────
+// ── Panel lateral de OPs desde el dashboard ────────────────────
+function dashPanelOPs(titulo, opsArr){
+  const dp   = document.getElementById('dp');
+  const head = document.getElementById('dp-header');
+  const body = document.getElementById('dp-body');
+  const acts = document.getElementById('dp-actions');
+  if(!dp || !body) return;
+
+  if(head) head.innerHTML = `
+    <button class="dp-back" onclick="closeDetail()">← Volver</button>
+    <span class="dp-title">${titulo} (${opsArr.length})</span>`;
+  if(acts) acts.innerHTML = '';
+
+  // Ordenar: mayor avance primero, en empate vencidas antes
+  const sorted = [...opsArr].sort((a,b)=>{
+    const pa = qaPct(a['%AVANCE']), pb = qaPct(b['%AVANCE']);
+    if(pb !== pa) return pb - pa; // mayor avance primero
+    const da = Number(a['DÍAS ENTREGA']||0), db = Number(b['DÍAS ENTREGA']||0);
+    return da - db; // vencidas primero en empate
+  });
+
+  if(!sorted.length){
+    body.innerHTML = `<div class="empty" style="padding:40px 20px"><div class="empty-icon">🏭</div><p>No hay OPs activas</p></div>`;
+  } else {
+    body.innerHTML = `<div style="padding:0 14px 80px">
+      ${sorted.map(op=>{
+        const _diasRaw = op['DÍAS ENTREGA'];
+        const dias = (String(_diasRaw||'').includes('NaN') || _diasRaw===undefined || _diasRaw===null) 
+          ? null : Number(_diasRaw);
+        const vencida = dias !== null && dias < 0;
+        const urgente = dias !== null && dias >= 0 && dias <= 3;
+        const _opKey  = (op.IDQR||op.OP)+'|'+(op.TIPO||'')+'|'+(op.ITEM||'');
+        // Imagen de la OP — intentar varios campos
+        const _imgUrl = op.IMAGEN_B64||op.REGISTRO_FOTOGRAFICO||op.IMAGEN_URL||op.IMAGEN||'';
+        const _imgOk  = _imgUrl && !_imgUrl.startsWith('FALSE') && _imgUrl.length > 10;
+
+        return `<div onclick="detailOP('${_opKey}')" style="
+          background:var(--card2);border-radius:12px;padding:12px 14px;
+          margin-bottom:8px;cursor:pointer;
+          border-left:3px solid ${vencida?'#ef4444':urgente?'#f59e0b':'var(--accent)'}">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
+            ${_imgOk ? `<img src="${_imgUrl}" alt="img"
+              style="width:52px;height:52px;border-radius:8px;object-fit:cover;
+              flex-shrink:0;border:1px solid var(--border);background:var(--border)"
+              onerror="this.style.display='none'">` : ''}
+            <div style="flex:1;min-width:0">
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:3px">
+                <span style="color:var(--accent);font-weight:800;font-size:13px">OP-${op.OP}</span>
+                <span style="font-size:10px;color:var(--muted)">COT-${op.COT||'—'}</span>
+                ${op.ESTADO&&!String(op.ESTADO||'').includes('#')?bEst(op.ESTADO):''}
+              </div>
+              <div style="font-size:12px;font-weight:600;color:var(--text);
+                white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+                ${op.DESCRIPCION||op['DESCRIPCION ITEM']||'Sin descripción'}
+              </div>
+              <div style="font-size:11px;color:var(--muted);margin-top:2px">
+                ${op.CLIENTE||op.EMPRESA||'—'} · Ítem ${op.ITEM||'—'}
+              </div>
+              ${op['Proceso actual']||op.RUTA_MQ1?`
+              <div style="font-size:10px;color:var(--gold);margin-top:3px">
+                ⚙️ ${op['Proceso actual']||op['RUTA MQ1']||''}
+              </div>`:''}
+            </div>
+            <div style="flex-shrink:0;text-align:right">
+              <div style="font-size:12px;font-weight:700;
+                color:${vencida?'#ef4444':urgente?'#f59e0b':'var(--muted)'}">
+                ${vencida
+                  ? '⚠️ '+Math.abs(dias)+'d vencida'
+                  : urgente ? '⏰ '+dias+'d rest.'
+                  : dias===null ? '—'
+                  : '📅 '+dias+'d'}
+              </div>
+              ${op['FECHA PACTADA']?`
+              <div style="font-size:10px;color:var(--muted);margin-top:2px">
+                ${fmtDate(op['FECHA PACTADA']).replace(/T.*/,'')}
+              </div>`:''}
+            </div>
+          </div>
+          <!-- Barra de avance con qaPct() igual que el resto del ERP -->
+          ${(()=>{ const _pct=qaPct(op['%AVANCE']); return `
+          <div style="margin-top:8px">
+            <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-bottom:3px">
+              <span>Avance</span>
+              <span style="font-weight:700;color:${_pct>=80?'#10b981':_pct>=40?'#f59e0b':'#3b82f6'}">${_pct}%</span>
+            </div>
+            <div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden">
+              <div style="height:100%;width:${_pct}%;
+                background:${_pct>=80?'#10b981':_pct>=40?'#f59e0b':'#3b82f6'};
+                border-radius:3px"></div>
+            </div>
+          </div>`; })()}
+        </div>`;
+      }).join('')}
+    </div>`;
+  }
+
+  if(!_detailOpen){
+    _detailOpen = true;
+    history.pushState({mod:MOD, detail:true}, '', '#'+MOD+'-detail');
+  }
+  dp.classList.add('open');
+  document.getElementById('content').style.overflow = 'hidden';
+}
+
+function dashPanel(titulo, items, emptyMsg='Sin resultados'){
+  // Reutiliza el panel de detalle lateral (dp) sin pushState
+  const dp     = document.getElementById('dp');
+  const head   = document.getElementById('dp-header');
+  const body   = document.getElementById('dp-body');
+  const acts   = document.getElementById('dp-actions');
+  if(!dp || !body) return;
+
+  if(head)  head.innerHTML = `
+    <button class="dp-back" onclick="closeDetail()">← Volver</button>
+    <span class="dp-title">${titulo}</span>`;
+  if(acts)  acts.innerHTML = '';
+
+  if(!items.length){
+    body.innerHTML = `<div class="empty" style="padding:40px 20px"><div class="empty-icon">📭</div><p>${emptyMsg}</p></div>`;
+  } else {
+    body.innerHTML = `
+      <div style="padding:12px 14px;font-size:12px;color:var(--muted)">${items.length} cotizaciones</div>
+      <div class="card-list" style="padding:0 14px 80px">
+        ${items.map(c=>`
+          <div class="list-card" onclick="detailCot('${c.COTIZACION}')">
+            <div class="lc-top">
+              <div style="flex:1;min-width:0">
+                <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                  <span class="lc-id">COT-${c.COTIZACION}</span>
+                  ${bEst(c.ESTADO)}
+                  ${bTipo(c.TIPO)}
+                </div>
+                <div class="lc-title">${c.Empresa||c.EMPRESA||'Sin empresa'}</div>
+                <div class="lc-sub" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+                  ${c['DESCRIPCION DEL PROYECTO']||'—'}
+                </div>
+              </div>
+              <div style="text-align:right;flex-shrink:0;margin-left:10px">
+                <div style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--gold)">
+                  ${fmt(c['PRECIO TOTAL']||c['VALOR TOTAL']||0)}
+                </div>
+                <div style="font-size:10px;color:var(--muted);margin-top:2px">
+                  ${c['FECHA EMISION COT.']||c['FECHA COTIZACION']||''}
+                </div>
+              </div>
+            </div>
+          </div>
+        `).join('')}
+      </div>`;
+  }
+
+  // Abrir el panel sin pushState — flag especial
+  _navFromNav = false;
+  if(!_detailOpen){
+    _detailOpen = true;
+    history.pushState({mod:MOD, detail:true}, '', '#'+MOD+'-detail');
+  }
+  dp.classList.add('open');
+  document.getElementById('content').style.overflow = 'hidden';
+}
+
 async function dashboard(){
   loading();
   try{
@@ -3324,14 +3624,90 @@ async function dashboard(){
       }
     }
 
-    if(hayCacheCompleto && isFirstLoad){
-      const bar = document.getElementById('splash-bar');
-      const txt = document.getElementById('splash-step');
-      if(bar) bar.style.width = '95%';
-      if(txt) txt.textContent = '⚡ Cargando desde caché local…';
-    }
+    // ── Aplica datos del servidor al DB local y cache ──────────────
+    const _applyInitData = (initData, silent=false) => {
+      if (!initData || typeof initData !== 'object') return;
+      const MAP = {
+        cotizaciones:'cotizaciones', produccion:'produccion',
+        clientes:'clientes', materiales:'materiales',
+        servicios:'servicios', procesos:'procesos', items:'items'
+      };
+      let huboActualizacion = false;
+      Object.entries(MAP).forEach(([gasKey, dbKey]) => {
+        if (Array.isArray(initData[gasKey]) && initData[gasKey].length > 0) {
+          const datos = dbKey === 'cotizaciones'
+            ? initData[gasKey].map(c => c.ESTADO ? {...c, ESTADO: _normEstado(c.ESTADO)} : c)
+            : initData[gasKey];
+          DB[dbKey] = datos;
+          cacheSet(dbKey, datos);
+          huboActualizacion = true;
+        }
+      });
+      if(huboActualizacion && silent){
+        updateBadges();
+        if(MOD === 'cotizaciones') cotizaciones();
+        else if(MOD === 'items') items();
+      }
+    };
 
-    if(!hayCacheCompleto){
+    // ── Sincronización al inicio: rango 1m, liviana y rápida ──────
+    // Solo trae el último mes. El selector de rango en la UI permite ampliar.
+    const _syncAgresivo = async (silent=false) => {
+      _showSyncDot(true);
+      try {
+        const rango1m = RANGO_STATE.cotizaciones || '1m';
+        // Filtro base: rango + asesor si es comercial
+        const _base = _esComercial() && _asesorActual()
+          ? { rango: rango1m, asesor: _asesorActual() }
+          : { rango: rango1m };
+
+        // Cotizaciones e ítems en paralelo — solo 1 mes
+        const [cots, its, prod] = await Promise.all([
+          GET('getCotizaciones',      '', _base).catch(()=>null),
+          GET('getItems',             '', _base).catch(()=>null),
+          GET('getControlProduccion', '', { rango: 'todo' }).catch(()=>null),
+        ]);
+        if(cots?.length){
+          DB.cotizaciones = cots.map(c=>c.ESTADO?{...c,ESTADO:_normEstado(c.ESTADO)}:c);
+          cacheSet('cotizaciones', DB.cotizaciones);
+        }
+        if(its?.length){ DB.items = its; cacheSet('items', DB.items); }
+        if(prod?.length){ DB.produccion = prod; cacheSet('produccion', prod); }
+
+        // Catálogos pequeños en paralelo (sin rango — son tablas completas pequeñas)
+        const [clts, mats, svcs, prcs] = await Promise.all([
+          GET('getClientes',   '', {}).catch(()=>null),
+          GET('getMateriales', '', {}).catch(()=>null),
+          GET('getServicios',  '', {}).catch(()=>null),
+          GET('getProcesos',   '', {}).catch(()=>null),
+        ]);
+        if(clts?.length){ DB.clientes   = clts; cacheSet('clientes',   clts); }
+        if(mats?.length){ DB.materiales = mats; cacheSet('materiales', mats); }
+        if(svcs?.length){ DB.servicios  = svcs; cacheSet('servicios',  svcs); }
+        if(prcs?.length){ DB.procesos   = prcs; cacheSet('procesos',   prcs); }
+
+        if(silent){
+          updateBadges();
+          if(MOD==='cotizaciones') cotizaciones();
+          else if(MOD==='items') items();
+        }
+      } catch(e){ console.warn('syncAgresivo:', e.message); }
+      finally { _showSyncDot(false); }
+    };
+
+    if(hayCacheCompleto){
+      // Cache válido → splash rápido + sync inmediata en background (sin delay)
+      if(isFirstLoad){
+        const bar = document.getElementById('splash-bar');
+        const txt = document.getElementById('splash-step');
+        if(bar) bar.style.width = '90%';
+        if(txt) txt.textContent = '⚡ Datos en caché — sincronizando…';
+      }
+      // Sync en background después de que el usuario ve el dashboard
+      setTimeout(() => _syncAgresivo(true), 2000);
+
+    } else {
+      // Sin cache o expirado → cargar stale si existe y sincronizar
       let hayStale = false;
       for(const [key] of COLECCIONES){
         if(!DB[key]){
@@ -3340,164 +3716,324 @@ async function dashboard(){
         }
       }
 
-      const _applyInitData = (initData) => {
-        if (!initData || typeof initData !== 'object') return;
-        const MAP = {
-          cotizaciones:'cotizaciones', produccion:'produccion',
-          clientes:'clientes',
-          materiales:'materiales', servicios:'servicios',
-          procesos:'procesos', items:'items'
-        };
-        Object.entries(MAP).forEach(([gasKey, dbKey]) => {
-          if (Array.isArray(initData[gasKey])) {
-            // Normalizar ESTADO de cotizaciones al entrar (GAS puede devolver APROBADO en masculino)
-            const datos = dbKey === 'cotizaciones'
-              ? initData[gasKey].map(c => c.ESTADO ? {...c, ESTADO: _normEstado(c.ESTADO)} : c)
-              : initData[gasKey];
-            DB[dbKey] = datos;
-            cacheSet(dbKey, datos);
-          }
-        });
-        if (initData.kpis) cacheSet('__kpis__', initData.kpis);
-      };
-
-      const rango = RANGO_STATE.cotizaciones || '1m';
-
       if(hayStale){
         if(isFirstLoad){
           const bar = document.getElementById('splash-bar');
           const txt = document.getElementById('splash-step');
-          if(bar) bar.style.width = '95%';
-          if(txt) txt.textContent = '⚡ Datos recientes cargados…';
+          if(bar) bar.style.width = '60%';
+          if(txt) txt.textContent = '⚡ Cargando datos — actualizando…';
         }
-        GET('getInitialData', '', { rango }).then(_applyInitData).catch(()=>{});
+        _syncAgresivo(true); // sin await — render con stale, actualiza al llegar
       } else {
+        // Primera vez: sin nada → bloquear hasta tener datos mínimos
         if(isFirstLoad){
           const bar = document.getElementById('splash-bar');
           const txt = document.getElementById('splash-step');
           if(bar) bar.style.width = '15%';
           if(txt) txt.textContent = '⏳ Primera carga — obteniendo datos…';
         }
-        let _pctAnim = 15;
-        const _barAnim = isFirstLoad ? setInterval(()=>{
-          _pctAnim = Math.min(85, _pctAnim + (85 - _pctAnim) * 0.06);
+        let _pct = 15;
+        const _anim = isFirstLoad ? setInterval(()=>{
+          _pct = Math.min(85, _pct + (85-_pct)*0.07);
           const bar = document.getElementById('splash-bar');
-          if(bar) bar.style.width = _pctAnim + '%';
-        }, 400) : null;
-        try {
-          const initData = await GET('getInitialData', '', { rango });
-          _applyInitData(initData);
-        } catch(e) {
-          console.warn('getInitialData falló:', e.message);
-          await Promise.all(COLECCIONES.map(([key, action, rangoKey]) => {
-            const params = rangoKey ? { rango: RANGO_STATE[rangoKey] || '1m' } : {};
-            return GET(action, '', params).then(data => {
-              DB[key] = data; cacheSet(key, data);
-            }).catch(()=>{});
-          }));
-        }
-        if(_barAnim) clearInterval(_barAnim);
+          if(bar) bar.style.width = _pct + '%';
+        }, 350) : null;
+        await _syncAgresivo(false); // bloqueante en primera carga
+        if(_anim) clearInterval(_anim);
       }
     }
 
     updateBadges();
     if(isFirstLoad) splashDone();
 
-    // KPIs
-    const cots = DB.cotizaciones || [];
+    // KPIs — filtrar por asesor si es comercial
+    const cots = _esComercial() && _asesorActual()
+      ? (DB.cotizaciones||[]).filter(c=>(c.ASESOR||'').toLowerCase()===_asesorActual().toLowerCase())
+      : (DB.cotizaciones||[]);
     const ops  = DB.produccion   || [];
     const clts = DB.clientes     || [];
     const cotsEspera    = cots.filter(c=>c.ESTADO==='EN ESPERA');
     const cotsAprobadas = cots.filter(c=>String(c.ESTADO||'').toUpperCase().includes('APROBAD'));
     const urgencias     = cots.filter(c=>String(c.TIPO||'').includes('UR'));
     const totalValor    = cotsAprobadas.reduce((s,c)=>s+Number(c['PRECIO TOTAL']||0),0);
-    const opsProceso    = ops.filter(o=>o.ESTADO==='EN PROCESO');
-    const opsVencidas   = ops.filter(o=>Number(o['DÍAS ENTREGA']||0)<0 && !['TERMINADO','ENTREGADO','CANCELADO'].includes(o.ESTADO));
+    // Filtrar OPs por las cotizaciones del asesor logueado
+    // Cruzar OPs con TODAS las cotizaciones del asesor (sin límite de rango)
+    // para no perder OPs de cotizaciones antiguas que no están en el cache de 1m
+    const _todasMisCots = new Set(
+      (DB.cotizaciones||[])
+        .filter(c=>!_esComercial()||!_asesorActual()||(c.ASESOR||'').toLowerCase()===_asesorActual().toLowerCase())
+        .map(c=>String(c.COTIZACION))
+    );
+    const opsFiltradas = _esComercial() && _asesorActual()
+      ? ops.filter(o=>
+          _todasMisCots.has(String(o.COT||'')) ||
+          (o.ASESOR||'').toLowerCase()===_asesorActual().toLowerCase()
+        )
+      : ops;
+
+    // OPs activas = todo lo que NO está terminado/entregado/cancelado
+    // igual que el filtro "Listo para Producción" del ERP principal
+    const ESTADOS_INACTIVOS = ['TERMINADO','ENTREGADO','CANCELADO','CANCELADA'];
+    const opsProceso  = opsFiltradas.filter(o=>!ESTADOS_INACTIVOS.includes(o.ESTADO));
+    const opsVencidas = opsFiltradas.filter(o=>
+      Number(o['DÍAS ENTREGA']||0)<0 &&
+      !ESTADOS_INACTIVOS.includes(o.ESTADO)
+    );
+    // Exponer para los onclick del dashboard
+    window._dashOpsProceso  = opsProceso;
+    window._dashOpsVencidas = opsVencidas;
+    window._dashOpsFiltradas = opsFiltradas;
 
     const now = new Date();
     const horaActual = now.toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
     const fechaActual = now.toLocaleDateString('es-CO',{weekday:'long',day:'numeric',month:'long'});
 
+    // ── Cálculos para el dashboard ──────────────────────────────
+    const mesActual = now.getMonth();
+    const anioActual = now.getFullYear();
+
+    // Facturación del mes (cotizaciones FACTURADAS este mes)
+    const cotsMes = cots.filter(c => {
+      const f = c['FECHA EMISION COT.'] || c['FECHA COTIZACION'] || c['FECHA'] || '';
+      if(!f) return false;
+      const d = new Date(f);
+      return d.getMonth()===mesActual && d.getFullYear()===anioActual;
+    });
+    const cotsFacturadas = cots.filter(c=>String(c.ESTADO||'').toUpperCase().includes('FACTURAD'));
+    const cotsFactMes    = cotsFacturadas.filter(c=>{
+      const f = c['FECHA EMISION COT.']||c['FECHA COTIZACION']||c['FECHA']||'';
+      const d = new Date(f); return d.getMonth()===mesActual && d.getFullYear()===anioActual;
+    });
+    const factMes = cotsFactMes.reduce((s,c)=>s+Number(c['PRECIO TOTAL']||c['VALOR TOTAL']||0),0);
+    const valorMes = cotsMes.reduce((s,c)=>s+Number(c['PRECIO TOTAL']||c['VALOR TOTAL']||0),0);
+    const valorAprobadas = cotsAprobadas.reduce((s,c)=>s+Number(c['PRECIO TOTAL']||c['VALOR TOTAL']||0),0);
+
+    // Mejores clientes (por valor total de cotizaciones aprobadas)
+    const clienteMap = {};
+    cots.forEach(c=>{
+      const emp = c.Empresa||c.EMPRESA||'Sin empresa';
+      if(!clienteMap[emp]) clienteMap[emp]={nombre:emp,total:0,cots:0,aprobadas:0};
+      clienteMap[emp].total += Number(c['PRECIO TOTAL']||c['VALOR TOTAL']||0);
+      clienteMap[emp].cots++;
+      if(String(c.ESTADO||'').toUpperCase().includes('APROBAD')) clienteMap[emp].aprobadas++;
+    });
+    const topClientes = Object.values(clienteMap)
+      .filter(x=>x.total>0)
+      .sort((a,b)=>b.total-a.total)
+      .slice(0,5);
+    const maxCliente = topClientes[0]?.total||1;
+
+    // Cotizaciones recientes (últimas 5)
+    const cotsRecientes = [...cots].sort((a,b)=>Number(b.COTIZACION||0)-Number(a.COTIZACION||0)).slice(0,5);
+
+    // Estados adicionales para el pipeline completo
+    const cotsEnProceso  = cots.filter(c=>c.ESTADO==='EN PROCESO');
+    const cotsTerminadas = cots.filter(c=>c.ESTADO==='TERMINADO'||c.ESTADO==='ENTREGADO');
+    const cotsAnuladas   = cots.filter(c=>String(c.ESTADO||'').toUpperCase().includes('ANUL'));
+
+    // Exponer estados de OPs para dashPanelOPs — todos los estados activos
+    const ESTADOS_INACTIVOS_OP = ['TERMINADO','ENTREGADO','CANCELADO','CANCELADA'];
+    window._dashOpsTodas = (DB.produccion||[]).filter(o=>
+      !ESTADOS_INACTIVOS_OP.includes(o.ESTADO) &&
+      (_todasMisCots?.has(String(o.COT||'')) || (!_esComercial()))
+    );
+    // Exponer variables al scope global para que los onclick del dashboard las usen
+    window._dashCots          = cots;
+    window._dashCotsEspera    = cotsEspera;
+    window._dashCotsAprobadas = cotsAprobadas;
+    window._dashCotsEnProceso = cotsEnProceso;
+    window._dashCotsTerminadas= cotsTerminadas;
+    window._dashCotsFacturadas= cotsFacturadas;
+    window._dashUrgencias     = urgencias;
+    window._dashCotsMes       = cotsMes;
+
+    // Pipeline completo — todos los estados relevantes para el comercial
+    const pipeline = [
+      {label:'En Espera',   icon:'🟡', count:cotsEspera.length,     color:'#f59e0b', varName:'window._dashCotsEspera||[]'},
+      {label:'Aprobadas',   icon:'🟢', count:cotsAprobadas.length,   color:'#10b981', varName:'window._dashCotsAprobadas||[]'},
+      {label:'En Proceso',  icon:'🔵', count:cotsEnProceso.length,   color:'#3b82f6', varName:'window._dashCotsEnProceso||[]'},
+      {label:'Terminadas',  icon:'✅', count:cotsTerminadas.length,  color:'#8b5cf6', varName:'window._dashCotsTerminadas||[]'},
+      {label:'Facturadas',  icon:'💜', count:cotsFacturadas.length,  color:'#6366f1', varName:'window._dashCotsFacturadas||[]'},
+      {label:'Urgentes',    icon:'🔴', count:urgencias.length,       color:'#ef4444', varName:'window._dashUrgencias||[]'},
+    ].filter(p=>p.count>0); // solo mostrar los que tienen datos
+
     setContent(`
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;padding:16px 14px 0">
+      <!-- HEADER -->
+      <div style="display:flex;align-items:center;gap:10px;padding:16px 14px 12px;background:linear-gradient(135deg,#0f1b3d,#1a2f5e);margin-bottom:0">
         <div style="flex:1">
-          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px">${fechaActual}</div>
-          <div style="font-size:20px;font-weight:800;color:var(--text)">Panel Comercial</div>
+          <div style="font-size:11px;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:.8px">${fechaActual}</div>
+          <div style="font-size:19px;font-weight:800;color:#fff">
+            Hola, ${_SESSION?.nombre?.split(' ')[0]||'Comercial'} 👋
+          </div>
         </div>
-        <div style="font-size:22px;font-weight:700;font-family:var(--mono);color:var(--accent)">${horaActual}</div>
-      </div>
-
-      <div class="kpi-grid" style="padding:0 14px 14px">
-        <div class="kpi-card warn" onclick="nav('cotizaciones')">
-          <div class="kpi-label">En Espera</div>
-          <div class="kpi-value">${cotsEspera.length}</div>
-          <div class="kpi-sub">cotizaciones pendientes</div>
-        </div>
-        <div class="kpi-card gold" onclick="nav('cotizaciones')">
-          <div class="kpi-label">Aprobadas</div>
-          <div class="kpi-value">${cotsAprobadas.length}</div>
-          <div class="kpi-sub">${fmt(totalValor)}</div>
-        </div>
-        <div class="kpi-card danger">
-          <div class="kpi-label">Urgencias</div>
-          <div class="kpi-value">${urgencias.length}</div>
-          <div class="kpi-sub">cotizaciones urgentes</div>
-        </div>
-        <div class="kpi-card info">
-          <div class="kpi-label">OPs en Proceso</div>
-          <div class="kpi-value">${opsProceso.length}</div>
-          <div class="kpi-sub">${opsVencidas.length > 0 ? opsVencidas.length + ' vencidas' : 'al día'}</div>
+        <div style="text-align:right">
+          <div style="font-size:22px;font-weight:700;font-family:var(--mono);color:#60a5fa">${horaActual}</div>
+          <div style="font-size:10px;color:rgba(255,255,255,.3)">hora local</div>
         </div>
       </div>
 
-      <div style="padding:0 14px">
-        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">Acceso rápido</div>
-        <div class="app-grid">
-          ${[
-            {m:'cotizaciones', icon:'📋', bg:'#1d4ed8', label:'Cotizaciones', badge: cotsEspera.length},
-            {m:'items',        icon:'🔩', bg:'#0369a1', label:'Ítems'},
-            {m:'clientes',     icon:'🏢', bg:'#047857', label:'Clientes'},
-            {m:'materiales',   icon:'🧱', bg:'#64748b', label:'Materiales'},
-          ].map(a=>`
-            <div class="app-icon" onclick="nav('${a.m}')">
-              <div class="app-icon-wrap">
-                <div class="app-icon-box" style="background:${a.bg};">${a.icon}</div>
-                ${a.badge ? `<div class="app-badge-dot">${a.badge}</div>` : ''}
+      <div style="padding:12px 14px;display:flex;flex-direction:column;gap:14px">
+
+        <!-- KPIs PRINCIPALES -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div onclick="dashPanel('💰 Aprobadas',window._dashCotsAprobadas||[],'No hay cotizaciones aprobadas')" style="background:linear-gradient(135deg,#1d4ed8,#2563eb);border-radius:14px;padding:14px;cursor:pointer;transition:opacity .15s" onmouseover="this.style.opacity='.9'" onmouseout="this.style.opacity='1'">
+            <div style="font-size:10px;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:.7px;margin-bottom:4px">💰 Valor aprobado</div>
+            <div style="font-size:20px;font-weight:800;color:#fff;font-family:var(--mono)">${fmt(valorAprobadas)}</div>
+            <div style="font-size:11px;color:rgba(255,255,255,.5);margin-top:2px">${cotsAprobadas.length} cotizaciones</div>
+          </div>
+          <div onclick="dashPanel('📅 Este mes',window._dashCotsMes||[],'No hay cotizaciones este mes')" style="background:linear-gradient(135deg,#065f46,#059669);border-radius:14px;padding:14px;cursor:pointer;transition:opacity .15s" onmouseover="this.style.opacity='.9'" onmouseout="this.style.opacity='1'">
+            <div style="font-size:10px;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:.7px;margin-bottom:4px">📅 Generado este mes</div>
+            <div style="font-size:20px;font-weight:800;color:#fff;font-family:var(--mono)">${fmt(valorMes)}</div>
+            <div style="font-size:11px;color:rgba(255,255,255,.5);margin-top:2px">${cotsMes.length} cotizaciones</div>
+          </div>
+        </div>
+
+        <!-- PIPELINE -->
+        <div style="background:var(--card2);border-radius:14px;padding:14px">
+          <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:12px">📊 Pipeline</div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+            ${pipeline.map(p=>`
+              <div onclick="dashPanel('${p.icon} ${p.label}',${p.varName},'No hay cotizaciones en este estado')" style="text-align:center;cursor:pointer;padding:8px 4px;border-radius:10px;background:var(--surface);transition:background .15s"
+                onmouseover="this.style.background='var(--card)'" onmouseout="this.style.background='var(--surface)'">
+                <div style="font-size:22px;font-weight:800;color:${p.color};font-family:var(--mono)">${p.count}</div>
+                <div style="font-size:10px;color:var(--muted);margin-top:2px;line-height:1.2">${p.label}</div>
               </div>
-              <div class="app-icon-label">${a.label}</div>
+            `).join('')}
+          </div>
+          <!-- Mini barra visual del pipeline -->
+          <div style="margin-top:12px;height:6px;border-radius:4px;overflow:hidden;display:flex;gap:2px">
+            ${(()=>{
+              const total = pipeline.reduce((s,p)=>s+p.count,0)||1;
+              return pipeline.filter(p=>p.count>0).map(p=>
+                `<div style="flex:${p.count};background:${p.color};border-radius:4px;transition:flex .4s" title="${p.label}: ${p.count}"></div>`
+              ).join('');
+            })()}
+          </div>
+        </div>
+
+        <!-- OPs DEL ASESOR -->
+        ${opsProceso.length ? `
+        <div style="background:var(--card2);border-radius:14px;padding:14px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+            <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px">🏭 OPs activas</div>
+            <div onclick="dashPanelOPs('🏭 OPs Activas', window._dashOpsProceso||[])" style="font-size:11px;color:var(--accent);cursor:pointer">${opsProceso.length} activas · ${opsVencidas.length>0?'<span style=\'color:#ef4444\'>'+opsVencidas.length+' vencidas</span>':'<span style=\'color:#10b981\'>al día</span>'}</div>
+          </div>
+          ${opsProceso.slice(0,4).map(op=>`
+            <div onclick="detailOP('${op.IDQR||op.OP}')" style="display:flex;align-items:center;gap:10px;padding:8px 0;cursor:pointer;border-bottom:1px solid var(--border);last-child:border:none">
+              <div style="flex:1;min-width:0">
+                <div style="font-size:12px;font-weight:700;color:var(--accent)">OP-${op.OP}</div>
+                <div style="font-size:11px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${op.DESCRIPCION||op['DESCRIPCION ITEM']||'—'}</div>
+              </div>
+              <div style="flex-shrink:0;text-align:right">
+                ${bEst(op.ESTADO)}
+                <div style="font-size:10px;margin-top:3px;${Number(op['DÍAS ENTREGA']||0)<0?'color:#ef4444;font-weight:700':'color:var(--muted)'}">
+                  ${Number(op['DÍAS ENTREGA']||0)<0?'⚠️ '+Math.abs(Number(op['DÍAS ENTREGA']))+' días vencida':Number(op['DÍAS ENTREGA']||0)+' días rest.'} · ${qaPct(op['%AVANCE'])}%
+                </div>
+              </div>
+            </div>
+          `).join('')}
+          ${opsProceso.length>4?`<div onclick="dashPanelOPs('🏭 OPs Activas', window._dashOpsProceso||[])" style="text-align:center;padding:10px;color:var(--accent);font-size:13px;cursor:pointer;font-weight:700">+ ${opsProceso.length-4} más →</div>`:''}
+        </div>` : ''}
+
+        <!-- ACCIONES RÁPIDAS -->
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
+          ${[
+            {m:'cotizaciones',icon:'📋',bg:'#1d4ed8',label:'Cots.',badge:cotsEspera.length},
+            {m:'items',       icon:'🔩',bg:'#0369a1',label:'Ítems'},
+            {m:'clientes',    icon:'🏢',bg:'#047857',label:'Clientes'},
+            {m:'materiales',  icon:'🧱',bg:'#64748b',label:'Catálogo'},
+          ].map(a=>`
+            <div onclick="nav('${a.m}')" style="position:relative;text-align:center;cursor:pointer">
+              <div style="width:52px;height:52px;border-radius:14px;background:${a.bg};display:flex;align-items:center;justify-content:center;font-size:24px;margin:0 auto 5px;box-shadow:0 4px 12px ${a.bg}44">
+                ${a.icon}
+              </div>
+              ${a.badge?`<div style="position:absolute;top:-2px;right:calc(50% - 30px);background:#ef4444;color:#fff;border-radius:10px;font-size:10px;font-weight:700;min-width:18px;height:18px;display:flex;align-items:center;justify-content:center;padding:0 4px">${a.badge}</div>`:''}
+              <div style="font-size:11px;color:var(--muted);font-weight:600">${a.label}</div>
             </div>
           `).join('')}
         </div>
-      </div>
 
-      ${cotsEspera.length > 0 ? `
-        <div style="padding:0 14px 14px">
-          <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin:14px 0 10px">🟡 Cotizaciones en Espera</div>
+        <!-- MEJORES CLIENTES -->
+        ${topClientes.length ? `
+        <div style="background:var(--card2);border-radius:14px;padding:14px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+            <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px">🏆 Top Clientes</div>
+            <div style="font-size:11px;color:var(--accent);cursor:pointer" onclick="nav('clientes')">Ver todos →</div>
+          </div>
+          ${topClientes.map((cl,i)=>`
+            <div onclick="dashPanel('🏢 '+cl.nombre, (window._dashCots||[]).filter(c=>(c.Empresa||c.EMPRESA||'')===cl.nombre), 'Sin cotizaciones para este cliente')" style="display:flex;align-items:center;gap:10px;padding:8px 0;cursor:pointer;${i<topClientes.length-1?'border-bottom:1px solid var(--border);':''}">
+              <div style="width:26px;height:26px;border-radius:8px;background:${['#1d4ed8','#059669','#d97706','#7c3aed','#0891b2'][i]};display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:800;flex-shrink:0">${i+1}</div>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:12px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${cl.nombre}</div>
+                <div style="margin-top:4px;height:4px;background:var(--border);border-radius:2px;overflow:hidden">
+                  <div style="height:100%;width:${Math.round(cl.total/maxCliente*100)}%;background:${['#3b82f6','#10b981','#f59e0b','#8b5cf6','#06b6d4'][i]};border-radius:2px;transition:width .6s"></div>
+                </div>
+              </div>
+              <div style="text-align:right;flex-shrink:0">
+                <div style="font-size:12px;font-weight:700;color:var(--gold);font-family:var(--mono)">${fmt(cl.total)}</div>
+                <div style="font-size:10px;color:var(--muted)">${cl.cots} cots · ${cl.aprobadas} aprobadas</div>
+              </div>
+            </div>
+          `).join('')}
+        </div>` : ''}
+
+        <!-- COTIZACIONES EN ESPERA -->
+        ${cotsEspera.length ? `
+        <div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+            <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px">🟡 Pendientes de respuesta</div>
+            <div style="font-size:11px;color:var(--accent);cursor:pointer" onclick="dashPanel('🟡 En Espera',window._dashCotsEspera||[],'No hay cotizaciones pendientes')">Ver todas →</div>
+          </div>
           <div class="card-list">
-            ${cotsEspera.slice(0,5).map(c=>`
+            ${cotsEspera.slice(0,4).map(c=>`
               <div class="list-card" onclick="detailCot('${c.COTIZACION}')">
                 <div class="lc-top">
-                  <div>
+                  <div style="flex:1;min-width:0">
                     <div class="lc-id">COT-${c.COTIZACION}</div>
                     <div class="lc-title">${c.Empresa||c.EMPRESA||'Sin empresa'}</div>
-                    <div class="lc-sub">${c['DESCRIPCION DEL PROYECTO']||'—'}</div>
+                    <div class="lc-sub" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c['DESCRIPCION DEL PROYECTO']||'—'}</div>
                   </div>
-                  <div style="text-align:right;flex-shrink:0">
+                  <div style="text-align:right;flex-shrink:0;margin-left:10px">
                     ${bTipo(c.TIPO)}
-                    <div style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--gold);margin-top:4px">${fmt(c['PRECIO TOTAL'])}</div>
+                    <div style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--gold);margin-top:4px">${fmt(c['PRECIO TOTAL']||c['VALOR TOTAL'])}</div>
                   </div>
-                </div>
-                <div class="lc-meta">
-                  ${bEst(c.ESTADO)}
-                  <span style="font-size:11px;color:var(--muted)">${c.ASESOR||''}</span>
-                  <span style="font-size:11px;color:var(--muted)">Lead: ${leadTimeDias(c['LEAD TIME COT'])}d</span>
                 </div>
               </div>
             `).join('')}
-            ${cotsEspera.length > 5 ? `<div style="text-align:center;padding:10px;color:var(--accent);font-size:13px;cursor:pointer" onclick="nav('cotizaciones')">Ver todas (${cotsEspera.length}) →</div>` : ''}
+            ${cotsEspera.length>4?`<div onclick="nav('cotizaciones')" style="text-align:center;padding:10px;color:var(--accent);font-size:13px;cursor:pointer;font-weight:600">+ ${cotsEspera.length-4} más →</div>`:''}
+          </div>
+        </div>` : `
+        <div style="background:linear-gradient(135deg,rgba(16,185,129,.08),rgba(16,185,129,.03));border:1px solid rgba(16,185,129,.2);border-radius:14px;padding:16px;text-align:center">
+          <div style="font-size:24px;margin-bottom:6px">✅</div>
+          <div style="font-size:13px;font-weight:700;color:#10b981">¡Todo al día!</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px">No hay cotizaciones pendientes de respuesta</div>
+        </div>`}
+
+        <!-- COTIZACIONES RECIENTES -->
+        <div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+            <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px">🕐 Recientes</div>
+            <div style="font-size:11px;color:var(--accent);cursor:pointer" onclick="dashPanel('🕐 Todas las cotizaciones',[...(window._dashCots||[])].sort((a,b)=>Number(b.COTIZACION||0)-Number(a.COTIZACION||0)),'Sin cotizaciones')">Ver todas →</div>
+          </div>
+          <div class="card-list">
+            ${cotsRecientes.map(c=>`
+              <div class="list-card" onclick="detailCot('${c.COTIZACION}')">
+                <div class="lc-top">
+                  <div style="flex:1;min-width:0">
+                    <div style="display:flex;align-items:center;gap:6px">
+                      <div class="lc-id">COT-${c.COTIZACION}</div>
+                      ${bEst(c.ESTADO)}
+                    </div>
+                    <div class="lc-title">${c.Empresa||c.EMPRESA||'Sin empresa'}</div>
+                  </div>
+                  <div style="font-family:var(--mono);font-size:12px;font-weight:700;color:var(--gold);flex-shrink:0;margin-left:10px">${fmt(c['PRECIO TOTAL']||c['VALOR TOTAL'])}</div>
+                </div>
+              </div>
+            `).join('')}
           </div>
         </div>
-      ` : ''}
+
+      </div>
     `);
 
   }catch(e){
@@ -3522,7 +4058,12 @@ async function cotizaciones(){
     if(!DB.clientes)     await load('clientes','getClientes');
     updateBadges();
 
-    const all=[...DB.cotizaciones].sort((a,b)=>Number(b.COTIZACION||0)-Number(a.COTIZACION||0));
+    // Si es comercial: solo ver sus propias cotizaciones
+    let _allCots = [...DB.cotizaciones];
+    if(_esComercial() && _asesorActual()){
+      _allCots = _allCots.filter(c=>(c.ASESOR||'').toLowerCase()===_asesorActual().toLowerCase());
+    }
+    const all = _allCots.sort((a,b)=>Number(b.COTIZACION||0)-Number(a.COTIZACION||0));
     const data = filterData('cotizaciones', all);
 
     // Opciones únicas para filtros
@@ -3575,7 +4116,21 @@ async function cotizaciones(){
               const opVinc = (DB.produccion||[]).filter(x=>String(x.COT)===String(c.COTIZACION));
               const opNum = opVinc.length ? opVinc.map(o=>'OP-'+o.OP).join(', ') : '—';
               const procActualCot = opVinc.length ? calcProcActual(opVinc[0]) : '—';
-              const avgAvance = opVinc.length ? Math.round(opVinc.reduce((s,o)=>s+Number(o['%AVANCE']||0),0)/opVinc.length) : null;
+              const avgAvance = opVinc.length ? Math.round(opVinc.reduce((s,o)=>s+qaPct(o['%AVANCE']),0)/opVinc.length) : null;
+
+              // Estado efectivo: si hay OPs, derivar del estado real de las OPs
+              // Prioridad: si alguna sigue activa → EN PROCESO; si todas terminadas → TERMINADO/ENTREGADO
+              const _estadoEfectivo = (()=>{
+                if(!opVinc.length) return _normEstado(c.ESTADO);
+                const todos = opVinc.map(o=>o.ESTADO||'');
+                const ACTIVOS = ['EN PROCESO','PENDIENTE MP','PENDIENTE MP Y DISEÑO','PENDIENTE DISEÑO','PAUSADO','TRABAJO EXTERNO'];
+                const TERM    = ['TERMINADO','ENTREGADO'];
+                if(todos.every(e=>TERM.includes(e)))          return 'TERMINADO';
+                if(todos.some(e=>e==='ENTREGADO'))             return 'EN PROCESO'; // parcial
+                if(todos.some(e=>ACTIVOS.includes(e)))         return 'EN PROCESO';
+                return _normEstado(c.ESTADO);
+              })();
+
               return `<tr onclick="detailCot('${c.COTIZACION}')">
                 <td>
                   ${avgAvance!==null?`<div style="display:flex;gap:2px;margin-bottom:2px">
@@ -3588,7 +4143,7 @@ async function cotizaciones(){
                   <span style="color:var(--accent);font-weight:700">COT-${c.COTIZACION||'—'}</span>
                 </td>
                 <td>${opVinc.length?`<span style="color:var(--gold);font-weight:700;font-size:12px">OP-${opVinc[0].OP}${opVinc.length>1?' +'.concat(opVinc.length-1):''}</span>`:'<span style="color:var(--muted)">—</span>'}</td>
-                <td onclick="event.stopPropagation()">${bEstCot(c.COTIZACION, c.ESTADO, opVinc.length>0)}</td>
+                <td onclick="event.stopPropagation()">${bEstCot(c.COTIZACION, _estadoEfectivo, opVinc.length>0)}</td>
                 <td>${bTipo(c.TIPO)}</td>
                 <td style="max-width:180px;font-weight:600">${c.Empresa||c.EMPRESA||'—'}</td>
                 <td style="max-width:220px">${c['DESCRIPCION DEL PROYECTO']||'—'}</td>
@@ -3611,6 +4166,15 @@ async function cotizaciones(){
         ${sorted.length ? sorted.map(c=>{
           const dias=leadTimeDias(c['LEAD TIME COT']);
           const opVincCard = (DB.produccion||[]).filter(x=>String(x.COT)===String(c.COTIZACION));
+          const _estadoEfectivoCard = (()=>{
+            if(!opVincCard.length) return _normEstado(c.ESTADO);
+            const todos = opVincCard.map(o=>o.ESTADO||'');
+            const TERM = ['TERMINADO','ENTREGADO'];
+            const ACTIVOS = ['EN PROCESO','PENDIENTE MP','PENDIENTE MP Y DISEÑO','PENDIENTE DISEÑO','PAUSADO','TRABAJO EXTERNO'];
+            if(todos.every(e=>TERM.includes(e))) return 'TERMINADO';
+            if(todos.some(e=>ACTIVOS.includes(e))) return 'EN PROCESO';
+            return _normEstado(c.ESTADO);
+          })();
           return `<div class="list-card" onclick="detailCot('${c.COTIZACION}')">
             <div class="lc-top">
               <div>
@@ -3624,7 +4188,7 @@ async function cotizaciones(){
               </div>
             </div>
             <div class="lc-meta">
-              ${bEstCot(c.COTIZACION, c.ESTADO, opVincCard.length>0)}
+              ${bEstCot(c.COTIZACION, _estadoEfectivoCard, opVincCard.length>0)}
               <span style="font-size:11px;color:var(--muted)">Lead: ${dias}d</span>
               <span style="font-size:11px;color:var(--muted)">${c.ASESOR||''}</span>
             </div>
@@ -3722,6 +4286,7 @@ async function recargarOPsCot(cotId){
 }
 
 async function detailCot(id){
+  window._detailCotId = id; // para modalAgregarSubItem
   // Abrir panel inmediatamente con lo que ya hay en caché
   const c=(DB.cotizaciones||[]).find(x=>String(x.COTIZACION)===String(id)||String(x.ID_PEDIDO)===String(id)); if(!c) return;
 
@@ -3803,11 +4368,16 @@ async function detailCot(id){
       </tr></thead>
       <tbody>
         ${its.map(it=>{
-          const opIt = (DB.produccion||[]).find(x=>String(x.COT)===String(id) && String(x.ITEM)===String(it.ITEM||it.ITEM_NUM));
+          const numStr = String(it.ITEM_NUM||it.ITEM||'—');
+          const parsed = parseItemNum(numStr);
+          const esHijo = parsed.nivel > 1;
+          const opIt = (DB.produccion||[]).find(x=>String(x.COT)===String(id) && (String(x.ITEM)===numStr||String(x.ITEM)===String(it.ITEM)));
           const pctIt = opIt ? Number(opIt['%AVANCE']||0) : null;
           const procIt = opIt ? calcProcActual(opIt) : '—';
           return `<tr onclick="detailItem('${it.ID_ITEM}')" style="cursor:pointer">
-            <td class="td-center" style="font-weight:700;color:var(--accent)">${it.ITEM||it['COT-ITEM']||'—'}</td>
+            <td class="td-center" style="font-weight:700;color:${esHijo?'#0369a1':'var(--accent)'};padding-left:${esHijo?'20':'8'}px">
+              ${esHijo?'<span style="color:var(--muted);margin-right:2px">└</span>':''}<span style="font-size:${esHijo?'11':'13'}px">${numStr}</span>
+            </td>
             <td style="max-width:200px;font-weight:500">${it['DESCRIPCION ITEM']||it.DESCRIPCION||'—'}</td>
             <td class="td-center">${it.UNIDADES||it.CANT||0}</td>
             <td style="max-width:120px">${it['MATERIAL 1']||'—'}</td>
@@ -3964,11 +4534,23 @@ async function detailCot(id){
         <span class="cot-action-ic" style="background:#2e7d32">🔄</span>
         <span class="cot-action-lbl">Actualizar Items</span>
       </button>
-      ${its.every(it=>it.DISEÑADOR) && its.length > 0 ? `` : `
-      <button class="cot-action-btn" onclick="diseñadorCot('${id}')">
-        <span class="cot-action-ic" style="background:#7b1fa2">👤</span>
-        <span class="cot-action-lbl">Diseñador</span>
-      </button>`}
+      ${(()=>{
+        // Si TODOS los ítems tienen diseñador: mostrar badge con el nombre, no el botón
+        const disActual = its.length > 0 && its.every(it=>it.DISEÑADOR) ? its[0].DISEÑADOR : null;
+        if(disActual){
+          return `<button class="cot-action-btn" onclick="diseñadorCot('${id}')" title="Cambiar diseñador">
+            <span class="cot-action-ic" style="background:#4a148c">✏️</span>
+            <span class="cot-action-lbl" style="font-size:9px;line-height:1.2">
+              ${disActual}<br><span style="opacity:.7;font-size:8px">Diseñador</span>
+            </span>
+          </button>`;
+        }
+        // Algún ítem sin diseñador o sin ítems en cache: mostrar botón asignar
+        return `<button class="cot-action-btn" onclick="diseñadorCot('${id}')">
+          <span class="cot-action-ic" style="background:#7b1fa2">👤</span>
+          <span class="cot-action-lbl">Diseñador</span>
+        </button>`;
+      })()}
       ${its.some(it=>it.DISEÑADOR) && !tieneOP ? `
       <button class="cot-action-btn" onclick="modalCrearOP('${id}')">
         <span class="cot-action-ic" style="background:#2e7d32">🏭</span>
@@ -3987,6 +4569,15 @@ async function detailCot(id){
         <span class="cot-action-ic" style="background:#2e7d32">🧩</span>
         <span class="cot-action-lbl">Agregar Item</span>
       </button>
+      <button class="cot-action-btn" onclick="modalSeleccionarItems('${id}')">
+        <span class="cot-action-ic" style="background:#0891b2">☑️</span>
+        <span class="cot-action-lbl">Selección</span>
+      </button>
+      ${String(c.TIPO||'').includes('EM') ? `
+      <button class="cot-action-btn" onclick="modalAgregarSubItem(null,'nuevo')">
+        <span class="cot-action-ic" style="background:#7c3aed">🔗</span>
+        <span class="cot-action-lbl">Sub-Ítem</span>
+      </button>` : ''}
     </div>
 
     <!-- ACCIONES RÁPIDAS (edición / borrado) -->
@@ -4342,6 +4933,13 @@ async function modalCrearOP(cotId, soloItemId){
   const c=(DB.cotizaciones||[]).find(x=>String(x.COTIZACION)===String(cotId));
   if(!c){ toast('Cotización no encontrada','error'); return; }
   let its=DB.items.filter(x=>String(x.COTIZACION)===String(cotId)||String(x.ID_PEDIDO)===String(cotId));
+  // Para ensambles: si hay sub-ítems (ITEM_NUM con punto), excluir los padres
+  // Los padres son contenedores — la OP se crea por cada pieza/sub-ítem
+  const _haySubItems = its.some(x=>String(x.ITEM_NUM||x.ITEM||'').includes('.'));
+  if(_haySubItems && String(c?.TIPO||'').includes('EM')){
+    const _soloHijos = its.filter(x=>String(x.ITEM_NUM||x.ITEM||'').includes('.'));
+    if(_soloHijos.length) its = _soloHijos; // usar solo hijos si existen
+  }
   if(!its.length){
     toast('La cotización no tiene items. Agrégalos primero.','error'); return;
   }
@@ -4376,7 +4974,11 @@ async function modalCrearOP(cotId, soloItemId){
     return;
   }
 
-  const newOP = opExistenteNum || String(Math.max(...(DB.produccion||[]).map(x=>Number(x.OP||x.ID_OP)||0),13000)+1);
+  // El número de OP lo asigna el GAS con LockService para evitar colisiones concurrentes.
+  // Solo usamos un número local temporal para mostrar en UI antes de la respuesta del servidor.
+  // El GAS debe implementar: LockService.getScriptLock() → getLastOP() + 1 → liberar lock.
+  const _maxLocal = Math.max(...(DB.produccion||[]).map(x=>Number(x.OP||x.ID_OP)||0),13000);
+  const newOP = opExistenteNum || String(_maxLocal + 1); // número tentativo — el GAS asigna el real
   const itemsAUsar = opExistenteNum ? itsFaltantes : its;
 
   const hoy=new Date().toISOString().slice(0,10);
@@ -4757,7 +5359,15 @@ async function items(){
     if(!DB.produccion)   await load('produccion','getControlProduccion');
     updateBadges();
 
-    const all=[...DB.items].sort((a,b)=>Number(b.COTIZACION||0)-Number(a.COTIZACION||0));
+    // Si es comercial: solo sus ítems (los de sus cotizaciones)
+    let _allItems = [...DB.items];
+    if(_esComercial() && _asesorActual()){
+      const _misCots = new Set((DB.cotizaciones||[])
+        .filter(c=>(c.ASESOR||'').toLowerCase()===_asesorActual().toLowerCase())
+        .map(c=>String(c.COTIZACION)));
+      _allItems = _allItems.filter(it=>_misCots.has(String(it.COTIZACION||it.ID_PEDIDO||'')));
+    }
+    const all = _allItems.sort((a,b)=>Number(b.COTIZACION||0)-Number(a.COTIZACION||0));
     const data = filterData('items', all);
 
     // Opciones únicas para filtros
@@ -4786,6 +5396,7 @@ async function items(){
             <th>OP</th>
             ${thSort('items','DESCRIPCION ITEM','Descripción')}
             ${thSort('items','ESTADO_PROD','Estado')}
+            <th>Avance</th>
             ${thSort('items','UNIDADES','Cant')}
             ${thSort('items','PRECIO UNITARIO','Precio Unit.')}
             ${thSort('items','PRECIO X ITEM','Precio×Item')}
@@ -4806,6 +5417,18 @@ async function items(){
                 <td style="color:var(--info);font-size:11px">${op?'OP-'+op.OP:'—'}</td>
                 <td style="max-width:200px">${it['DESCRIPCION ITEM']||it.DESCRIPCION||'Sin descripción'}</td>
                 <td>${bEst(it.ESTADO_PROD||'—')}</td>
+                <td style="min-width:90px">
+                  ${op ? (() => {
+                    const _p = qaPct(op['%AVANCE']);
+                    const _c = _p>=80?'#10b981':_p>=40?'#f59e0b':'#3b82f6';
+                    return `<div style="display:flex;align-items:center;gap:5px">
+                      <div style="flex:1;height:5px;background:var(--border);border-radius:3px;overflow:hidden;min-width:40px">
+                        <div style="height:100%;width:${_p}%;background:${_c};border-radius:3px"></div>
+                      </div>
+                      <span style="font-size:11px;font-weight:700;color:${_c};font-family:var(--mono);white-space:nowrap">${_p}%</span>
+                    </div>`;
+                  })() : '<span style="color:var(--muted);font-size:11px">—</span>'}
+                </td>
                 <td class="td-num">${it.UNIDADES||it.CANT||0}</td>
                 <td class="td-num">${fmt(it['PRECIO UNITARIO']||it['PRECIO SIN IVA'])}</td>
                 <td class="td-num" style="color:var(--gold);font-weight:700">${fmt(it['PRECIO X ITEM']||(Number(it['PRECIO UNITARIO']||0)*(it.UNIDADES||1)))}</td>
@@ -4832,8 +5455,19 @@ async function items(){
               <div style="font-size:11px;color:var(--muted)">×${it.CANT||0}</div>
             </div>
           </div>
+          ${op ? (() => {
+            const _p = qaPct(op['%AVANCE']);
+            const _c = _p>=80?'#10b981':_p>=40?'#f59e0b':'#3b82f6';
+            return `<div style="margin:6px 0 4px;display:flex;align-items:center;gap:6px">
+              <div style="flex:1;height:4px;background:var(--border);border-radius:2px;overflow:hidden">
+                <div style="height:100%;width:${_p}%;background:${_c};border-radius:2px"></div>
+              </div>
+              <span style="font-size:10px;font-weight:700;color:${_c};font-family:var(--mono)">${_p}%</span>
+              <span style="font-size:10px;color:var(--muted)">${bEst(op.ESTADO)}</span>
+            </div>`;
+          })() : ''}
           <div class="lc-meta">
-            ${bEst(it.ESTADO_PROD)}
+            ${!op ? bEst(it.ESTADO_PROD) : ''}
             ${it.RUTA_MQ1?`<span style="font-size:10px;color:var(--muted)">${it.RUTA_MQ1}${it.RUTA_MQ2?' → '+it.RUTA_MQ2:''}</span>`:''}
             ${diasTag(it.DIAS_ENTREGA)}
           </div>
@@ -5879,8 +6513,17 @@ const svcOpts = (DB.servicios || []).map(s => {
     if(!isNew){
       for(let _mi = 0; _mi < 5; _mi++){
         const _costEl = document.getElementById('mat'+_mi+'cost');
-        const _costoGuardado = Number(it['COSTO MAT '+(_mi+1)] ?? 0);
-        if(_costEl && _costoGuardado > 0){
+        if(!_costEl) continue;
+        // Leer el costo guardado: primero del data-saved-cost (puesto por buildMatRow),
+        // luego buscar en todas las variantes de nombre de columna del Sheet
+        const n = _mi+1;
+        const _costoDeAtributo = Number(_costEl.dataset.savedCost||0);
+        const _costoDeSheet = Number(
+          it['COSTO MAT '+n] ?? it['COSTO_MAT_'+n] ??
+          it['COSTO MATERIAL '+n] ?? it['COSTO MAT'+n] ?? 0
+        );
+        const _costoGuardado = _costoDeAtributo || _costoDeSheet;
+        if(_costoGuardado > 0){
           _costEl._manual = true;
           _costEl.value = _costoGuardado;
         }
@@ -5899,9 +6542,12 @@ const svcOpts = (DB.servicios || []).map(s => {
     // Limpiar archivos pendientes al abrir un modal nuevo
     window._itPendingImg  = null;
     window._itPendingPlan = null;
-    recalcItem();
-    _checkMargenUrgencia(true);
-    renderDescImages();
+    // recalcItem() DESPUÉS de marcar _manual para que no sobreescriba precios guardados
+    setTimeout(()=>{
+      recalcItem();
+      _checkMargenUrgencia(true);
+      renderDescImages();
+    }, 50);
   },100);
 }
 async function deleteItem(id){
@@ -6121,7 +6767,14 @@ async function deleteCliente(id){
 // ═══════════════════════════════════════════════════════════════
 
 // Stubs para evitar errores si detailOP llama estas funciones
-function qaPct(v){ const n=Number(String(v||'0').replace('%','')); return isNaN(n)?0:Math.min(100,Math.max(0,n)); }
+function qaPct(v){
+  const s = String(v||'0').replace('%','').trim();
+  const n = Number(s);
+  if(isNaN(n)) return 0;
+  // Si viene como decimal entre 0 y 1 (ej: 0.897) → multiplicar x100
+  const pct = (n > 0 && n < 1) ? Math.round(n * 100) : Math.round(n);
+  return Math.min(100, Math.max(0, pct));
+}
 function qaBar(){ return ''; }
 
 // produccion() solo carga DB en background — no navega
@@ -7366,40 +8019,48 @@ async function saveCot(exist){
     if(data[k]===undefined || data[k]==='') delete data[k];
   });
 
+  const btn = document.getElementById('btn-save-cot');
   try{
     const _cotCreada = !exist;
-    const _cotId = data['ID_COT'] || data['COTIZACION'] || '';
-    const _pedId = data['ID_PEDIDO'] || '';
 
-    // Mutación optimista inmediata en DB local
     if(_cotCreada){
-      DB.cotizaciones = [{...data, ID_PEDIDO:_pedId, ID_COT:_cotId, COTIZACION:_cotId}, ...(DB.cotizaciones||[])];
-    } else if(DB.cotizaciones){
-      const idx = DB.cotizaciones.findIndex(x=>String(x.COTIZACION)===String(_cotId)||String(x.ID_PEDIDO)===String(_pedId));
-      if(idx>=0) DB.cotizaciones[idx] = {...DB.cotizaciones[idx],...data};
+      // ── NUEVA COTIZACIÓN: esperar respuesta del servidor ──────────
+      // No mostrar nada hasta que el GAS confirme y asigne el número real
+      if(btn){ btn.disabled=true; btn.textContent='⏳ Creando…'; }
+
+      const res = await POST('createCotizacion', data);
+
+      // El GAS debe devolver { ok:true, ID_COT, ID_PEDIDO, COTIZACION }
+      const _cotIdReal  = res?.ID_COT || res?.COTIZACION || data['ID_COT'] || '';
+      const _pedIdReal  = res?.ID_PEDIDO || data['ID_PEDIDO'] || '';
+
+      // Agregar a DB local con el número REAL del servidor
+      const cotReal = {...data, ID_PEDIDO:_pedIdReal, ID_COT:_cotIdReal, COTIZACION:_cotIdReal};
+      DB.cotizaciones = [cotReal, ...(DB.cotizaciones||[])];
+
+      toast(`✅ COT-${_cotIdReal} creada`);
+      closeModal();
+      cotizaciones();
+
+      // Sugerir agregar ítems
+      setTimeout(()=>{ toast('💡 Toca la cotización para agregar ítems'); }, 1000);
+
+    } else {
+      // ── EDICIÓN: optimista + background ──────────────────────────
+      const _cotId = data['ID_COT'] || data['COTIZACION'] || '';
+      const _pedId = data['ID_PEDIDO'] || '';
+      if(DB.cotizaciones){
+        const idx = DB.cotizaciones.findIndex(x=>String(x.COTIZACION)===String(_cotId)||String(x.ID_PEDIDO)===String(_pedId));
+        if(idx>=0) DB.cotizaciones[idx] = {...DB.cotizaciones[idx],...data};
+      }
+      toast('✅ Cotización actualizada');
+      closeModal();
+      POST_BG('updateCotizacion', data);
+      _autoSync(['cotizaciones'], cotizaciones);
     }
 
-    // Cerrar modal e informar INMEDIATAMENTE
-    toast(exist ? '✅ Cotización actualizada' : '✅ Cotización creada — puedes agregar ítems');
-    closeModal();
-
-    // Enviar al servidor en background
-    POST_BG(exist ? 'updateCotizacion' : 'createCotizacion', data);
-
-    _autoSync(['cotizaciones'], cotizaciones);
-    // Si es nueva cotización, preguntar si quiere agregar ítems inmediatamente
-    if(_cotCreada){
-      setTimeout(()=>{
-        // Buscar la cotización recién creada en DB
-        const newCot = (DB.cotizaciones||[]).find(c=>c.ID_PEDIDO===_pedId || String(c.ID_COT)===String(_cotId));
-        if(newCot){
-          toast('💡 Toca "＋" para agregar ítems a la cotización');
-        }
-      }, 800);
-    }
   } catch(e){
     toast('❌ ' + e.message, 'error');
-    const btn = document.getElementById('btn-save-cot');
     if(btn){ btn.disabled=false; btn.textContent = exist?'✓ Guardar':'✓ Crear Cotización'; }
   }
 }
@@ -8701,22 +9362,36 @@ async function saveOP(exist){
 
   if(!data.ID_OP){ toast('Nº OP requerido','error'); return; }
 
-  // Mutación optimista en DB local
+  const _btnSaveOP = document.querySelector('#modal-foot .btn-primary');
+
   if(!exist){
-    DB.produccion = [...(DB.produccion||[]), {...data}];
-  } else if(DB.produccion){
-    const idx=DB.produccion.findIndex(x=>String(x.IDQR||x.OP||'')===String(exist));
-    if(idx>=0) DB.produccion[idx]={...DB.produccion[idx],...data};
+    // ── NUEVA OP: esperar respuesta del servidor ───────────────────
+    // El GAS asigna el número definitivo con LockService
+    if(_btnSaveOP){ _btnSaveOP.disabled=true; _btnSaveOP.textContent='⏳ Creando OP…'; }
+    try{
+      const res = await POST('createOP', data);
+      // El GAS devuelve el número real asignado
+      const opReal  = res?.OP  || res?.ID_OP  || data.OP  || data.ID_OP;
+      const idqrReal = res?.IDQR || ('tmp_'+Date.now());
+      DB.produccion = [...(DB.produccion||[]), {...data, OP:opReal, IDQR:idqrReal}];
+      toast(`✅ OP-${opReal} creada`);
+      closeModal();
+      _syncNow(['produccion']); setTimeout(produccion, 250);
+    }catch(e){
+      toast('❌ '+e.message,'error');
+      if(_btnSaveOP){ _btnSaveOP.disabled=false; _btnSaveOP.textContent='✓ Crear OP'; }
+    }
+  } else {
+    // ── EDICIÓN: optimista + background ───────────────────────────
+    if(DB.produccion){
+      const idx=DB.produccion.findIndex(x=>String(x.IDQR||x.OP||'')===String(exist));
+      if(idx>=0) DB.produccion[idx]={...DB.produccion[idx],...data};
+    }
+    toast('OP actualizada ✓');
+    closeModal();
+    POST_BG('updateOP', data);
+    _autoSync(['produccion'], produccion);
   }
-
-  toast(exist?'OP actualizada ✓':'OP creada ✓');
-  closeModal();
-
-  // Guardar en background
-  POST_BG(exist?'updateOP':'createOP', data);
-
-  if(!exist){ _syncNow(['produccion']); setTimeout(produccion, 250); }
-  else { _autoSync(['produccion'], produccion); }
 }
 
 async function deleteOP(id){
@@ -8841,7 +9516,9 @@ function buildMatRow(idx, it){
           <div style="display:flex;align-items:center;gap:8px">
             <div class="money-row" style="flex:1">
               <span class="money-sign">$</span>
-              <input type="number" id="mat${idx}cost" value="${m.cost||0}" oninput="this._manual=true;recalcItem()">
+              <input type="number" id="mat${idx}cost" value="${m.cost||0}"
+                data-saved-cost="${m.cost||0}"
+                oninput="this._manual=true;recalcItem()">
             </div>
             <button type="button" class="btn btn-ghost btn-sm" onclick="calcCostMat(${idx},true)">⟳ Recalc</button>
           </div>
@@ -9728,14 +10405,423 @@ async function recalcularTotalesCotUI(cotId){
   detailCot(cotId);
 }
 
+// ═══════════════════════════════════════════════════════════════
+// SELECCIÓN DE ÍTEMS PARA COTIZACIÓN — elegir cuáles incluir y con qué precio
+// ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
+// JERARQUÍA DE ÍTEMS — soporte para ítems padre e hijos (1, 1.1, 1.2, 2, 2.1…)
+// Los ítems usan el campo ITEM_NUM (string) para el número visible
+// y ITEM_PADRE (string) para referenciar al padre
+// ═══════════════════════════════════════════════════════════════
+
+// Parsear número de ítem: "1.2" → {nivel:2, padre:"1", num:2}
+function parseItemNum(itemNum){
+  const s = String(itemNum||'').trim();
+  const parts = s.split('.');
+  return {
+    raw:   s,
+    nivel: parts.length,   // 1=raíz, 2=hijo, 3=nieto (no soportado por ahora)
+    padre: parts.length > 1 ? parts.slice(0,-1).join('.') : null,
+    seq:   Number(parts[parts.length-1])||0,
+  };
+}
+
+// Ordenar ítems con jerarquía correcta: 1, 1.1, 1.2, 2, 2.1...
+function sortItemsJerarquia(items){
+  return [...items].sort((a,b)=>{
+    const na = String(a.ITEM_NUM||a.ITEM||0);
+    const nb = String(b.ITEM_NUM||b.ITEM||0);
+    // Comparar segmento por segmento
+    const pa = na.split('.').map(Number);
+    const pb = nb.split('.').map(Number);
+    for(let i=0;i<Math.max(pa.length,pb.length);i++){
+      const va = pa[i]||0, vb = pb[i]||0;
+      if(va!==vb) return va-vb;
+    }
+    return 0;
+  });
+}
+
+// Construir árbol de ítems agrupados
+function buildItemTree(items){
+  const sorted = sortItemsJerarquia(items);
+  const raices = sorted.filter(it=>!parseItemNum(it.ITEM_NUM||it.ITEM).padre);
+  return raices.map(padre=>{
+    const numPadre = String(padre.ITEM_NUM||padre.ITEM||'');
+    const hijos = sorted.filter(it=>{
+      const p = parseItemNum(it.ITEM_NUM||it.ITEM);
+      return p.padre === numPadre;
+    });
+    return {padre, hijos};
+  });
+}
+
+// Render de un ítem en la lista con jerarquía visual
+function renderItemCardJerarquia(it, opts={}){
+  const numStr  = String(it.ITEM_NUM||it.ITEM||'—');
+  const parsed  = parseItemNum(numStr);
+  const esHijo  = parsed.nivel > 1;
+  const indent  = esHijo ? '20px' : '0';
+  const bgColor = esHijo ? 'var(--surface)' : 'var(--card2)';
+  const numBg   = esHijo ? '#0369a1' : 'var(--accent2)';
+  const pUnit   = Number(it['PRECIO UNITARIO']||it['PRECIO SIN IVA']||0);
+  const pTotal  = Number(it['PRECIO X ITEM']||(pUnit*(it.UNIDADES||1)));
+  const cant    = Number(it.UNIDADES||it.CANT||1);
+
+  return `<div style="margin-left:${indent};margin-bottom:6px">
+    <div style="background:${bgColor};border-radius:${esHijo?'8':'10'}px;
+      padding:${esHijo?'8 10':'10 12'}px;
+      border-left:3px solid ${esHijo?'#0369a1':'var(--accent)'};
+      display:flex;align-items:center;gap:8px;cursor:pointer"
+      onclick="detailItem('${it.ID_ITEM}')">
+      <span style="background:${numBg};color:#fff;border-radius:6px;
+        padding:2px 8px;font-size:${esHijo?'10':'12'}px;font-weight:700;flex-shrink:0;
+        min-width:32px;text-align:center">${numStr}</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:${esHijo?'11':'12'}px;font-weight:${esHijo?'500':'600'};
+          color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+          ${it['DESCRIPCION ITEM']||it.DESCRIPCION||'Sin descripción'}
+        </div>
+        <div style="font-size:10px;color:var(--muted);margin-top:2px">
+          ${cant} uds · ${it['MATERIAL 1']||'—'}
+        </div>
+      </div>
+      <div style="text-align:right;flex-shrink:0">
+        <div style="font-size:${esHijo?'11':'13'}px;font-weight:700;color:var(--gold);font-family:var(--mono)">
+          ${fmt(pTotal)}
+        </div>
+        ${!esHijo?`<div style="font-size:10px;color:var(--muted)">${fmt(pUnit)}/ud</div>`:''}
+      </div>
+      ${opts.acciones ? `<div onclick="event.stopPropagation()" style="display:flex;gap:4px;flex-shrink:0">
+        <button onclick="formItem(DB.items.find(x=>x.ID_ITEM==='${it.ID_ITEM}')||{})"
+          style="background:none;border:none;cursor:pointer;font-size:14px;padding:4px">✏️</button>
+        <button onclick="modalAgregarSubItem('${it.ID_ITEM}','${String(it.ITEM_NUM||it.ITEM)}')"
+          style="background:none;border:none;cursor:pointer;font-size:14px;padding:4px" title="Agregar sub-ítem">＋</button>
+      </div>` : ''}
+    </div>
+  </div>`;
+}
+
+// Modal para agregar un sub-ítem bajo un padre
+function modalAgregarSubItem(itemPadreId, numPadre){
+  const cotId = window._detailCotId; // guardado al abrir detailCot
+  if(!cotId){ toast('Sin cotización activa','error'); return; }
+
+  // Si numPadre es 'nuevo' → crear ítem raíz con siguiente número
+  if(numPadre === 'nuevo'){
+    const itsRaiz = (DB.items||[]).filter(it=>{
+      const p = parseItemNum(it.ITEM_NUM||it.ITEM);
+      return !p.padre && (String(it.COTIZACION)===String(cotId));
+    });
+    const maxRaiz = Math.max(...itsRaiz.map(it=>parseItemNum(it.ITEM_NUM||it.ITEM).seq),0);
+    formItem({ COTIZACION:cotId, ITEM_NUM:String(maxRaiz+1), ITEM:maxRaiz+1 });
+    return;
+  }
+
+  const itsHermanos = (DB.items||[]).filter(it=>{
+    const p = parseItemNum(it.ITEM_NUM||it.ITEM);
+    return p.padre === String(numPadre) &&
+      (String(it.COTIZACION)===String(cotId)||String(it.ID_PEDIDO)===String(cotId));
+  });
+  const siguienteSeq = itsHermanos.length + 1;
+  const nuevoNum     = `${numPadre}.${siguienteSeq}`;
+
+  // Abrir formItem con el número pre-asignado
+  const padre = (DB.items||[]).find(x=>x.ID_ITEM===itemPadreId);
+  formItem({
+    COTIZACION:   cotId,
+    ID_PEDIDO:    padre?.ID_PEDIDO||'',
+    ITEM_NUM:     nuevoNum,
+    ITEM:         nuevoNum,
+    ITEM_PADRE:   numPadre,
+    EMPRESA:      padre?.EMPRESA||'',
+  });
+}
+
+// Convertir ítem existente a padre (agregar campo ITEM_NUM si solo tiene ITEM)
+function normalizarItemNum(it){
+  return {
+    ...it,
+    ITEM_NUM: it.ITEM_NUM || String(it.ITEM||''),
+  };
+}
+
+function modalSeleccionarItems(cotId){
+  const c   = (DB.cotizaciones||[]).find(x=>String(x.COTIZACION)===String(cotId));
+  const its = (DB.items||[])
+    .filter(x=>String(x.COTIZACION)===String(cotId)||String(x.ID_PEDIDO)===String(c?.ID_PEDIDO||''))
+    .sort((a,b)=>(Number(a.ITEM)||0)-(Number(b.ITEM)||0));
+
+  if(!its.length){ toast('Sin ítems en esta cotización','error'); return; }
+
+  // Leer selección guardada (localStorage por cotización)
+  const selKey = 'cot_sel_'+cotId;
+  let selGuardada = {};
+  try{ selGuardada = JSON.parse(localStorage.getItem(selKey)||'{}'); }catch(e){}
+
+  openModal(`☑️ Selección de Ítems — COT-${cotId}`,`
+    <div style="background:rgba(8,145,178,.06);border:1px solid rgba(8,145,178,.2);border-radius:10px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:var(--muted)">
+      ℹ️ Elige qué ítems incluir en la cotización y ajusta el precio o descuento de cada uno para el cliente.
+    </div>
+    <div id="sel-items-list">
+      ${its.map(it=>{
+        const saved   = selGuardada[it.ID_ITEM] || {};
+        const checked = saved.incluir !== false; // incluido por defecto
+        const precioBase = Number(it['PRECIO UNITARIO']||it['PRECIO SIN IVA']||0);
+        const descPct    = saved.descPct !== undefined ? saved.descPct : 0;
+        const precioFinal = Math.round(precioBase * (1 - descPct/100));
+        return `
+        <div id="sel-it-${it.ID_ITEM}" style="background:var(--card2);border-radius:12px;padding:12px;margin-bottom:8px;
+          border:1.5px solid ${checked?'var(--accent)':'var(--border)'};transition:border-color .15s">
+          <div style="display:flex;align-items:flex-start;gap:10px">
+            <!-- Checkbox -->
+            <input type="checkbox" id="chk-${it.ID_ITEM}" ${checked?'checked':''}
+              style="width:18px;height:18px;margin-top:2px;flex-shrink:0;cursor:pointer;accent-color:var(--accent)"
+              onchange="selItemToggle('${it.ID_ITEM}',this.checked)">
+            <div style="flex:1;min-width:0">
+              <!-- Header del ítem -->
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                <div>
+                  <span style="background:var(--accent2);color:#fff;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700">Ítem ${it.ITEM}</span>
+                  <span style="font-size:11px;color:var(--muted);margin-left:6px">${it.UNIDADES||it.CANT||1} uds</span>
+                </div>
+                <div style="font-size:11px;color:var(--muted)">Base: <strong>${fmt(precioBase)}</strong></div>
+              </div>
+              <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:8px;
+                white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+                ${it['DESCRIPCION ITEM']||it.DESCRIPCION||'Sin descripción'}
+              </div>
+              <!-- Controles de precio -->
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                <div>
+                  <label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700;display:block;margin-bottom:3px">
+                    Descuento %
+                  </label>
+                  <div style="display:flex;align-items:center;gap:4px">
+                    <input type="number" id="desc-${it.ID_ITEM}" value="${descPct}" min="0" max="100" step="1"
+                      style="width:100%;padding:6px 8px;border-radius:8px;border:1px solid var(--border);
+                      background:var(--surface);color:var(--text);font-size:13px;font-weight:700"
+                      oninput="selItemCalc('${it.ID_ITEM}',${precioBase})">
+                    <span style="font-size:13px;color:var(--muted)">%</span>
+                  </div>
+                </div>
+                <div>
+                  <label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700;display:block;margin-bottom:3px">
+                    Precio final / ud
+                  </label>
+                  <input type="number" id="precio-${it.ID_ITEM}" value="${precioFinal}" min="0"
+                    style="width:100%;padding:6px 8px;border-radius:8px;border:1px solid var(--border);
+                    background:var(--surface);color:var(--gold);font-size:13px;font-weight:700;box-sizing:border-box"
+                    oninput="selItemCalcDesc('${it.ID_ITEM}',${precioBase})">
+                </div>
+              </div>
+              <!-- Total del ítem -->
+              <div id="total-${it.ID_ITEM}" style="margin-top:6px;font-size:11px;color:var(--muted);text-align:right">
+                Total: <strong style="color:var(--gold)">${fmt(precioFinal*(Number(it.UNIDADES||it.CANT)||1))}</strong>
+                (${it.UNIDADES||it.CANT||1} × ${fmt(precioFinal)})
+              </div>
+            </div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+    <!-- Total general -->
+    <div style="background:var(--card2);border-radius:12px;padding:12px 14px;margin-top:4px;
+      display:flex;justify-content:space-between;align-items:center">
+      <div style="font-size:12px;font-weight:700;color:var(--muted)">TOTAL SELECCIÓN</div>
+      <div id="sel-total-general" style="font-size:18px;font-weight:800;color:var(--gold);font-family:var(--mono)">
+        ${fmt(its.filter(it=>(selGuardada[it.ID_ITEM]?.incluir??true)).reduce((s,it)=>{
+          const p = selGuardada[it.ID_ITEM]?.precioFinal ?? Number(it['PRECIO UNITARIO']||0);
+          return s + p*(Number(it.UNIDADES||it.CANT)||1);
+        },0))}
+      </div>
+    </div>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+     <button class="btn btn-ghost btn-sm" onclick="selItemsTodos(true)">✅ Todos</button>
+     <button class="btn btn-ghost btn-sm" onclick="selItemsTodos(false)">⬜ Ninguno</button>
+     <button class="btn btn-primary" onclick="guardarSeleccionItems('${cotId}')">💾 Guardar selección</button>`
+  );
+
+  // Guardar referencia a los ítems para calcular el total
+  window._selItemsCtx = { cotId, its, selKey };
+}
+
+// Toggle incluir/excluir ítem
+function selItemToggle(itemId, checked){
+  const row = document.getElementById('sel-it-'+itemId);
+  if(row) row.style.borderColor = checked ? 'var(--accent)' : 'var(--border)';
+  selItemsActualizarTotal();
+}
+
+// Calcular precio final desde descuento
+function selItemCalc(itemId, precioBase){
+  const descEl   = document.getElementById('desc-'+itemId);
+  const precioEl = document.getElementById('precio-'+itemId);
+  if(!descEl||!precioEl) return;
+  const desc = Math.min(100, Math.max(0, Number(descEl.value)||0));
+  const pFinal = Math.round(precioBase * (1 - desc/100));
+  precioEl.value = pFinal;
+  selItemActualizarTotalItem(itemId, pFinal);
+}
+
+// Calcular descuento desde precio final
+function selItemCalcDesc(itemId, precioBase){
+  const descEl   = document.getElementById('desc-'+itemId);
+  const precioEl = document.getElementById('precio-'+itemId);
+  if(!descEl||!precioEl||!precioBase) return;
+  const pFinal = Math.max(0, Number(precioEl.value)||0);
+  const desc = precioBase > 0 ? Math.round((1 - pFinal/precioBase)*100) : 0;
+  descEl.value = Math.max(0, desc);
+  selItemActualizarTotalItem(itemId, pFinal);
+}
+
+function selItemActualizarTotalItem(itemId, precioFinal){
+  const ctx = window._selItemsCtx;
+  if(!ctx) return;
+  const it  = ctx.its.find(x=>String(x.ID_ITEM)===String(itemId));
+  const cant = Number(it?.UNIDADES||it?.CANT||1);
+  const totalEl = document.getElementById('total-'+itemId);
+  if(totalEl) totalEl.innerHTML = `Total: <strong style="color:var(--gold)">${fmt(precioFinal*cant)}</strong> (${cant} × ${fmt(precioFinal)})`;
+  selItemsActualizarTotal();
+}
+
+function selItemsActualizarTotal(){
+  const ctx = window._selItemsCtx;
+  if(!ctx) return;
+  let total = 0;
+  ctx.its.forEach(it=>{
+    const chk = document.getElementById('chk-'+it.ID_ITEM);
+    if(!chk?.checked) return;
+    const precio = Number(document.getElementById('precio-'+it.ID_ITEM)?.value||0);
+    const cant   = Number(it.UNIDADES||it.CANT||1);
+    total += precio * cant;
+  });
+  const el = document.getElementById('sel-total-general');
+  if(el) el.textContent = fmt(total);
+}
+
+function selItemsTodos(incluir){
+  const ctx = window._selItemsCtx;
+  if(!ctx) return;
+  ctx.its.forEach(it=>{
+    const chk = document.getElementById('chk-'+it.ID_ITEM);
+    const row = document.getElementById('sel-it-'+it.ID_ITEM);
+    if(chk){ chk.checked = incluir; }
+    if(row) row.style.borderColor = incluir ? 'var(--accent)' : 'var(--border)';
+  });
+  selItemsActualizarTotal();
+}
+
+function guardarSeleccionItems(cotId){
+  const ctx = window._selItemsCtx;
+  if(!ctx) return;
+  const seleccion = {};
+  ctx.its.forEach(it=>{
+    const chk     = document.getElementById('chk-'+it.ID_ITEM);
+    const precioEl= document.getElementById('precio-'+it.ID_ITEM);
+    const descEl  = document.getElementById('desc-'+it.ID_ITEM);
+    seleccion[it.ID_ITEM] = {
+      incluir:     chk?.checked ?? true,
+      precioFinal: Number(precioEl?.value||0),
+      descPct:     Number(descEl?.value||0),
+      precioBase:  Number(it['PRECIO UNITARIO']||it['PRECIO SIN IVA']||0),
+      cant:        Number(it.UNIDADES||it.CANT||1),
+    };
+  });
+  localStorage.setItem(ctx.selKey, JSON.stringify(seleccion));
+
+  const incluidos = Object.values(seleccion).filter(x=>x.incluir).length;
+  const totalSel  = Object.entries(seleccion)
+    .filter(([,v])=>v.incluir)
+    .reduce((s,[,v])=>s+v.precioFinal*v.cant, 0);
+
+  toast(`✅ Selección guardada — ${incluidos} ítems · Total: ${fmt(totalSel)}`);
+  closeModal();
+  detailCot(cotId);
+}
+
+// Helper: leer la selección guardada para una cotización
+function getSeleccionItems(cotId){
+  const selKey = 'cot_sel_'+cotId;
+  try{ return JSON.parse(localStorage.getItem(selKey)||'{}'); }catch(e){ return {}; }
+}
+
 async function actualizarItemsCot(cotId){
-  toast('Actualizando ítems…');
+  // Primero refrescar ítems del servidor
+  toast('⏳ Actualizando ítems…');
   try{
-    DB.items = await GET('getItems','',{rango:RANGO_STATE.elementos||'1m'}); cacheSet('items',DB.items);
-    await recalcularTotalesCot(cotId);
-    toast('✅ Ítems actualizados');
+    DB.items = await GET('getItems','',{rango:'todo'}); cacheSet('items',DB.items);
+  }catch(e){ console.warn('getItems:', e); }
+
+  // Obtener ítems de esta cotización ordenados por número actual
+  const its = (DB.items||[])
+    .filter(x=>String(x.COTIZACION)===String(cotId)||String(x.ID_PEDIDO)===String(cotId))
+    .sort((a,b)=>Number(a.ITEM||0)-Number(b.ITEM||0));
+
+  if(!its.length){ toast('Sin ítems que actualizar','error'); return; }
+
+  // Detectar si hay huecos en la numeración (ej: 1,2,4)
+  const nums = its.map(x=>Number(x.ITEM||0));
+  const hayHuecos = nums.some((n,i)=>n !== i+1);
+
+  if(!hayHuecos){
+    // Solo recalcular totales, no hay que renumerar
+    try{ await recalcularTotalesCot(cotId); }catch(e){}
+    toast('✅ Ítems al día — numeración correcta');
     detailCot(cotId);
-  }catch(e){ toast(e.message,'error'); }
+    return;
+  }
+
+  // Confirmar renumeración
+  const confirmMsg = `Los ítems tienen numeración con huecos:
+${nums.join(', ')}
+
+¿Renumerar secuencialmente (1, 2, 3…)?`;
+  if(!confirm(confirmMsg)) return;
+
+  toast('⏳ Renumerando ítems…');
+  try{
+    // Renumerar en paralelo — cada ítem recibe su nuevo número
+    const updates = its.map((it, i) => {
+      const nuevoNum = i + 1;
+      const nuevoCotItem = `${cotId}-${nuevoNum}`;
+      // Actualizar cache local inmediatamente
+      const idx = (DB.items||[]).findIndex(x=>String(x.ID_ITEM)===String(it.ID_ITEM));
+      if(idx>=0){
+        DB.items[idx] = {...DB.items[idx], ITEM: nuevoNum, 'COT-ITEM': nuevoCotItem};
+      }
+      if(Number(it.ITEM) === nuevoNum) return null; // ya tiene el número correcto
+      return POST_BG('updateItem', {
+        ID_ITEM: it.ID_ITEM,
+        ITEM: nuevoNum,
+        'COT-ITEM': nuevoCotItem,
+      });
+    }).filter(Boolean);
+
+    // También actualizar las OPs vinculadas si las hay
+    its.forEach((it, i)=>{
+      const nuevoNum = i+1;
+      if(Number(it.ITEM)===nuevoNum) return;
+      const opsVinc = (DB.produccion||[]).filter(o=>
+        String(o.COT)===String(cotId) && String(o.ITEM)===String(it.ITEM)
+      );
+      opsVinc.forEach(op=>{
+        const idxOp=(DB.produccion||[]).findIndex(x=>x.IDQR===op.IDQR);
+        if(idxOp>=0) DB.produccion[idxOp]={...DB.produccion[idxOp], ITEM:nuevoNum};
+        POST_BG('updateOP',{IDQR:op.IDQR, ID_OP:op.OP, ITEM:nuevoNum});
+      });
+    });
+
+    await recalcularTotalesCot(cotId);
+    toast(`✅ ${its.length} ítems renumerados: ${its.map((_,i)=>i+1).join(', ')}`);
+    detailCot(cotId);
+
+    // Sync en background para confirmar
+    setTimeout(async()=>{
+      try{ DB.items=await GET('getItems','',{rango:'todo'}); cacheSet('items',DB.items); }catch(e){}
+    }, 3000);
+
+  }catch(e){ toast('❌ '+e.message,'error'); }
 }
 
 function diseñadorCot(cotId){
@@ -13902,10 +14988,33 @@ function _fmaeRefreshAfterChange(cotId){
   setTimeout(()=>{ document.querySelector('.dp-tab[data-tab="fmae"]')?.click(); },350);
 }
 // ── INIT ─────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', ()=>{
+function iniciarApp(){
+  // Mostrar info del usuario en el sidebar
+  const infoEl = document.getElementById('sidebar-user-info');
+  if(infoEl && _SESSION){
+    infoEl.innerHTML = `👤 <strong style="color:rgba(255,255,255,.7)">${_SESSION.nombre}</strong><br>
+      <span style="color:#3b82f6;font-size:10px">${_esAdmin()?'🔑 Administrador':'💼 Comercial'}</span>`;
+  }
   const hash = window.location.hash.replace('#','') || 'dashboard';
   history.replaceState({mod:'dashboard'}, '', '#dashboard');
   nav('dashboard');
+}
+
+document.addEventListener('DOMContentLoaded', ()=>{
+  // Verificar sesión activa — si no hay, mostrar login
+  if(!_SESSION){
+    mostrarLogin();
+    return;
+  }
+  // Sesión de más de 12 horas → re-login
+  const horasActivas = (Date.now() - (_SESSION.ts||0)) / 3600000;
+  if(horasActivas > 12){
+    localStorage.removeItem('_wedm_session');
+    _SESSION = null;
+    mostrarLogin();
+    return;
+  }
+  iniciarApp();
 });
 </script>
 </body>
