@@ -3139,9 +3139,15 @@ async function saveItem(exist, cotId){
     CIUDAD:  cotRef?.CIUDAD||'',
     'FECHA EMISION COT.': cotRef?.['FECHA EMISION COT.']||'',
     'FECHA ENTREGA PACTADA': cotRef?.['FECHA ENTREGA PACTADA']||'',
-    ITEM:  gn('i2'),
-    'COT-ITEM': (cotId||'')+'-'+gn('i2'),
+    ITEM:  gv('i2'),    // jerárquico: "1", "1.1", "1.2", "2"
+    'COT-ITEM': (cotId||'')+'-'+gv('i2'),  // ej: "18118-1.1"
     UNIDADES: cant,
+    ES_PADRE:   (document.getElementById('i-es-padre')?.value==='SI') ? 'SI' : '',
+    ITEM_PADRE: (()=>{
+      const selPadre = document.getElementById('sel-padre');
+      if(selPadre?.value) return selPadre.value;
+      return parseItemNum(gv('i2')).padre || '';
+    })(),
     'DESCRIPCION ITEM': richGet('i4'),
     IMAGENES_DESCRIPCION: '',
     DISEÑO: gv('idis'),
@@ -3211,14 +3217,13 @@ async function saveItem(exist, cotId){
     if(planUrl) { data.PLANO_URL  = planUrl; data.PLANO_NOMBRE  = planNom; }
   }catch(e){ console.warn('_itSubirArchivosPendientes:', e); }
 
-  // Mutación optimista local
+  // Mutación optimista local solo para edición
+  // Para nuevo ítem: no agregar al cache todavía — evita duplicados
   if(!DB.items || !DB.items.length) DB.items = [];
   if(exist){
     const ix = DB.items.findIndex(x => String(x.ID_ITEM) === String(exist));
     if(ix >= 0) DB.items[ix] = {...DB.items[ix], ...data};
     else DB.items.push(data);
-  } else {
-    DB.items.push({...data, ID_ITEM:'tmp_'+Date.now()});
   }
 
   toast(exist ? '✅ Ítem actualizado' : '✅ Ítem creado');
@@ -3256,6 +3261,58 @@ async function saveItem(exist, cotId){
 
 // ── ON TIPO COT ───────────────────────────────────────────────────
 // Actualiza el bloque de descripción cuando cambia el tipo en formCot
+// Toggle modo padre en el wizard de ítem
+function onSelPadre(numPadre){
+  const i2 = document.getElementById('i2');
+  if(!numPadre){
+    if(i2){ i2.value=''; i2.removeAttribute('readonly'); }
+    return;
+  }
+  // Calcular el siguiente número de sub-ítem para cualquier nivel
+  // 1 → 1.1, 1.1 → 1.1.1, 2 → 2.1, etc.
+  const cotId = window._detailCotId || '';
+  const hermanos = (DB.items||[]).filter(x=>{
+    const p = parseItemNum(String(x.ITEM_NUM||x.ITEM||''));
+    return p.padre === String(numPadre) &&
+      (String(x.COTIZACION)===String(cotId)||String(x.ID_PEDIDO)===String(cotId));
+  });
+  const siguiente = `${numPadre}.${hermanos.length+1}`;
+  if(i2){ i2.value = siguiente; i2.setAttribute('readonly','readonly'); }
+}
+
+function toggleEsPadre(){
+  const hidden  = document.getElementById('i-es-padre');
+  const toggle  = document.getElementById('toggle-es-padre');
+  const lbl     = document.getElementById('lbl-es-padre');
+  const txt     = document.getElementById('txt-es-padre');
+  if(!hidden) return;
+
+  const ahora = hidden.value === 'SI';
+  const nuevo = !ahora;
+
+  hidden.value = nuevo ? 'SI' : '';
+
+  // Animar el toggle
+  if(toggle){
+    toggle.style.background = nuevo ? 'var(--accent)' : 'var(--border)';
+    const knob = toggle.querySelector('div');
+    if(knob) knob.style.left = nuevo ? '21px' : '3px';
+  }
+  if(lbl)  lbl.style.borderColor = nuevo ? 'var(--accent)' : 'var(--border)';
+  if(txt)  txt.textContent = nuevo
+    ? '✅ Activado — puedes agregar sub-ítems'
+    : 'Activa para agregar sub-ítems (1.1, 1.2…)';
+
+  // Si activa y el número tiene punto, quitarlo
+  if(nuevo){
+    const numEl = document.getElementById('i2');
+    if(numEl){
+      const numStr = String(numEl.value||'').trim();
+      if(numStr.includes('.')) numEl.value = numStr.split('.')[0];
+    }
+  }
+}
+
 function onTipoCot(val){
   const info = TIPOS_COT[val];
   if(!info) return;
@@ -4396,6 +4453,7 @@ async function detailCot(id){
             <td onclick="event.stopPropagation()">
               <div class="it-row-actions">
                 <button class="btn btn-ghost btn-sm" title="Editar ítem" onclick="formItem(DB.items.find(x=>x.ID_ITEM==='${it.ID_ITEM}')||${JSON.stringify(it).replace(/'/g,"\'").replace(/"/g,'&quot;')})">✏️</button>
+                ${(!esHijo&&(String(it.ES_PADRE||'').toUpperCase()==='SI'||String(it.ITEM_TIPO||'')==='PADRE'||String(c.TIPO||'').includes('EM')))?`<button class="btn btn-ghost btn-sm" style="color:var(--accent)" title="Agregar sub-ítem" onclick="event.stopPropagation();modalAgregarSubItem('${it.ID_ITEM}','${numStr}')">＋</button>`:''}
                 <button class="btn btn-ghost btn-sm" title="Copiar a otra COT" onclick="modalCopiarItem('${it.ID_ITEM}','${id}')">📋</button>
                 <button class="btn btn-ghost btn-sm" style="color:var(--danger)" title="Eliminar" onclick="deleteItem('${it.ID_ITEM}')">🗑</button>
               </div>
@@ -4765,7 +4823,7 @@ async function formCot(c={}){
         <div class="field span2"><label>Asesor</label>
           <select id="f5">
             <option value="">-- Seleccionar --</option>
-            ${ASESORES.map(a=>`<option ${(c.ASESOR||'')===a?'selected':''}>${a}</option>`).join('')}
+            ${ASESORES.map(a=>`<option ${(c.ASESOR||_asesorActual())===a?'selected':''}>${a}</option>`).join('')}
           </select></div>
 
         <div class="field span2"><label>Descripción del Proyecto</label>
@@ -6168,6 +6226,16 @@ function richMigrarImagenesLegacy(text, imagenesDescripcion){
 async function formItem(it={}){
   const isNew=!it.ID_ITEM;
 
+  // Obtener ítems padre disponibles en esta cotización
+  const _cotIdForm = it.COTIZACION||it.ID_PEDIDO||window._detailCotId||'';
+  const padresDisp = _cotIdForm
+    ? (DB.items||[]).filter(x=>
+        (String(x.COTIZACION)===String(_cotIdForm)||String(x.ID_PEDIDO)===String(_cotIdForm)) &&
+        (x.ES_PADRE==='SI'||x.ITEM_TIPO==='PADRE')
+        // Sin límite de nivel — permite 1.1 ser padre de 1.1.1
+      )
+    : [];
+
   // ── Imágenes pegadas en Descripción Item (Ctrl+V) ───────────
   // Se reinician por cada apertura del form y se precargan si el item
   // ya tenía imágenes guardadas de una edición anterior.
@@ -6262,9 +6330,50 @@ const svcOpts = (DB.servicios || []).map(s => {
     <div class="wiz-step" id="wiz-item-0">
       <div class="form-grid">
         <div class="field"><label>Nº Item ★</label>
-          <input type="number" id="i2" value="${sugItem}"></div>
+          <input type="number" id="i2" value="${sugItem}" id="i2"></div>
+        ${isNew && padresDisp.length > 0 ? `
+        <div class="field span2">
+          <label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;font-weight:700;display:block;margin-bottom:6px">
+            ¿Agregar como sub-ítem de...?
+          </label>
+          <select id="sel-padre" onchange="onSelPadre(this.value)" style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface);color:var(--text);font-size:13px">
+            <option value="">— Ítem independiente —</option>
+            ${padresDisp.map(p=>`
+              <option value="${p.ITEM_NUM||p.ITEM}" ${String(it.ITEM_PADRE||'')=== String(p.ITEM_NUM||p.ITEM)?'selected':''}>
+                Ítem ${p.ITEM_NUM||p.ITEM} — ${(p['DESCRIPCION ITEM']||p.DESCRIPCION||'').substring(0,40)}
+              </option>`).join('')}
+          </select>
+        </div>` : ''}
         <div class="field"><label>Unidades ★</label>
           <input type="number" id="i3" value="${it.UNIDADES||it.CANT||1}" oninput="recalcItem()"></div>
+        <div class="field span2">
+          <div id="lbl-es-padre" onclick="${parseItemNum(String(it.ITEM_NUM||it.ITEM||'')).nivel < 3 ? 'toggleEsPadre()' : ''}" style="
+            background:var(--card2);border-radius:10px;padding:12px 14px;
+            display:flex;align-items:center;gap:12px;
+            cursor:${parseItemNum(String(it.ITEM_NUM||it.ITEM||'')).nivel < 3 ? 'pointer' : 'not-allowed'};
+            border:2px solid var(--border);transition:all .2s;user-select:none;
+            opacity:${parseItemNum(String(it.ITEM_NUM||it.ITEM||'')).nivel < 3 ? '1' : '0.4'}"
+            title="${parseItemNum(String(it.ITEM_NUM||it.ITEM||'')).nivel >= 3 ? 'Máximo 3 niveles de jerarquía' : ''}">
+            <!-- Toggle visual custom — funciona en Android sin depender del checkbox nativo -->
+            <div id="toggle-es-padre" style="
+              width:44px;height:26px;border-radius:13px;flex-shrink:0;
+              background:${it.ES_PADRE==='SI'||it.ITEM_TIPO==='PADRE'?'var(--accent)':'var(--border)'};
+              position:relative;transition:background .2s">
+              <div style="
+                position:absolute;top:3px;
+                left:${it.ES_PADRE==='SI'||it.ITEM_TIPO==='PADRE'?'21':'3'}px;
+                width:20px;height:20px;border-radius:50%;background:#fff;
+                transition:left .2s;box-shadow:0 1px 3px rgba(0,0,0,.3)"></div>
+            </div>
+            <input type="hidden" id="i-es-padre" value="${it.ES_PADRE==='SI'||it.ITEM_TIPO==='PADRE'?'SI':''}">
+            <div>
+              <div style="font-size:13px;font-weight:700;color:var(--text)">🔗 Ítem padre (ensamble)</div>
+              <div style="font-size:11px;color:var(--muted)" id="txt-es-padre">
+                ${it.ES_PADRE==='SI'||it.ITEM_TIPO==='PADRE'?'✅ Activado — puedes agregar sub-ítems':'Activa para agregar sub-ítems (1.1, 1.2…)'}
+              </div>
+            </div>
+          </div>
+        </div>
         <div class="field span2"><label>Descripción Item</label>
           <div id="i4" class="rich-desc" style="min-height:180px" contenteditable="true" data-placeholder="Descripción de la pieza — puedes pegar una captura de pantalla (Ctrl+V)" onpaste="richPaste(event,'i4')">${i4HtmlInicial}</div>
           <div class="rich-desc-hint">✎ Editor tipo Word: puedes escribir y pegar imágenes (Ctrl+V) en el mismo texto</div>
@@ -7924,12 +8033,9 @@ async function saveCot(exist){
   if(!empresa){ toast('Selecciona una empresa','error'); return; }
 
   // ── Número de cotización ──
-  // Para nueva: viene del servidor (f0h). Para edición: viene del registro existente.
-  const cotIdHidden = gv('f0h');
-  if(!exist && !cotIdHidden){
-    toast('⏳ Esperando número del servidor, reintenta en 2 segundos','error');
-    return;
-  }
+  // Para nueva: el GAS asigna el número con LockService — no validar aquí
+  // Para edición: viene del registro existente
+  const cotIdHidden = gv('f0h') || '';
 
   // Para edición: buscar el registro completo en cache
   let idPedido = undefined;
@@ -7942,15 +8048,16 @@ async function saveCot(exist){
     idCot    = reg?.ID_COT || reg?.COTIZACION || cotIdHidden;
   }
 
-  // ── Blindaje: nunca dejar pasar un número de COT inválido o el texto "undefined" ──
-  // (evita que se guarde literalmente la cadena "undefined" en la hoja, como pasó antes)
+  // ── Blindaje: solo para edición — nueva COT el GAS asigna el número ──
   const idCotStr = String(idCot ?? '').trim();
-  const idCotInvalido = !idCotStr || idCotStr.toLowerCase()==='undefined' || idCotStr.toLowerCase()==='null' || isNaN(Number(idCotStr.replace(/^COT-?/i,'')));
-  if(idCotInvalido){
-    toast('⚠️ Número de COT inválido — recarga e intenta de nuevo','error');
-    const btn0 = document.getElementById('btn-save-cot');
-    if(btn0){ btn0.disabled=false; btn0.textContent = exist?'✓ Guardar':'✓ Crear Cotización'; }
-    return;
+  if(exist){
+    const idCotInvalido = !idCotStr || idCotStr.toLowerCase()==='undefined' || idCotStr.toLowerCase()==='null';
+    if(idCotInvalido){
+      toast('⚠️ Número de COT inválido — recarga e intenta de nuevo','error');
+      const btn0 = document.getElementById('btn-save-cot');
+      if(btn0){ btn0.disabled=false; btn0.textContent='✓ Guardar'; }
+      return;
+    }
   }
 
   // ── Blindaje: la fecha de emisión nunca debe quedar vacía ──
@@ -8000,18 +8107,22 @@ async function saveCot(exist){
     TELEFONO:                    gv('ftel'),
   };
 
-  // Limpiar campos undefined/vacíos
+  // Para nueva cotización: generar ID_PEDIDO (UUID) antes de limpiar
+  const _cotCreada = !exist;
+  if(_cotCreada && !data.ID_PEDIDO){
+    data.ID_PEDIDO = 'cot_' + Date.now() + '_' + Math.random().toString(36).slice(2,8);
+  }
+
+  // Limpiar campos undefined/vacíos (excepto ID_PEDIDO que el GAS necesita)
   Object.keys(data).forEach(k => {
+    if(k === 'ID_PEDIDO') return; // nunca borrar
     if(data[k]===undefined || data[k]==='') delete data[k];
   });
 
   const btn = document.getElementById('btn-save-cot');
   try{
-    const _cotCreada = !exist;
-
     if(_cotCreada){
       // ── NUEVA COTIZACIÓN: esperar respuesta del servidor ──────────
-      // No mostrar nada hasta que el GAS confirme y asigne el número real
       if(btn){ btn.disabled=true; btn.textContent='⏳ Creando…'; }
 
       const res = await POST('createCotizacion', data);
@@ -10526,9 +10637,18 @@ function modalAgregarSubItem(itemPadreId, numPadre){
 
 // Convertir ítem existente a padre (agregar campo ITEM_NUM si solo tiene ITEM)
 function normalizarItemNum(it){
+  // COT-ITEM tiene el número jerárquico completo (ej: "18118-1.1")
+  // ITEM tiene el número entero (ej: 1) para compatibilidad con OPs
+  // Extraer el número jerárquico del COT-ITEM
+  const cotItem = String(it['COT-ITEM']||'');
+  const itemNum = cotItem.includes('-')
+    ? cotItem.split('-').slice(1).join('-') // todo después del primer guion
+    : String(it.ITEM||'');
   return {
     ...it,
-    ITEM_NUM: it.ITEM_NUM || String(it.ITEM||''),
+    ITEM_NUM:   itemNum,
+    ITEM_PADRE: it.ITEM_PADRE || parseItemNum(itemNum).padre || '',
+    ES_PADRE:   it.ES_PADRE==='SI' ? 'SI' : '',
   };
 }
 
