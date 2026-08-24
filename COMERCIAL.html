@@ -57,6 +57,25 @@ body{display:flex;flex-direction:column;font-family:var(--sans);font-size:14px;
   border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;
   cursor:pointer;font-size:15px;flex-shrink:0;
   -webkit-tap-highlight-color:transparent;
+  transition:border-color .2s,color .2s;
+}
+/* Animación de rotación */
+@keyframes refresh-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Estilo del botón cuando sincroniza (spinner) */
+#refresh-btn.syncing {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 3px solid rgba(0, 0, 0, 0.08);
+  border-left-color: #4f46e5;
+  background: transparent;
+  color: transparent;
+  animation: refresh-spin 0.8s linear infinite;
+  box-shadow: none;
 }
 
 /* ═══ OVERLAY ════════════════════════════= */
@@ -888,7 +907,16 @@ kbd{
     height: 100%; width: 0%; background: linear-gradient(90deg,#4f8ef7,#a78bfa);
     border-radius: 99px; transition: width .35s ease;
   }
-  .splash-step { color: #6666aa; font-size: 12px; min-height: 18px; text-align: center; }
+  .splash-step {
+  color: #8888aa;
+  font-size: 13px;
+  min-height: 18px;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
 
   
   /* ── FILTROS AVANZADOS ──────────────────────────────── */
@@ -1273,7 +1301,10 @@ kbd{
   <div class="splash-bar-wrap">
     <div class="splash-bar" id="splash-bar"></div>
   </div>
-  <div class="splash-step" id="splash-step">Iniciando...</div>
+  <div class="splash-step" id="splash-step">
+    <span id="splash-msg">Iniciando...</span>
+    <span id="splash-pct" style="font-weight:600; color:#a78bfa; margin-left:6px;">0%</span>
+  </div>
 </div>
 
 <!-- TOPBAR -->
@@ -1318,11 +1349,12 @@ kbd{
       👤 Cargando…
     </div>
     <button onclick="if(confirm('¿Cerrar sesión?'))loginCerrar()"
-      style="width:100%;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,.1);
-      background:rgba(255,255,255,.04);color:rgba(255,255,255,.45);font-size:11px;
-      cursor:pointer;transition:background .15s"
-      onmouseover="this.style.background='rgba(220,38,38,.15)'"
-      onmouseout="this.style.background='rgba(255,255,255,.04)'">
+      style="width:100%; padding:10px 14px; border-radius:8px; border:1px solid #fee2e2;
+      background:#fef2f2; color:#dc2626; font-size:12px; font-weight:600;
+      cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px;
+      transition:all .2s ease;"
+      onmouseover="this.style.background='#fee2e2'; this.style.borderColor='#fca5a5';"
+      onmouseout="this.style.background='#fef2f2'; this.style.borderColor='#fee2e2';">
       🚪 Cerrar sesión
     </button>
   </div>
@@ -2047,17 +2079,12 @@ function closeDetail(){
     history.back();
   }
 }
-// Indicador visual de sync en curso
+// Indicador visual de sync en curso — gira el botón ↻ del buscador
 function _showSyncDot(visible){
-  let dot = document.getElementById('sync-dot');
-  if(!dot){
-    dot = document.createElement('div');
-    dot.id = 'sync-dot';
-    dot.title = 'Sincronizando datos…';
-    dot.style.cssText = 'position:fixed;bottom:68px;right:12px;width:8px;height:8px;border-radius:50%;background:#60a5fa;z-index:9998;transition:opacity .3s;box-shadow:0 0 6px #60a5fa';
-    document.body.appendChild(dot);
-  }
-  dot.style.opacity = visible ? '1' : '0';
+  const btn = document.getElementById('refresh-btn');
+  if(!btn) return;
+  btn.classList.toggle('syncing', !!visible);
+  btn.title = visible ? 'Sincronizando datos…' : 'Actualizar';
 }
 
 function updateBadges(){
@@ -2585,11 +2612,11 @@ function mostrarLogin(){
       <div style="color:#e8f0fe;font-size:14px;font-weight:700;margin-bottom:16px">Iniciar sesión</div>
       <div style="margin-bottom:14px">
         <select id="login-usuario" style="
-          width:100%;padding:12px 14px;border-radius:10px;
-          background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);
-          color:#fff;font-size:14px;appearance:none;outline:none">
-          <option value="">— Selecciona tu nombre —</option>
-          ${USUARIOS_COMERCIAL.map(u=>`<option value="${u.nombre}">${u.nombre}</option>`).join('')}
+        width:100%;padding:12px 14px;border-radius:10px;
+        background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);
+        color:#fff;font-size:14px;appearance:none;outline:none">
+        <option value="" style="background:#111827; color:#fff;">— Selecciona tu nombre —</option>
+        ${USUARIOS_COMERCIAL.map(u=>`<option value="${u.nombre}" style="background:#111827; color:#fff;">${u.nombre}</option>`).join('')}
         </select>
       </div>
       <div style="margin-bottom:20px;position:relative">
@@ -6231,7 +6258,9 @@ async function formItem(it={}){
   const padresDisp = _cotIdForm
     ? (DB.items||[]).filter(x=>
         (String(x.COTIZACION)===String(_cotIdForm)||String(x.ID_PEDIDO)===String(_cotIdForm)) &&
-        (x.ES_PADRE==='SI'||x.ITEM_TIPO==='PADRE')
+        (x.ES_PADRE==='SI'||x.ITEM_TIPO==='PADRE') &&
+        // Al editar, un ítem no puede ser padre de sí mismo
+        (isNew || String(x.ID_ITEM)!==String(it.ID_ITEM))
         // Sin límite de nivel — permite 1.1 ser padre de 1.1.1
       )
     : [];
@@ -6331,7 +6360,7 @@ const svcOpts = (DB.servicios || []).map(s => {
       <div class="form-grid">
         <div class="field"><label>Nº Item ★</label>
           <input type="number" id="i2" value="${sugItem}" id="i2"></div>
-        ${isNew && padresDisp.length > 0 ? `
+        ${padresDisp.length > 0 ? `
         <div class="field span2">
           <label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;font-weight:700;display:block;margin-bottom:6px">
             ¿Agregar como sub-ítem de...?
@@ -14217,8 +14246,22 @@ async function generarPDFCotizacion(cotId) {
     return s;
   }
 
-  const its  = (DB.items||[]).filter(x=>String(x.COTIZACION)===String(cotId)||String(x.ID_PEDIDO)===String(cotId));
+  let its  = (DB.items||[]).filter(x=>String(x.COTIZACION)===String(cotId)||String(x.ID_PEDIDO)===String(cotId));
   const hoy  = new Date().toLocaleDateString('es-CO',{day:'2-digit',month:'2-digit',year:'numeric'});
+
+  // Aplicar la selección de ítems guardada (modal "Selección de Ítems"): excluir
+  // del PDF los ítems que el usuario desmarcó, y usar el precio final editado
+  // si fue modificado en la selección.
+  const seleccionCot = getSeleccionItems(cotId);
+  if(Object.keys(seleccionCot).length){
+    its = its
+      .filter(it => seleccionCot[it.ID_ITEM]?.incluir ?? true)
+      .map(it => {
+        const sel = seleccionCot[it.ID_ITEM];
+        if(!sel) return it;
+        return {...it, 'PRECIO UNITARIO': sel.precioFinal, 'PRECIO X ITEM': sel.precioFinal * sel.cant};
+      });
+  }
 
   // Calcular precio unitario de cada item — prueba todos los nombres posibles del Sheet real
   function getPrecioUnit(it) {
@@ -14239,12 +14282,17 @@ async function generarPDFCotizacion(cotId) {
     return Number(it['PRECIO X ITEM'] || it.VALOR_TOTAL || it.SUBTOTAL || (pu * cant) || 0);
   }
 
-  const subtotal = its.length > 0
+  // Si hay una selección de ítems guardada, los totales del PDF deben recalcularse
+  // a partir de los ítems incluidos (no de los totales guardados en la cotización,
+  // que reflejan TODOS los ítems).
+  const seleccionActiva = Object.keys(seleccionCot).length > 0;
+
+  const subtotal = (its.length > 0 || seleccionActiva)
     ? its.reduce((s,it) => s + getPrecioTotal(it), 0)
     : Number(c['PRECIO SIN IVA'] || c.SUBTOTAL_DESC || c['PRECIO TOTAL'] || 0);
 
-  const iva      = Number(c.IVA||0) || Math.round(subtotal*0.19);
-  const total    = Number(c['PRECIO TOTAL']||0) || subtotal+iva;
+  const iva      = seleccionActiva ? Math.round(subtotal*0.19) : (Number(c.IVA||0) || Math.round(subtotal*0.19));
+  const total    = seleccionActiva ? (subtotal+iva) : (Number(c['PRECIO TOTAL']||0) || subtotal+iva);
   const descPct  = Number(c['DESCUENTO%']||0);
   const descVal  = Number(c.DESCUENTO||0);
   const letras   = clean(c.LETRAS, '') || numeroALetras(total);
