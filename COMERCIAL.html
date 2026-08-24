@@ -4886,27 +4886,13 @@ async function formCot(c={}){
     const hidEl = document.getElementById('f0h');
     if(hidEl && !hidEl.value) hidEl.value = String(cotNum);
   }
-  // Si es nueva COT, pedir número al servidor (con retry automático)
+  // Si es nueva COT: NO mostrar número hasta que el GAS lo asigne al guardar
+  // El número lo asigna createCotizacionSegura con LockService — evita duplicados
   if(isNew){
-    const _fetchNextId = async (intento=1) => {
-      try{
-        const res = await GET('nextCotId');
-        const display = document.getElementById('f0-display');
-        const hidden  = document.getElementById('f0h');
-        if(display) display.innerHTML = `<span style="font-size:22px">COT-<strong>${res.nextId}</strong></span>`;
-        if(hidden)  hidden.value = String(res.nextId);
-      }catch(e){
-        const display = document.getElementById('f0-display');
-        if(intento < 3){
-          // Reintento automático
-          if(display) display.innerHTML = `<div class="spinner" style="width:14px;height:14px;border-width:2px;display:inline-block"></div> <span>Reintentando (${intento}/3)…</span>`;
-          setTimeout(()=>_fetchNextId(intento+1), 2000);
-        } else {
-          if(display) display.innerHTML = `<button class="btn btn-sm btn-ghost" onclick="location.reload()">⚠️ Error — toca para reintentar</button>`;
-        }
-      }
-    };
-    _fetchNextId();
+    const display = document.getElementById('f0-display');
+    const hidden  = document.getElementById('f0h');
+    if(display) display.innerHTML = `<span style="font-size:18px;color:var(--muted)">Se asignará al guardar</span>`;
+    if(hidden)  hidden.value = ''; // vacío — el GAS asigna el número real
   } else {
     // Edición: mostrar el número existente
     const display = document.getElementById('f0-display');
