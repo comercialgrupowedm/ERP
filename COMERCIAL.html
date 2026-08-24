@@ -3525,7 +3525,10 @@ async function getImagenOP(idqr){
 function dashPanelOPs(titulo, opsArr){
   window._dashPanelOpsAll = opsArr||[];
   window._dashPanelOpsTitulo = titulo;
-  _renderDashPanelOps('TODAS');
+  // Por defecto no se muestran las pausadas mezcladas con las activas —
+  // solo aparecen si el usuario toca el chip "Pausadas".
+  const hayPausadas = opsArr.some(o=>o.ESTADO==='PAUSADO');
+  _renderDashPanelOps(hayPausadas ? 'ACTIVAS' : 'TODAS');
 }
 
 function _renderDashPanelOps(filtro){
@@ -3540,16 +3543,18 @@ function _renderDashPanelOps(filtro){
 
   // ── Chips de filtro rápido por estado ──────────────────────
   const chips = [
-    {key:'TODAS',    label:'Todas',    count:opsArr.length},
-    {key:'VENCIDAS',  label:'⚠️ Vencidas', count:opsArr.filter(o=>Number(o['DÍAS ENTREGA']||0)<0).length},
+    {key:'ACTIVAS',  label:'Activas',  count:opsArr.filter(o=>o.ESTADO!=='PAUSADO').length},
+    {key:'VENCIDAS',  label:'⚠️ Vencidas', count:opsArr.filter(o=>Number(o['DÍAS ENTREGA']||0)<0 && o.ESTADO!=='PAUSADO').length},
     {key:'PAUSADO',   label:'⏸ Pausadas', count:opsArr.filter(o=>o.ESTADO==='PAUSADO').length},
     {key:'PENDIENTE MP', label:'Pend. MP', count:opsArr.filter(o=>o.ESTADO==='PENDIENTE MP').length},
     {key:'EN PROCESO', label:'En Proceso', count:opsArr.filter(o=>o.ESTADO==='EN PROCESO').length},
     {key:'TRABAJO EXTERNO', label:'Trabajo Externo', count:opsArr.filter(o=>o.ESTADO==='TRABAJO EXTERNO').length},
-  ].filter(ch=>ch.key==='TODAS'||ch.count>0);
+    {key:'TODAS',    label:'Todas',    count:opsArr.length},
+  ].filter(ch=>ch.count>0);
 
   const opsFiltradas = filtro==='TODAS' ? opsArr
-    : filtro==='VENCIDAS' ? opsArr.filter(o=>Number(o['DÍAS ENTREGA']||0)<0)
+    : filtro==='ACTIVAS' ? opsArr.filter(o=>o.ESTADO!=='PAUSADO')
+    : filtro==='VENCIDAS' ? opsArr.filter(o=>Number(o['DÍAS ENTREGA']||0)<0 && o.ESTADO!=='PAUSADO')
     : opsArr.filter(o=>o.ESTADO===filtro);
 
   if(head) head.innerHTML = `
@@ -3893,7 +3898,9 @@ async function dashboard(){
     // OPs activas = todo lo que NO está terminado/entregado/cancelado
     // igual que el filtro "Listo para Producción" del ERP principal
     const ESTADOS_INACTIVOS = ['TERMINADO','ENTREGADO','CANCELADO','CANCELADA'];
-    const opsProceso  = opsFiltradas.filter(o=>!ESTADOS_INACTIVOS.includes(o.ESTADO));
+    // "Activas" = en curso de verdad. PAUSADO no cuenta como activa (si la pausaron es
+    // justamente porque no está avanzando); se muestra aparte, no sumada al total.
+    const opsProceso  = opsFiltradas.filter(o=>!ESTADOS_INACTIVOS.includes(o.ESTADO) && o.ESTADO!=='PAUSADO');
     const opsVencidas = opsFiltradas.filter(o=>
       Number(o['DÍAS ENTREGA']||0)<0 &&
       !ESTADOS_INACTIVOS.includes(o.ESTADO)
@@ -4037,7 +4044,7 @@ async function dashboard(){
         <div style="background:var(--card2);border-radius:14px;padding:14px">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
             <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px">🏭 OPs activas</div>
-            <div onclick="dashPanelOPs('🏭 OPs Activas', window._dashOpsProceso||[])" style="font-size:11px;color:var(--accent);cursor:pointer">${opsProceso.length} activas · ${opsVencidas.length>0?'<span style=\'color:#ef4444\'>'+opsVencidas.length+' vencidas</span>':'<span style=\'color:#10b981\'>al día</span>'}${opsPausadas.length>0?' · <span style=\'color:#f59e0b\'>'+opsPausadas.length+' pausadas</span>':''}</div>
+            <div onclick="dashPanelOPs('🏭 OPs Activas', [...(window._dashOpsProceso||[]), ...(window._dashOpsPausadas||[])])" style="font-size:11px;color:var(--accent);cursor:pointer">${opsProceso.length} activas · ${opsVencidas.length>0?'<span style=\'color:#ef4444\'>'+opsVencidas.length+' vencidas</span>':'<span style=\'color:#10b981\'>al día</span>'}${opsPausadas.length>0?' · <span style=\'color:#f59e0b\'>'+opsPausadas.length+' pausadas</span>':''}</div>
           </div>
           ${opsProceso.slice(0,4).map(op=>`
             <div onclick="detailOP('${op.IDQR||op.OP}')" style="display:flex;align-items:center;gap:10px;padding:8px 0;cursor:pointer;border-bottom:1px solid var(--border);last-child:border:none">
