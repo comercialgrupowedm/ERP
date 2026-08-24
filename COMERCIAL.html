@@ -3523,19 +3523,54 @@ async function getImagenOP(idqr){
 // ── Panel lateral de cotizaciones desde el dashboard ───────────
 // ── Panel lateral de OPs desde el dashboard ────────────────────
 function dashPanelOPs(titulo, opsArr){
+  window._dashPanelOpsAll = opsArr||[];
+  window._dashPanelOpsTitulo = titulo;
+  _renderDashPanelOps('TODAS');
+}
+
+function _renderDashPanelOps(filtro){
   const dp   = document.getElementById('dp');
   const head = document.getElementById('dp-header');
   const body = document.getElementById('dp-body');
   const acts = document.getElementById('dp-actions');
   if(!dp || !body) return;
 
+  const opsArr = window._dashPanelOpsAll||[];
+  const titulo = window._dashPanelOpsTitulo||'OPs';
+
+  // ── Chips de filtro rápido por estado ──────────────────────
+  const chips = [
+    {key:'TODAS',    label:'Todas',    count:opsArr.length},
+    {key:'VENCIDAS',  label:'⚠️ Vencidas', count:opsArr.filter(o=>Number(o['DÍAS ENTREGA']||0)<0).length},
+    {key:'PAUSADO',   label:'⏸ Pausadas', count:opsArr.filter(o=>o.ESTADO==='PAUSADO').length},
+    {key:'PENDIENTE MP', label:'Pend. MP', count:opsArr.filter(o=>o.ESTADO==='PENDIENTE MP').length},
+    {key:'EN PROCESO', label:'En Proceso', count:opsArr.filter(o=>o.ESTADO==='EN PROCESO').length},
+    {key:'TRABAJO EXTERNO', label:'Trabajo Externo', count:opsArr.filter(o=>o.ESTADO==='TRABAJO EXTERNO').length},
+  ].filter(ch=>ch.key==='TODAS'||ch.count>0);
+
+  const opsFiltradas = filtro==='TODAS' ? opsArr
+    : filtro==='VENCIDAS' ? opsArr.filter(o=>Number(o['DÍAS ENTREGA']||0)<0)
+    : opsArr.filter(o=>o.ESTADO===filtro);
+
   if(head) head.innerHTML = `
     <button class="dp-back" onclick="closeDetail()">← Volver</button>
-    <span class="dp-title">${titulo} (${opsArr.length})</span>`;
+    <span class="dp-title">${titulo} (${opsFiltradas.length})</span>`;
   if(acts) acts.innerHTML = '';
 
+  const chipsHtml = chips.length>1 ? `
+    <div style="display:flex;gap:6px;overflow-x:auto;padding:10px 14px 4px;-webkit-overflow-scrolling:touch">
+      ${chips.map(ch=>`
+        <button onclick="_renderDashPanelOps('${ch.key}')" style="
+          flex-shrink:0;border:none;cursor:pointer;white-space:nowrap;
+          padding:6px 12px;border-radius:20px;font-size:11px;font-weight:700;
+          background:${filtro===ch.key?'var(--accent)':'var(--card2)'};
+          color:${filtro===ch.key?'#fff':'var(--muted)'}">
+          ${ch.label} · ${ch.count}
+        </button>`).join('')}
+    </div>` : '';
+
   // Ordenar: mayor avance primero, en empate vencidas antes
-  const sorted = [...opsArr].sort((a,b)=>{
+  const sorted = [...opsFiltradas].sort((a,b)=>{
     const pa = qaPct(a['%AVANCE']), pb = qaPct(b['%AVANCE']);
     if(pb !== pa) return pb - pa; // mayor avance primero
     const da = Number(a['DÍAS ENTREGA']||0), db = Number(b['DÍAS ENTREGA']||0);
@@ -3543,9 +3578,9 @@ function dashPanelOPs(titulo, opsArr){
   });
 
   if(!sorted.length){
-    body.innerHTML = `<div class="empty" style="padding:40px 20px"><div class="empty-icon">🏭</div><p>No hay OPs activas</p></div>`;
+    body.innerHTML = chipsHtml + `<div class="empty" style="padding:40px 20px"><div class="empty-icon">🏭</div><p>No hay OPs en este filtro</p></div>`;
   } else {
-    body.innerHTML = `<div style="padding:0 14px 80px">
+    body.innerHTML = chipsHtml + `<div style="padding:0 14px 80px">
       ${sorted.map(op=>{
         const _diasRaw = op['DÍAS ENTREGA'];
         const dias = (String(_diasRaw||'').includes('NaN') || _diasRaw===undefined || _diasRaw===null) 
@@ -3863,9 +3898,11 @@ async function dashboard(){
       Number(o['DÍAS ENTREGA']||0)<0 &&
       !ESTADOS_INACTIVOS.includes(o.ESTADO)
     );
+    const opsPausadas = opsFiltradas.filter(o=>o.ESTADO==='PAUSADO');
     // Exponer para los onclick del dashboard
     window._dashOpsProceso  = opsProceso;
     window._dashOpsVencidas = opsVencidas;
+    window._dashOpsPausadas = opsPausadas;
     window._dashOpsFiltradas = opsFiltradas;
 
     const now = new Date();
@@ -4000,7 +4037,7 @@ async function dashboard(){
         <div style="background:var(--card2);border-radius:14px;padding:14px">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
             <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px">🏭 OPs activas</div>
-            <div onclick="dashPanelOPs('🏭 OPs Activas', window._dashOpsProceso||[])" style="font-size:11px;color:var(--accent);cursor:pointer">${opsProceso.length} activas · ${opsVencidas.length>0?'<span style=\'color:#ef4444\'>'+opsVencidas.length+' vencidas</span>':'<span style=\'color:#10b981\'>al día</span>'}</div>
+            <div onclick="dashPanelOPs('🏭 OPs Activas', window._dashOpsProceso||[])" style="font-size:11px;color:var(--accent);cursor:pointer">${opsProceso.length} activas · ${opsVencidas.length>0?'<span style=\'color:#ef4444\'>'+opsVencidas.length+' vencidas</span>':'<span style=\'color:#10b981\'>al día</span>'}${opsPausadas.length>0?' · <span style=\'color:#f59e0b\'>'+opsPausadas.length+' pausadas</span>':''}</div>
           </div>
           ${opsProceso.slice(0,4).map(op=>`
             <div onclick="detailOP('${op.IDQR||op.OP}')" style="display:flex;align-items:center;gap:10px;padding:8px 0;cursor:pointer;border-bottom:1px solid var(--border);last-child:border:none">
@@ -4620,8 +4657,15 @@ async function detailCot(id){
         <span class="cot-action-lbl">Actualizar Items</span>
       </button>
       ${(()=>{
-        // Si TODOS los ítems tienen diseñador: mostrar badge con el nombre, no el botón
-        const disActual = its.length > 0 && its.every(it=>it.DISEÑADOR) ? its[0].DISEÑADOR : null;
+        // Si TODOS los ítems tienen diseñador: mostrar badge con el nombre, no el botón.
+        // Si la cotización ya tiene OP creada, usar Control Producción (fuente de verdad)
+        // como respaldo, porque una OP creada solo con parte de los ítems deja a los
+        // demás ítems sin DISEÑADOR aunque la cotización ya tenga diseñador asignado.
+        let disActual = its.length > 0 && its.every(it=>it.DISEÑADOR) ? its[0].DISEÑADOR : null;
+        if(!disActual && tieneOP){
+          const opConDis = ops.find(op=>op.DISEÑADOR);
+          if(opConDis) disActual = opConDis.DISEÑADOR;
+        }
         if(disActual){
           return `<button class="cot-action-btn" onclick="diseñadorCot('${id}')" title="Cambiar diseñador">
             <span class="cot-action-ic" style="background:#4a148c">✏️</span>
