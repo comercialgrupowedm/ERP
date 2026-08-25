@@ -1227,7 +1227,7 @@ function renderTabla(items){
               onchange="_bulkToggle('${safe(normId)}',this.checked);this.closest('tr').style.background=this.checked?'rgba(99,102,241,.08)':''"
               style="width:14px;height:14px;accent-color:var(--accent)">
           </td>
-          <td style="width:44px;padding:4px 6px" onclick="verDetalle('${safe(normId)}')">${_thumbHtml(op,36)}</td>
+          <td style="width:58px;padding:4px 6px" onclick="verDetalle('${safe(normId)}')">${_thumbHtml(op,52)}</td>
           <td class="mono" onclick="verDetalle('${safe(normId)}')">OP-${esc(op.OP||'—')}</td>
           <td class="mono" onclick="verDetalle('${safe(normId)}')">${esc(op.ITEM||'—')}</td>
           <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" onclick="verDetalle('${safe(normId)}')">${esc(op.DESCRIPCION||'—')}</td>
@@ -1297,7 +1297,7 @@ function renderOpCard(op){
   return `<div class="list-card" onclick="verDetalle('${safe(_idqr)}')"
     style="${urg?'border-color:var(--danger);':mpAlerta?'border-left:3px solid '+mp.color+';':''}">
     <div class="lc-top">
-      ${_thumbHtml(op,44)}
+      ${_thumbHtml(op,60)}
       <div style="flex:1;min-width:0">
         <div class="lc-id">OP-${esc(op.OP||'—')} · Item ${esc(op.ITEM||'—')}</div>
         <div class="lc-title">${esc(op.DESCRIPCION||'—')}</div>
@@ -2270,7 +2270,14 @@ async function qaPedirMaterial(opId){
       </div>
       <div style="margin-top:12px">
         <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:6px">📝 Observaciones</div>
-        <textarea id="cmp-obs" rows="3" placeholder="Especificaciones, tolerancias, notas de fabricación…" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:8px 10px;font-size:12px;background:var(--surface);color:var(--text);font-family:var(--sans)"></textarea>
+        <textarea id="cmp-obs" rows="2" placeholder="Especificaciones, tolerancias, notas de fabricación…" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:8px 10px;font-size:12px;background:var(--surface);color:var(--text);font-family:var(--sans)"></textarea>
+      </div>
+      <div style="margin-top:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <div style="font-size:11px;font-weight:700;color:#b45309;text-transform:uppercase">📋 RESUMEN DEL PEDIDO — EDITABLE</div>
+          <button type="button" onclick="_cmpActualizarResumen()" style="font-size:10px;padding:3px 8px;border-radius:6px;border:1px solid var(--border);background:var(--card2);cursor:pointer;color:var(--muted)">🔄 Regenerar</button>
+        </div>
+        <div id="cmp-resumen-wrap"></div>
       </div>
     </div>`,
     `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
@@ -2289,6 +2296,8 @@ async function qaPedirMaterial(opId){
       : `⚠ Sin coincidencias en ELEMENTOS · COT=${cotNum} ITEM=${itemNum} · filas cargadas: ${(DB.elementos||[]).length}`;
   }
   _cmpRenderItems();
+  // Resumen inicial
+  setTimeout(_cmpActualizarResumen, 100);
 }
 async function _qaPedirMaterialViejo_noUsar(opId){
   const op=(DB.produccion||[]).find(o=>String(o.IDQR||o.OP)===String(opId));
@@ -2338,16 +2347,16 @@ function _cmpAddItem(tipo){
   _cmpRenderItems();
 }
 function _cmpDelItem(i){ window._cmpItems.splice(i,1); if(!window._cmpItems.length) window._cmpItems.push({tipo:'mat',nombre:'',geometria:'cil',diametro:'',espesor:'',largo:'',ancho:'',cant:1,unidad:'kg',precio:0,notas:''}); _cmpRenderItems(); }
-function _cmpUpdItem(i,field,val){ if(window._cmpItems[i]) window._cmpItems[i][field]=val; _cmpUpdateTotal(); }
+function _cmpUpdItem(i,field,val){ if(window._cmpItems[i]) window._cmpItems[i][field]=val; _cmpUpdateTotal(); if(!window._cmpResumenTimer) window._cmpResumenTimer=setTimeout(()=>{_cmpActualizarResumen();window._cmpResumenTimer=null;},350); }
 
-// ── FUSIONAR: combina todos los ítems actuales en un único renglón con
-// Fusionar SOLO los materiales seleccionados (servicios siempre van en filas separadas)
+// ── FUSIONAR: genera un bloque editable para materiales Y otro para servicios
 function _cmpToggleFusion(){
   if(!window._cmpFused){
-    // Solo fusionar materiales (mat + fusion), servicios van siempre separados
     const mats = window._cmpItems.filter(it=>it.tipo==='mat'||it.tipo==='fusion');
-    const svcs = window._cmpItems.filter(it=>it.tipo==='svc');
-    if(mats.length < 2){ toast('Agrega al menos 2 materiales para fusionar','error'); return; }
+    const svcs = window._cmpItems.filter(it=>it.tipo==='svc'||it.tipo==='fusion_svc');
+    if(mats.length < 2 && svcs.length < 2){
+      toast('Agrega al menos 2 materiales (o 2 servicios) para fusionar','error'); return;
+    }
     window._cmpItemsBackup = JSON.parse(JSON.stringify(window._cmpItems));
 
     const _itemTexto = (it,n) => {
@@ -2365,12 +2374,25 @@ function _cmpToggleFusion(){
       return `${n+1}. ${nombreReal}${dims} / ${cant} ${unid} - ${costo}`;
     };
 
-    const desc = mats.map((it,n) => _itemTexto(it,n)).join('\n');
-    const totalCosto = mats.reduce((s,it)=>s+(Number(it.precio)||0),0);
-    const totalCant  = mats.reduce((s,it)=>s+(Number(it.cant)||0),0);
-    const fusion = {tipo:'fusion',nombre:'ESPECIAL',fusedDesc:desc,cant:totalCant,unidad:'',precio:totalCosto,notas:''};
-    // Recomponer: fusión primero, luego servicios (siempre separados)
-    window._cmpItems = [fusion, ...svcs];
+    const resultado = [];
+    // Bloque fusionado de MATERIALES (solo si hay ≥1)
+    if(mats.length >= 1){
+      const desc = mats.map((it,n) => _itemTexto(it,n)).join('\n');
+      const totalCosto = mats.reduce((s,it)=>s+(Number(it.precio)||0),0);
+      const totalCant  = mats.reduce((s,it)=>s+(Number(it.cant)||0),0);
+      resultado.push({tipo:'fusion',nombre:'ESPECIAL',fusedDesc:desc,cant:totalCant,unidad:'',precio:totalCosto,notas:'',_sel:true});
+    }
+    // Bloque fusionado de SERVICIOS (solo si hay ≥1)
+    if(svcs.length >= 1){
+      const descSvc = svcs.map((it,n) => {
+        const costo = '$'+Number(it.precio||0).toLocaleString('es-CO');
+        return `${n+1}. ${it.nombre||'—'} / ${it.cant||0} ${it.unidad||'días'} - ${costo}`;
+      }).join('\n');
+      const totalSvcCosto = svcs.reduce((s,it)=>s+(Number(it.precio)||0),0);
+      const totalSvcCant  = svcs.reduce((s,it)=>s+(Number(it.cant)||0),0);
+      resultado.push({tipo:'fusion_svc',nombre:'SERVICIOS',fusedDesc:descSvc,cant:totalSvcCant,unidad:'días',precio:totalSvcCosto,notas:'',_sel:true});
+    }
+    window._cmpItems = resultado;
     window._cmpFused=true;
   } else {
     window._cmpItems = window._cmpItemsBackup || window._cmpItems;
@@ -2385,10 +2407,75 @@ function _cmpUpdateTotal(){
   const t=(window._cmpItems||[]).reduce((s,it)=>s+(Number(it.precio)||0),0);
   const el=document.getElementById('cmp-total-val');
   if(el) el.textContent='$'+t.toLocaleString('es-CO');
+  _cmpActualizarResumen();
+}
+
+// ── RESUMEN DE PEDIDO: genera bloques editables por tipo ─────────────
+function _cmpBuildLineaResumen(it){
+  // Una sola línea compacta con símbolos: MATERIAL · Ø65 × L220mm · 2 kg · $150.000
+  if(it.tipo==='fusion'||it.tipo==='fusion_svc') return it.fusedDesc||'';
+  const isMat = it.tipo==='mat';
+  const isEsp = it.nombre==='ESPECIAL';
+  const nombre = isMat ? (isEsp ? (it.notas||'MATERIAL ESPECIAL') : it.nombre||'') : it.nombre||'';
+  const partes = [nombre];
+  if(isMat && !isEsp){
+    const isPlat = it.geometria==='plat';
+    if(isPlat){
+      const e = it.espesor||''; const a = it.ancho||''; const l = it.largo||'';
+      if(e||a||l) partes.push(`e${e||'?'} × ${a||'?'} × L${l||'?'}mm`);
+    } else {
+      const d = it.diametro||''; const l = it.largo||'';
+      if(d) partes.push(`Ø${d}mm`);
+      if(l) partes.push(`L${l}mm`);
+    }
+  }
+  if(it.cant)   partes.push(`${it.cant} ${it.unidad||'und'}`);
+  if(!isMat && it.notas) partes.push(it.notas);
+  if(isMat && !isEsp && it.notas) partes.push(it.notas);
+  if(it.precio) partes.push(`$${Number(it.precio).toLocaleString('es-CO')}`);
+  return partes.filter(Boolean).join(' · ');
+}
+
+function _cmpActualizarResumen(){
+  const wrap = document.getElementById('cmp-resumen-wrap');
+  if(!wrap) return;
+  const items = (window._cmpItems||[]).filter(it=>it._sel!==false && it.nombre);
+  if(!items.length){
+    wrap.innerHTML = `<div style="color:var(--muted);font-size:11px;text-align:center;padding:10px">Sin ítems seleccionados</div>`;
+    return;
+  }
+  const mats = items.filter(it=>it.tipo==='mat'||it.tipo==='fusion');
+  const svcs = items.filter(it=>it.tipo==='svc'||it.tipo==='fusion_svc');
+  let html = '';
+
+  if(mats.length){
+    const descMat = mats.map((it,n)=>{
+      const linea = _cmpBuildLineaResumen(it);
+      return mats.length>1 ? `${n+1}. ${linea}` : linea;
+    }).join('\n');
+    html += `<div style="margin-bottom:10px">
+      <div style="font-size:10px;font-weight:700;color:var(--purple);text-transform:uppercase;margin-bottom:4px">🪨 Materiales a pedir</div>
+      <textarea id="cmp-resumen-mat" rows="${Math.min(mats.length+1,10)}" style="width:100%;font-family:var(--mono);font-size:11.5px;border:1.5px solid var(--purple);border-radius:8px;padding:10px;background:rgba(124,58,237,.04);color:var(--text);line-height:1.8;resize:vertical">${esc(descMat)}</textarea>
+    </div>`;
+  }
+
+  if(svcs.length){
+    const descSvc = svcs.map((it,n)=>{
+      const linea = _cmpBuildLineaResumen(it);
+      return svcs.length>1 ? `${n+1}. ${linea}` : linea;
+    }).join('\n');
+    html += `<div>
+      <div style="font-size:10px;font-weight:700;color:#0d9488;text-transform:uppercase;margin-bottom:4px">🛠 Servicios a pedir</div>
+      <textarea id="cmp-resumen-svc" rows="${Math.min(svcs.length+1,8)}" style="width:100%;font-family:var(--mono);font-size:11.5px;border:1.5px solid #0d9488;border-radius:8px;padding:10px;background:rgba(13,148,136,.04);color:var(--text);line-height:1.8;resize:vertical">${esc(descSvc)}</textarea>
+    </div>`;
+  }
+
+  wrap.innerHTML = html;
 }
 function _cmpSelAll(val){
   (window._cmpItems||[]).forEach(it=>{ it._sel=val; });
   _cmpRenderItems();
+  _cmpActualizarResumen();
 }
 function _cmpSelItem(i,val){
   if(window._cmpItems[i]) window._cmpItems[i]._sel=val;
@@ -2396,21 +2483,50 @@ function _cmpSelItem(i,val){
   const allSel = (window._cmpItems||[]).every(it=>it._sel);
   const allChk = document.getElementById('cmp-sel-all');
   if(allChk) allChk.checked = allSel;
+  _cmpActualizarResumen();
+}
+
+// Opciones metalurgia para cuando el catálogo no tiene todas las opciones
+const _MAT_METALURGIA = [
+  'ACERO SAE 1018','ACERO SAE 1020','ACERO SAE 1045','ACERO SAE 4140','ACERO SAE 4340',
+  'ACERO SAE 8620','ACERO INOXIDABLE 304','ACERO INOXIDABLE 316','ACERO INOXIDABLE 420',
+  'ACERO TOOL D2','ACERO TOOL H13','ACERO TOOL O1','ACERO TOOL S7','ACERO RÁPIDO M2 (HSS)',
+  'ACERO CEMENTADO','ACERO NITRURADO','ACERO BONIFICADO',
+  'BRONCE SAE 40','BRONCE SAE 660','BRONCE FOSFOROSO','BRONCE ALUMINIO','BRONCE SILICIO',
+  'COBRE ELECTROLÍTICO','LATÓN',
+  'ALUMINIO 6061','ALUMINIO 6063','ALUMINIO 7075','ALUMINIO 2024','ALUMINIO FUNDIDO',
+  'TITANIO GR2','TITANIO GR5 (Ti-6Al-4V)',
+  'NYLON (PA6)','NYLON (PA66)','DELRIN (POM)','TEFLÓN (PTFE)','POLIPROPILENO','HDPE','UHMWPE',
+  'HIERRO FUNDIDO GRIS','HIERRO FUNDIDO NODULAR','HIERRO FUNDIDO BLANCO',
+  'TUNGSTENO CARBURO','CARBURO CEMENTADO',
+  'LATÓN 360','ZINC FUNDIDO','ZAMAK',
+];
+
+function _cmpMatOpts(it){
+  // Opciones del catálogo DB
+  const dbOpts = (DB.materiales||[]).map(m=>m.MATERIAL||'').filter(Boolean);
+  // Unir catálogo + metalurgia, sin duplicados
+  const allOpts = [...new Set([...dbOpts, ..._MAT_METALURGIA])].sort();
+  return allOpts.map(n=>`<option value="${esc(n)}" ${it.nombre===n?'selected':''}>${esc(n)}</option>`).join('');
 }
 
 function _cmpRenderItems(){
   const c=document.getElementById('cmp-items-list'); if(!c) return;
-  c.innerHTML=window._cmpItems.map((it,i)=>{
+
+  // Separar fusión de materiales, fusión de servicios, ítems normales
+  let html = '';
+  window._cmpItems.forEach((it,i)=>{
     if(it.tipo==='fusion'){
-      return `<div class="cmp-item-row fused" style="opacity:${it._sel!==false?1:.5}">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px">
+      // Cuadro fusionado de MATERIALES
+      html += `<div class="cmp-item-row fused" style="opacity:${it._sel!==false?1:.5}">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
             <input type="checkbox" ${it._sel!==false?'checked':''} onchange="_cmpSelItem(${i},this.checked);_cmpRenderItems()" style="width:15px;height:15px;accent-color:var(--accent)">
-            <span style="font-size:10px;font-weight:700;color:var(--purple)">🧲 FUSIONADO — EDITABLE</span>
+            <span style="font-size:10px;font-weight:700;color:var(--purple)">🧲 MATERIALES FUSIONADOS — EDITABLE</span>
           </label>
         </div>
-        <textarea rows="4" onchange="_cmpUpdItem(${i},'fusedDesc',this.value)" style="font-family:var(--mono);font-size:11px">${esc(it.fusedDesc||'')}</textarea>
-        <div class="cmp-cost-row">
+        <textarea rows="5" onchange="_cmpUpdItem(${i},'fusedDesc',this.value)" style="font-family:var(--mono);font-size:11px;width:100%;border:1.5px solid var(--purple);border-radius:8px;padding:8px;background:rgba(124,58,237,.04);color:var(--text);resize:vertical">${esc(it.fusedDesc||'')}</textarea>
+        <div class="cmp-cost-row" style="margin-top:6px">
           <span>Cantidad total</span>
           <input type="number" value="${it.cant||0}" onchange="_cmpUpdItem(${i},'cant',this.value)" style="max-width:90px">
         </div>
@@ -2419,24 +2535,52 @@ function _cmpRenderItems(){
           <input type="number" value="${it.precio||0}" onchange="_cmpUpdItem(${i},'precio',this.value)">
         </div>
       </div>`;
+      return;
+    }
+    if(it.tipo==='fusion_svc'){
+      // Cuadro fusionado de SERVICIOS
+      html += `<div class="cmp-item-row fused" style="opacity:${it._sel!==false?1:.5};border-color:#0d9488">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+            <input type="checkbox" ${it._sel!==false?'checked':''} onchange="_cmpSelItem(${i},this.checked);_cmpRenderItems()" style="width:15px;height:15px;accent-color:#0d9488">
+            <span style="font-size:10px;font-weight:700;color:#0d9488">🔧 SERVICIOS FUSIONADOS — EDITABLE</span>
+          </label>
+        </div>
+        <textarea rows="4" onchange="_cmpUpdItem(${i},'fusedDesc',this.value)" style="font-family:var(--mono);font-size:11px;width:100%;border:1.5px solid #0d9488;border-radius:8px;padding:8px;background:rgba(13,148,136,.04);color:var(--text);resize:vertical">${esc(it.fusedDesc||'')}</textarea>
+        <div class="cmp-cost-row" style="margin-top:6px">
+          <span>Cantidad total</span>
+          <input type="number" value="${it.cant||0}" onchange="_cmpUpdItem(${i},'cant',this.value)" style="max-width:90px">
+        </div>
+        <div class="cmp-cost-row">
+          <span>💰 Costo cotiz $</span>
+          <input type="number" value="${it.precio||0}" onchange="_cmpUpdItem(${i},'precio',this.value)">
+        </div>
+      </div>`;
+      return;
     }
     const isMat=it.tipo==='mat';
+    const isEspecial = it.nombre==='ESPECIAL';
     const opts=isMat
-      ? (DB.materiales||[]).map(m=>`<option value="${esc(m.MATERIAL||'')}" ${it.nombre===m.MATERIAL?'selected':''}>${esc(m.MATERIAL||'')}</option>`).join('')
+      ? _cmpMatOpts(it)
       : (DB.servicios||[]).map(s=>{const n=s['SERVICIO EXTERNO']||s.SERVICIO_EXTERNO||'';return `<option value="${esc(n)}" ${it.nombre===n?'selected':''}>${esc(n)}</option>`;}).join('');
     const isPlat = it.geometria==='plat';
     const dimsResumen = isPlat ? `${esc(it.espesor||'—')}×${esc(it.largo||'—')}×${esc(it.ancho||'—')}mm` : `Ø${esc(it.diametro||'—')}×L${esc(it.largo||'—')}mm`;
     const refBox = it._origen==='cotizacion' ? `<div class="cmp-ref-box">📐 ${dimsResumen}
       ${it.densidad?` &nbsp; <b>Dens:</b> ${esc(it.densidad)}`:''}${it.precioKg?` &nbsp; <b>$/kg:</b> $${esc(String(it.precioKg))}`:''}${it.peso?` &nbsp; <b>Peso:</b> ${esc(it.peso)} kg`:''}
       &nbsp; <b>Est:</b> $${Number(it.precio||0).toLocaleString('es-CO')}</div>` : '';
-    const geomToggle = isMat ? `<div style="margin-top:6px">
+    // Campo descripción libre cuando es ESPECIAL (igual que en comercial)
+    const especialField = (isMat && isEspecial) ? `<div style="margin-top:6px">
+      <div style="font-size:10px;color:var(--warn);text-transform:uppercase;font-weight:700;margin-bottom:3px">⚡ Descripción del material especial</div>
+      <textarea rows="2" placeholder="Ej: LAMINA ALUMINIO 3MM 1200×2400" onchange="_cmpUpdItem(${i},'notas',this.value)" style="width:100%;border:1.5px solid var(--warn);border-radius:8px;padding:8px;font-size:12px;background:rgba(217,119,6,.05);color:var(--text);font-family:var(--sans);resize:vertical">${esc(it.notas||'')}</textarea>
+    </div>` : '';
+    const geomToggle = (isMat && !isEspecial) ? `<div style="margin-top:6px">
         <div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700;margin-bottom:4px">Geometría</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
           <button type="button" onclick="_cmpUpdItem(${i},'geometria','cil');_cmpRenderItems()" style="padding:9px;border-radius:8px;border:1.5px solid var(--border);font-weight:700;font-size:12px;cursor:pointer;${!isPlat?'background:var(--purple);color:#fff;border-color:var(--purple)':'background:var(--surface);color:var(--text)'}">● Cil</button>
           <button type="button" onclick="_cmpUpdItem(${i},'geometria','plat');_cmpRenderItems()" style="padding:9px;border-radius:8px;border:1.5px solid var(--border);font-weight:700;font-size:12px;cursor:pointer;${isPlat?'background:var(--purple);color:#fff;border-color:var(--purple)':'background:var(--surface);color:var(--text)'}">— Plat</button>
         </div>
       </div>` : '';
-    const dimsFields = isMat ? (isPlat ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px">
+    const dimsFields = (isMat && !isEspecial) ? (isPlat ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px">
         <input type="number" placeholder="Espesor (mm)" value="${esc(it.espesor||'')}" onchange="_cmpUpdItem(${i},'espesor',this.value)">
         <input type="number" placeholder="Ancho (mm)" value="${esc(it.ancho||'')}" onchange="_cmpUpdItem(${i},'ancho',this.value)">
       </div>
@@ -2446,7 +2590,8 @@ function _cmpRenderItems(){
         <input type="number" placeholder="Diámetro (mm)" value="${esc(it.diametro||'')}" onchange="_cmpUpdItem(${i},'diametro',this.value)">
         <input type="number" placeholder="Largo (mm)" value="${esc(it.largo||'')}" onchange="_cmpUpdItem(${i},'largo',this.value)">
       </div>`) : '';
-    return `<div class="cmp-item-row" style="opacity:${it._sel!==false?1:.5}">
+    const notasField = (!isMat || !isEspecial) ? `<input type="text" placeholder="${isMat?'Notas / dureza…':'Descripción del servicio…'}" value="${esc(it.notas||'')}" onchange="_cmpUpdItem(${i},'notas',this.value)" style="margin-top:6px">` : '';
+    html += `<div class="cmp-item-row" style="opacity:${it._sel!==false?1:.5}">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px">
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
           <input type="checkbox" ${it._sel!==false?'checked':''} onchange="_cmpSelItem(${i},this.checked);this.closest('.cmp-item-row').style.opacity=this.checked?1:.5" style="width:15px;height:15px;accent-color:var(--accent)">
@@ -2454,25 +2599,27 @@ function _cmpRenderItems(){
         </label>
         <button type="button" onclick="_cmpDelItem(${i})" style="background:none;border:none;color:var(--danger);font-size:16px;cursor:pointer">✕</button>
       </div>
-      <select onchange="_cmpUpdItem(${i},'nombre',this.value)">
+      <select onchange="_cmpUpdItem(${i},'nombre',this.value);_cmpRenderItems()">
         <option value="">— Seleccionar ${isMat?'material':'servicio'} —</option>
-        ${isMat?'<option value="ESPECIAL" '+(it.nombre==='ESPECIAL'?'selected':'')+'>⚡ ESPECIAL</option>':''}
+        ${isMat?'<option value="ESPECIAL" '+(isEspecial?'selected':'')+'>⚡ ESPECIAL</option>':''}
         ${opts}
       </select>
       ${refBox}
+      ${especialField}
       ${geomToggle}
       ${dimsFields}
+      ${notasField}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px">
         <input type="number" placeholder="Cantidad" value="${it.cant||''}" onchange="_cmpUpdItem(${i},'cant',this.value)">
         <input type="text" placeholder="Unidad (kg, días…)" value="${esc(it.unidad||'')}" onchange="_cmpUpdItem(${i},'unidad',this.value)">
       </div>
-      <input type="text" placeholder="Notas / dimensiones / dureza…" value="${esc(it.notas||'')}" onchange="_cmpUpdItem(${i},'notas',this.value)" style="margin-top:6px">
       <div class="cmp-cost-row">
         <span>💰 Costo cotiz $</span>
         <input type="number" value="${it.precio||0}" onchange="_cmpUpdItem(${i},'precio',this.value)">
       </div>
     </div>`;
-  }).join('');
+  });
+  c.innerHTML = html;
   _cmpUpdateTotal();
 }
 
@@ -2532,7 +2679,7 @@ async function _cmpConfirmar(idqr){
     const noc=`CMP-${tsBase}-${idqr}`;
     const totalOC=items.reduce((s,it)=>s+(Number(it.precio)||0),0);
     const resumen=items.map((it,n)=>{
-      if(it.tipo==='fusion') return it.fusedDesc||'';
+      if(it.tipo==='fusion'||it.tipo==='fusion_svc') return it.fusedDesc||'';
       return `${n+1}. ${it.tipo==='mat'?'🪨':'🛠'} ${it.nombre} — ${it.cant||0} ${it.unidad||''}${it.notas?' ('+it.notas+')':''} — $${Number(it.precio||0).toLocaleString('es-CO')}`;
     }).join('\n');
     // Crear en BIENES Y SERVICIOS — materiales (incluso fusión) y servicios en filas separadas
@@ -2543,14 +2690,12 @@ async function _cmpConfirmar(idqr){
       const idCompra=`${noc}-${filaIdx}`;
       const esSvc = it.tipo==='svc';
       const esFusion = it.tipo==='fusion';
-      const tipoPedido = esSvc?'SERVICIO EXTERNO':(esFusion?'MATERIAL_ESPECIAL':'MATERIAL');
+      const esFusionSvc = it.tipo==='fusion_svc';
+      const tipoPedido = (esSvc||esFusionSvc)?'SERVICIO EXTERNO':(esFusion?'MATERIAL_ESPECIAL':'MATERIAL');
 
       // ── Construir PRODUCTO descriptivo como en la hoja ──────────────
-      // Ejemplo mat normal:  "ACERO SAE 4140: Cilindro - Ø22 x 350mm / 1 UND"
-      // Ejemplo ESPECIAL:    "LAMINA ALUMINIO 3MM 1X2 · Cant: 1 - $400.000"
-      // Ejemplo servicio:    "CORTE LASER · Cant: 2 días - $170.000"
       let productoTexto = '';
-      if(esFusion){
+      if(esFusion || esFusionSvc){
         // Fusionado: texto libre del textarea
         productoTexto = (it.fusedDesc||'').trim();
       } else if(esSvc){
@@ -2595,7 +2740,7 @@ async function _cmpConfirmar(idqr){
         PRODUCTO: productoTexto,
         'TIPO DE PEDIDO': tipoPedido,
         CANT: '',           // Vacío — cantidad va en PRODUCTO
-        OBSERVACIONES: (!esFusion&&obs) ? obs : '',
+        OBSERVACIONES: (!esFusion&&!esFusionSvc&&obs) ? obs : '',
         'AUTORIZACION JUAN DIEGO': '',  // Checkbox — vacío
         COMPRADO: '',                   // Checkbox — vacío
         'COSTO SIN IVA': esSvc?'':(it.precio||0),
@@ -3026,7 +3171,7 @@ function renderBienesServicios(){
       <div style="padding:12px 14px;border-bottom:1px solid var(--border)">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
           <div style="display:flex;gap:10px;align-items:flex-start;flex:1;min-width:0">
-            ${imgUrl?`<img src="${imgUrl}" style="width:48px;height:48px;object-fit:cover;border-radius:8px;flex-shrink:0" loading="lazy">`:'<div style="width:48px;height:48px;border-radius:8px;background:var(--border);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">🪨</div>'}
+            ${imgUrl?`<img src="${imgUrl}" style="width:72px;height:72px;object-fit:cover;border-radius:8px;flex-shrink:0" loading="lazy">`:'<div style="width:72px;height:72px;border-radius:8px;background:var(--border);display:flex;align-items:center;justify-content:center;font-size:28px;flex-shrink:0">🪨</div>'}
             <div style="min-width:0">
               <div style="font-size:12px;font-weight:700;color:var(--accent)">${esc(oc)}</div>
               <div style="font-size:13px;font-weight:600;color:var(--text);margin-top:2px">
