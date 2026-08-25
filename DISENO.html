@@ -444,6 +444,8 @@ td.mono{font-family:var(--mono);font-size:11px}
   <div class="bn-item" data-m="planos" onclick="nav('planos')"><div class="bn-icon">📄</div>Planos</div>
   <div class="bn-item" data-m="produccion" onclick="nav('produccion')"><div class="bn-icon">🏭</div>Producción</div>
   <div class="bn-item admin-only" data-m="todos" onclick="nav('todos')" style="display:none"><div class="bn-icon">🗂️</div>Todas</div>
+  <div class="bn-item" data-m="bsmodulo" onclick="nav('bsmodulo')"><div class="bn-icon">🧱</div>Pedidos<span class="bn-badge" id="bb-bs" style="display:none">0</span></div>
+  <div class="bn-item" data-m="itemscot" onclick="nav('itemscot')"><div class="bn-icon">📋</div>Ítems Cot.</div>
 </div>
 
 <div id="toast"></div>
@@ -652,11 +654,31 @@ async function iniciarApp(){
   if(refBtn) refBtn.classList.add('spinning');
   try {
     // Sincronizar siempre al entrar: ignora caché y trae datos frescos
-    ['produccion','cotizaciones'].forEach(k=>localStorage.removeItem(CACHE_PFX+k));
-    setSplash(40,'Cargando órdenes de producción...');
+    ['produccion','cotizaciones','bienesServicios'].forEach(k=>localStorage.removeItem(CACHE_PFX+k));
+    setSplash(30,'Cargando órdenes de producción...');
     await loadData('produccion','getControlProduccion');
-    setSplash(70,'Cargando cotizaciones...');
+    setSplash(60,'Cargando cotizaciones...');
     await loadData('cotizaciones','getCotizaciones');
+    setSplash(85,'Cargando Bienes & Servicios...');
+    await (async()=>{
+      try{
+        const r = await fetch(API+'?action=getBienesServicios');
+        if(!r.ok) throw new Error('HTTP '+r.status);
+        const j = await r.json();
+        const todos = (j.data!==undefined?j.data:j)||[];
+        // Filtrar solo OPs activas (no CANCELADO/PAUSADO/TERMINADO)
+        const opsActivasSet = new Set(
+          (DB.produccion||[])
+            .filter(op => !['CANCELADO','PAUSADO','TERMINADO'].includes(String(op.ESTADO||'').toUpperCase()))
+            .map(op => String(op.OP||'').trim())
+            .filter(Boolean)
+        );
+        DB.bienesServicios = Array.isArray(todos)
+          ? todos.filter(r => opsActivasSet.has(String(r['#OP']||'').trim()))
+          : [];
+        console.log('[BS] filtrados:', DB.bienesServicios.length, '/ total:', todos.length);
+      }catch(e){ DB.bienesServicios=[]; }
+    })();
     setSplash(100,'¡Listo!');
     updateBadges();
     nav('dashboard');
@@ -800,6 +822,7 @@ const TITLES = {
   dashboard:'Control Diseño', pendiente:'Mis Items Activos',
   ingenieria:'Ingeniería & Planeación', planos:'Planos',
   produccion:'En Producción', todos:'Todas las OPs (Admin)',
+  bsmodulo:'Bienes & Servicios — Pedidos', itemscot:'Ítems Cotizados',
 };
 
 function nav(m){
@@ -816,6 +839,8 @@ function nav(m){
     case 'planos':      renderPlanos(); break;
     case 'produccion':  renderEnProduccion(); break;
     case 'todos':       _esAdmin()?renderTodos():nav('dashboard'); break;
+    case 'bsmodulo':    renderBienesServicios(); break;
+    case 'itemscot':   renderItemsCotizados(); break;
     default:
       if(FILTROS_DASH[m]) renderFiltroDash(m);
       else setContent(`<div class="empty"><div class="empty-icon">🚧</div><p>Módulo no disponible</p></div>`);
@@ -1176,12 +1201,40 @@ function renderTabla(items){
   </table></div></div>`;
 }
 
+// ── Helper global: normalizar SI/NO/TRUE ─────────────────────────
+function _bsYes(v){ if(v===true||v===1) return true; const s=String(v||'').trim().toUpperCase(); return s==='SI'||s==='TRUE'||s==='1'||s==='YES'; }
+
+// ── Helper: estado de pedido de material ──────────────────────────
+function _mpStatus(op){
+  const opStr = String(op.OP||'').trim();
+  const bs = DB.bienesServicios || [];
+  const pedidos = bs.filter(r => String(r['#OP']||'').trim() === opStr);
+  if(pedidos.length > 0){
+    const todoRecibido = pedidos.every(r => _bsYes(r.RECIBIDO));
+    const todoComprado = pedidos.every(r => _bsYes(r.COMPRADO));
+    if(todoRecibido) return {estado:'recibido', label:'✅ MP Recibida', color:'#10b981', bg:'#d1fae5', count:pedidos.length};
+    if(todoComprado) return {estado:'comprado',  label:'🛒 MP Comprada', color:'#3b82f6', bg:'#dbeafe', count:pedidos.length};
+    return {estado:'pedido', label:'📦 MP Pedida', color:'#8b5cf6', bg:'#ede9fe', count:pedidos.length};
+  }
+  // Sin pedido — calcular días desde FECHA INICIO
+  const fechaInicio = op['FECHA INICIO']||op['FECHA_INICIO']||'';
+  if(!fechaInicio) return {estado:'sin_pedido', label:'⬜ Sin pedido', color:'#94a3b8', bg:'#f1f5f9', count:0};
+  const inicio = new Date(fechaInicio);
+  if(isNaN(inicio)) return {estado:'sin_pedido', label:'⬜ Sin pedido', color:'#94a3b8', bg:'#f1f5f9', count:0};
+  const dias = Math.floor((Date.now() - inicio) / 86400000);
+  if(dias >= 5) return {estado:'urgente',   label:'🚩 Pedido vencido', color:'#dc2626', bg:'#fee2e2', count:0, dias};
+  if(dias >= 2) return {estado:'alerta',    label:'🔴 Sin pedido '+dias+'d', color:'#f59e0b', bg:'#fef3c7', count:0, dias};
+  return {estado:'nuevo', label:'⬜ Sin pedido', color:'#94a3b8', bg:'#f1f5f9', count:0, dias};
+}
+
 function renderOpCard(op){
   const d=diasHasta(op['FECHA ENTREGA']);
   const urg=d!==null&&d<3;
   const ingenOK=!esPendienteDiseño(op);
-  return `<div class="list-card${urg?' ':''}" onclick="verDetalle('${safe(op.OP||op.IDQR)}')"
-    ${urg?'style="border-color:var(--danger)"':''}>
+  const mp=_mpStatus(op);
+  const mpAlerta = mp.estado==='urgente'||mp.estado==='alerta';
+  return `<div class="list-card" onclick="verDetalle('${safe(op.OP||op.IDQR)}')"
+    style="${urg?'border-color:var(--danger);':mpAlerta?'border-left:3px solid '+mp.color+';':''}">
     <div class="lc-top">
       ${_thumbHtml(op,44)}
       <div style="flex:1;min-width:0">
@@ -1196,6 +1249,7 @@ function renderOpCard(op){
     </div>
     <div class="lc-meta">
       ${ingenOK?'<span class="badge verde">✅ Ing. OK</span>':'<span class="badge naranja">⏳ Ing. pendiente</span>'}
+      <span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;background:${mp.bg};color:${mp.color}">${mp.label}</span>
       ${op.PLANO_URL||op.PLANO_NOMBRE?'<span class="badge azul">📄 Con plano</span>':''}
       ${op['HORAS TOTAL']?`<span style="font-size:10px;color:var(--muted)">⏱ ${esc(String(op['HORAS TOTAL']))}h</span>`:''}
       ${_esAdmin()&&op.DISEÑADOR?`<span class="badge morado">✏️ ${esc(op.DISEÑADOR)}</span>`:''}
@@ -1523,15 +1577,71 @@ function verDetalle(opId){
   <!-- INFO -->
   <div class="dp-section"><h4>📋 Información</h4>
     ${[['OP','OP-'+(op.OP||'—')],['Ítem',op.ITEM||'—'],['Descripción',op.DESCRIPCION||'—'],
-      ['Cliente',op.CLIENTE||'—'],['Cotización',op.COTIZACION?'COT-'+op.COTIZACION:'—'],
+      ['Cliente',op.CLIENTE||'—'],['Cotización',(op.COTIZACION||op.COT)?'COT-'+(op.COTIZACION||op.COT):'—'],
       ['Tipo',op.TIPO||'—'],['Estado',op.ESTADO||'—'],['Diseñador',op.DISEÑADOR||'Sin asignar'],
-      ['F. Entrega',fmtFecha(op['FECHA ENTREGA'])],['Días',op['DÍAS ENTREGA']!==undefined?op['DÍAS ENTREGA']+'d':'—'],
-      ['Horas',op['HORAS TOTAL']?op['HORAS TOTAL']+'h':'—'],['Cantidad',op.CANTIDAD||'—'],
+      ['F. Entrega',fmtFecha(op['FECHA ENTREGA PRODUCCION']||op['FECHA ENTREGA'])],
+      ['Días',op['DÍAS ENTREGA']!==undefined?op['DÍAS ENTREGA']+'d':'—'],
+      ['Horas',op['HORAS TOTAL']?op['HORAS TOTAL']+'h':'—'],
+      ['Cantidad',(op.CANT||op.CANTIDAD||op['CANTIDAD']||'—')],
       ['Ingeniería OK',ingenOK?'✅ Sí':'❌ Pendiente'],
       ['MP Pedido',op.MP_INSUMOS==='Y'?'✅ Sí':'❌ No'],
       ['Plano',op.PLANO_NOMBRE||'—'],
     ].map(([l,v])=>`<div class="dp-row"><span class="dp-label">${esc(l)}</span><span class="dp-val">${esc(String(v))}</span></div>`).join('')}
-  </div>`;
+  </div>
+
+  <!-- PEDIDOS BS RELACIONADOS -->
+  ${(()=>{
+    const opStr = String(op.OP||'').trim();
+    const bsPed = (DB.bienesServicios||[]).filter(r=>String(r['#OP']||'').trim()===opStr);
+    const mp = _mpStatus(op);
+    const alertaHtml = (mp.estado==='urgente'||mp.estado==='alerta')
+      ? `<div style="background:${mp.bg};border:1px solid ${mp.color};border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:12px;font-weight:700;color:${mp.color}">
+          ${mp.label} — ${mp.dias}+ días sin pedido de material
+         </div>` : '';
+    if(!bsPed.length) return alertaHtml + `<div class="dp-section">
+      <h4>🧱 Pedidos de Material</h4>
+      <div style="text-align:center;padding:16px;color:var(--muted);font-size:12px">
+        Sin pedidos registrados<br>
+        <button class="btn btn-sm btn-primary" style="margin-top:10px"
+          onclick="closeDetail();qaPedirMaterial('${safe(op.IDQR||op.OP)}')">+ Hacer pedido</button>
+      </div></div>`;
+    // Agrupar por ORDEN DE COMPRA
+    const ocs = {};
+    bsPed.forEach(r=>{ const oc=r['ORDEN DE COMPRA']||r.IDCOMPRAS; if(!ocs[oc])ocs[oc]=[]; ocs[oc].push(r); });
+    const ocCards = Object.entries(ocs).map(([oc,items])=>{
+      const r0=items[0];
+      const comp = items.every(r=>_bsYes(r.COMPRADO));
+      const recib= items.every(r=>_bsYes(r.RECIBIDO));
+      const color= recib?'#10b981':comp?'#3b82f6':'#f59e0b';
+      const label= recib?'✅ Recibido':comp?'🛒 Comprado':'⏳ Pendiente';
+      const itemRows = items.map(it=>`
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);font-size:11px">
+          <div>
+            <span>${it['TIPO DE PEDIDO']==='SERVICIO EXTERNO'?'🛠':'🪨'}</span>
+            <b>${esc(it.PRODUCTO||'—')}</b>
+            <span style="color:var(--muted)"> · ${it.CANT||'?'} ${it.UNIDAD||''}</span>
+          </div>
+          <span style="color:${_bsYes(it.RECIBIDO)?'#10b981':_bsYes(it.COMPRADO)?'#3b82f6':'#f59e0b'};font-weight:700;font-size:10px">
+            ${_bsYes(it.RECIBIDO)?'✅':_bsYes(it.COMPRADO)?'🛒':'⏳'}
+          </span>
+        </div>`).join('');
+      return `<div style="border:1px solid var(--border);border-radius:10px;margin-bottom:8px;overflow:hidden">
+        <div style="padding:8px 12px;background:${color}18;display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="font-size:11px;font-weight:700;color:${color}">${esc(oc)}</div>
+            <div style="font-size:10px;color:var(--muted)">📅 ${r0['FECHA DE PEDIDO']||'—'} · 👤 ${esc(r0.COLABORADOR||'—')}</div>
+          </div>
+          <span style="font-size:10px;font-weight:700;color:${color}">${label}</span>
+        </div>
+        <div style="padding:4px 12px">${itemRows}</div>
+      </div>`;
+    }).join('');
+    return alertaHtml + `<div class="dp-section">
+      <h4>🧱 Pedidos de Material <span style="background:#e0e7ff;color:#3730a3;border-radius:99px;padding:1px 7px;font-size:10px;font-weight:700">${bsPed.length}</span></h4>
+      ${ocCards}
+    </div>`;
+  })()}
+  `;
 
   openDetail(`OP-${op.OP||'—'} · Item ${op.ITEM||'—'}`, body);
 }
@@ -1736,20 +1846,42 @@ async function qaGuardarImagen(opId){
 async function _cargarCatalogos(){
   const tareas=[];
   if(!DB.materiales) tareas.push(loadData('materiales','getMateriales').catch(()=>{DB.materiales=[];}));
-  if(!DB.servicios) tareas.push(loadData('servicios','getServicios').catch(()=>{DB.servicios=[];}));
+  if(!DB.servicios)  tareas.push(loadData('servicios','getServicios').catch(()=>{DB.servicios=[];}));
+  // Elementos: se construyen desde DB.produccion (ya en memoria) + DB.cotizaciones.
+  // Solo se hace fetch si no hay nada en memoria aún.
   if(!DB.elementos){
-    tareas.push((async()=>{
-      try{
-        const r=await fetch(API+'?action=getItems&modo=todo');
-        if(!r.ok) throw new Error('HTTP '+r.status);
-        const j=await r.json();
-        DB.elementos = (j.data!==undefined?j.data:j)||[];
-      }catch(e){ DB.elementos=[]; }
-      if(!Array.isArray(DB.elementos)){
-        console.warn('getItems no devolvió un arreglo, revisa la acción en tu backend:', DB.elementos);
-        DB.elementos=[];
-      }
-    })());
+    if(DB.produccion && DB.produccion.length){
+      // Obtener lista única de cotizaciones activas en producción
+      const cotsActivas = [...new Set(
+        DB.produccion.map(op => String(op.COTIZACION||op.COT||'').trim()).filter(Boolean)
+      )];
+      tareas.push((async()=>{
+        try{
+          // Cargar ítems solo de cotizaciones activas (rango=todo para no perder nada)
+          const r = await fetch(API+'?action=getItems&modo=todo');
+          if(!r.ok) throw new Error('HTTP '+r.status);
+          const j = await r.json();
+          const todos = (j.data!==undefined?j.data:j)||[];
+          // Filtrar solo los que pertenecen a cotizaciones en producción activa
+          const norm = v => String(v??'').replace(/[^0-9]/g,'').replace(/^0+(?=\d)/,'');
+          const cotsSet = new Set(cotsActivas.map(norm));
+          DB.elementos = Array.isArray(todos)
+            ? todos.filter(e => cotsSet.has(norm(e.COTIZACION||e.COT||'')))
+            : [];
+          console.log('[Catálogo] elementos filtrados:', DB.elementos.length, '/ total:', todos.length);
+        }catch(e){ DB.elementos=[]; }
+      })());
+    } else {
+      tareas.push((async()=>{
+        try{
+          const r = await fetch(API+'?action=getItems&modo=todo');
+          if(!r.ok) throw new Error('HTTP '+r.status);
+          const j = await r.json();
+          DB.elementos = (j.data!==undefined?j.data:j)||[];
+        }catch(e){ DB.elementos=[]; }
+        if(!Array.isArray(DB.elementos)) DB.elementos=[];
+      })());
+    }
   }
   await Promise.all(tareas);
 }
@@ -2111,9 +2243,7 @@ async function _cmpConfirmar(idqr){
       if(it.tipo==='fusion') return it.fusedDesc||'';
       return `${n+1}. ${it.tipo==='mat'?'🪨':'🛠'} ${it.nombre} — ${it.cant||0} ${it.unidad||''}${it.notas?' ('+it.notas+')':''} — $${Number(it.precio||0).toLocaleString('es-CO')}`;
     }).join('\n');
-    // Intentar crear en BIENES Y SERVICIOS; si el GAS aún no tiene la ruta,
-    // cae en fallback a COMPRAS para no perder el pedido.
-    let _gasHasBS = null; // null=desconocido, true/false después del primer intento
+    // Crear en BIENES Y SERVICIOS (único destino desde v6.0)
     for(let i=0;i<items.length;i++){
       const it=items[i];
       const idCompra=`${noc}-${i+1}`;
@@ -2166,50 +2296,33 @@ async function _cmpConfirmar(idqr){
         REF_ELEMENTOS: op.IDQR||idqr,
         BOTON: ''
       };
-      // Intentar BIENES Y SERVICIOS; si falla (GAS no actualizado) → fallback a COMPRAS
-      if(_gasHasBS !== false){
-        try{
-          const _res = await postBG('createBienServicio', bsPayload);
-          // Si el GAS devuelve error de acción no reconocida, caer en fallback
-          if(_res && _res.ok === false && String(_res.error||'').includes('no reconocida')){
-            _gasHasBS = false;
-          } else {
-            _gasHasBS = true;
-          }
-        }catch(e){ _gasHasBS = false; }
-      }
-      if(_gasHasBS === false){
-        // Fallback: guardar en COMPRAS (hoja antigua) para no perder el pedido
-        if(i===0){
-          await postBG('createCompra',{
-            N_OC:noc, FECHA:ahora.toISOString().slice(0,10),
-            OP:op.OP||'', COTIZACION:op.COTIZACION||'', ITEM:op.ITEM||'',
-            IDQR:idqr, CLIENTE:op.CLIENTE||'', OBSERVACIONES:obs||'',
-            DESCRIPCION_OC:items.map((x,n)=>n+1+'. '+(x.nombre||x.fusedDesc||'?')+' — $'+Number(x.precio||0).toLocaleString('es-CO')).join('\n'),
-            ESTADO:'PENDIENTE', TOTAL_OC:totalOC,
-          }).catch(()=>{});
-        }
-        await postBG('createElemOC',{
-          N_OC:noc, ITEM_NUM:i+1,
-          DESCRIPCION: it.tipo==='fusion'?it.fusedDesc:it.nombre,
-          MATERIAL: it.tipo==='mat'?it.nombre:(it.tipo==='fusion'?'ESPECIAL':'🛠 Servicio externo'),
-          CANT:it.cant||0, UNIDAD:it.unidad||(it.tipo==='mat'?'kg':'días'),
-          NOTAS:it.notas||'', PRECIO_UNIT:it.precio||0, TOTAL:it.precio||0
-        }).catch(()=>{});
-      }
+      await postBG('createBienServicio', bsPayload);
     }
     // Marcar la OP como con MP/Insumos solicitado
-    await postBG('updateProduccion',{...op, MP_INSUMOS:'Y'}).catch(()=>{});
-    op.MP_INSUMOS='Y';
-    const destino = _gasHasBS===false ? 'COMPRAS (GAS pendiente de actualizar)' : 'Bienes & Servicios';
-    toast('✅ Pedido registrado en '+destino+': '+noc);
+    await postBG('updateOP',{IDQR:op.IDQR||idqr,'MP\nINSUMOS':'Y'}).catch(()=>{});
+    op['MP\nINSUMOS']='Y';
+    // Refrescar BS en memoria con las OPs activas
+    try{
+      const _bsr = await fetch(API+'?action=getBienesServicios');
+      const _bsj = await _bsr.json();
+      const _bstodos = (_bsj.data!==undefined?_bsj.data:_bsj)||[];
+      const _opsSet = new Set((DB.produccion||[])
+        .filter(op=>!['CANCELADO','PAUSADO','TERMINADO'].includes(String(op.ESTADO||'').toUpperCase()))
+        .map(op=>String(op.OP||'').trim()).filter(Boolean));
+      DB.bienesServicios = Array.isArray(_bstodos)?_bstodos.filter(r=>_opsSet.has(String(r['#OP']||'').trim())):[];
+    }catch(_){}
+    toast('✅ Pedido registrado en Bienes & Servicios: '+noc);
     closeModal();
+    // Reabrir detalle para mostrar los pedidos actualizados
     if(document.getElementById('detail-panel')?.classList.contains('open')) verDetalle(op.OP||idqr);
     else nav(MOD);
   }catch(e){
     const msg = e.message||String(e);
-    if(msg.toLowerCase().includes('fetch')||msg.toLowerCase().includes('cors')||msg.toLowerCase().includes('failed')){
-      toast('❌ Error de red. ¿Está el GAS actualizado y publicado?','error');
+    if(msg.toLowerCase().includes('fetch')||msg.toLowerCase().includes('cors')||msg.toLowerCase().includes('failed')||msg.toLowerCase().includes('network')){
+      const esFile = location.protocol==='file:';
+      toast(esFile
+        ? '❌ Abre desde GitHub Pages — no funciona desde archivo local'
+        : '❌ Error de red. ¿Está el GAS actualizado y publicado?','error');
     } else {
       toast('❌ '+msg,'error');
     }
@@ -2455,6 +2568,349 @@ function _hrBuildPrintHtml(op,data){
   <script>window.onload=()=>setTimeout(()=>window.print(),200)<\/script>
   </body></html>`;
 }
+
+// ══════════════════════════════════════════════════════════════════════
+// MÓDULO: BIENES & SERVICIOS — Pedidos
+// ══════════════════════════════════════════════════════════════════════
+let _bsFiltro = 'todos'; // todos | pendiente | comprado | recibido
+let _bsSearch = '';
+
+function renderBienesServicios(){
+  const bs = DB.bienesServicios || [];
+  const filtrados = bs.filter(r => {
+    const comp  = _bsYes(r.COMPRADO);
+    const recib = _bsYes(r.RECIBIDO);
+    const rechaz= _bsYes(r.RECHAZADO);
+    if(_bsFiltro==='pendiente' && (comp||recib||rechaz)) return false;
+    if(_bsFiltro==='comprado'  && !comp) return false;
+    if(_bsFiltro==='recibido'  && !recib) return false;
+    if(_bsFiltro==='rechazado' && !rechaz) return false;
+    if(_bsSearch){
+      const q = _bsSearch.toLowerCase();
+      return [r['#OP'],r.PRODUCTO,r['EMPRESA/CLIENTE'],r.COLABORADOR,r['ORDEN DE COMPRA'],r.PROVEEDOR]
+        .some(v => String(v||'').toLowerCase().includes(q));
+    }
+    return true;
+  });
+
+  // Limitar a últimos 90 días para rendimiento
+  const _bsCutoff = new Date(); _bsCutoff.setDate(_bsCutoff.getDate()-90);
+  const filtradosRecientes = _bsFiltro==='todos'
+    ? filtrados.filter(r => { const f=new Date(r['FECHA DE PEDIDO']||''); return isNaN(f)?true:f>=_bsCutoff; })
+    : filtrados; // en filtros específicos mostrar todos aunque sean viejos
+
+  // Agrupar por ORDEN DE COMPRA
+  const grupos = {};
+  filtradosRecientes.forEach(r => {
+    const oc = r['ORDEN DE COMPRA'] || r.IDCOMPRAS || '—';
+    if(!grupos[oc]) grupos[oc] = [];
+    grupos[oc].push(r);
+  });
+
+    const pendCount = bs.filter(r => !_bsYes(r.COMPRADO) && !_bsYes(r.RECIBIDO) && !_bsYes(r.RECHAZADO)).length;
+  const badgeEl = document.getElementById('bb-bs');
+  if(badgeEl){ badgeEl.textContent=pendCount; badgeEl.style.display=pendCount>0?'':'none'; }
+
+  const chips = ['todos','pendiente','comprado','recibido','rechazado'].map(f =>
+    `<button onclick="_bsFiltro='${f}';renderBienesServicios()" style="padding:6px 12px;border-radius:20px;border:none;cursor:pointer;font-size:12px;font-weight:600;
+      background:${_bsFiltro===f?'var(--accent)':'var(--surface)'};color:${_bsFiltro===f?'#fff':'var(--muted)'};transition:all .15s">
+      ${{todos:'Todos',pendiente:'⏳ Pendientes',comprado:'🛒 Comprados',recibido:'✅ Recibidos',rechazado:'❌ Rechazados'}[f]}
+    </button>`).join('');
+
+  const totalGrupos = Object.keys(grupos).length;
+  const ocCards = Object.entries(grupos).sort((a,b)=>b[0].localeCompare(a[0])).map(([oc, items]) => {
+    const r0 = items[0];
+    const comp  = items.every(r => _bsYes(r.COMPRADO));
+    const recib = items.every(r => _bsYes(r.RECIBIDO));
+    const rechaz= items.some(r  => _bsYes(r.RECHAZADO));
+    const estadoColor = recib?'#10b981':comp?'#3b82f6':rechaz?'#ef4444':'#f59e0b';
+    const estadoLabel = recib?'✅ RECIBIDO':comp?'🛒 COMPRADO':rechaz?'❌ RECHAZADO':'⏳ PENDIENTE';
+    const autJD = _bsYes(r0['AUTORIZACION JUAN DIEGO']);
+    // Imagen de la OP desde DB.produccion
+    const opData = (DB.produccion||[]).find(op=>String(op.OP||'').trim()===String(r0['#OP']||'').trim());
+    const imgUrl = opData?.IMAGEN_B64||opData?.IMAGEN||'';
+
+    const itemRows = items.map(it => {
+      const esComp = _bsYes(it.COMPRADO);
+      const esRecib= _bsYes(it.RECIBIDO);
+      const esRechaz= _bsYes(it.RECHAZADO);
+      const fechaComp = it['FECHA  DE COMPRA']||it['FECHA DE COMPRA']||'';
+      const fechaRecib = it['FECHA RECIBIDO ']||it['FECHA RECIBIDO']||'';
+      const proveedor = it.PROVEEDOR||'';
+      const costoSinIva = it['COSTO SIN IVA']||it['$COSTO MP  (Pesos)']||'';
+      const costoSvc = it['$COSTO SERVICIO EXT.']||'';
+      const numFactura = it['# FACTURA']||'';
+      const esSvc = it['TIPO DE PEDIDO']==='SERVICIO EXTERNO';
+      return `<div style="padding:10px 0;border-bottom:1px solid var(--border)">
+        <div style="display:flex;align-items:flex-start;gap:10px">
+          <div style="font-size:20px;flex-shrink:0">${esSvc?'🛠':'🪨'}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:600;color:var(--text)">${esc(it.PRODUCTO||'—')}</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px">
+              Cant: <b>${it.CANT||'—'}</b> · ${esc(it['TIPO DE PEDIDO']||'')}
+            </div>
+            ${it.OBSERVACIONES?`<div style="font-size:11px;color:var(--muted);margin-top:2px;font-style:italic">${esc(String(it.OBSERVACIONES).slice(0,80))}</div>`:''}
+            <!-- Fila Autorización -->
+            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">
+              ${_bsYes(it['AUTORIZACION JUAN DIEGO'])
+                ?'<span style="font-size:10px;background:#d1fae5;color:#065f46;padding:2px 8px;border-radius:10px">✔ Autorizado JD</span>'
+                :'<span style="font-size:10px;background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:10px">⏳ Sin autorizar</span>'}
+              ${esRecib
+                ?`<span style="font-size:10px;background:#d1fae5;color:#065f46;padding:2px 8px;border-radius:10px">✅ Recibido${fechaRecib?' · '+fechaRecib:''}</span>`
+                :esComp
+                  ?`<span style="font-size:10px;background:#dbeafe;color:#1e40af;padding:2px 8px;border-radius:10px">🛒 Comprado${fechaComp?' · '+fechaComp:''}</span>`
+                  :'<span style="font-size:10px;background:#fee2e2;color:#991b1b;padding:2px 8px;border-radius:10px">⏳ No comprado</span>'}
+            </div>
+            <!-- Proveedor / Costo / Factura -->
+            ${proveedor||costoSinIva||costoSvc?`<div style="font-size:11px;color:var(--muted);margin-top:5px;display:flex;flex-wrap:wrap;gap:8px">
+              ${proveedor?`<span>🏭 ${esc(proveedor)}</span>`:''}
+              ${costoSinIva?`<span style="color:#10b981">💰 ${fmt(costoSinIva)}</span>`:''}
+              ${costoSvc?`<span style="color:#8b5cf6">🛠 ${fmt(costoSvc)}</span>`:''}
+              ${numFactura?`<span>📄 Factura: ${esc(numFactura)}</span>`:''}
+            </div>`:''}
+          </div>
+          <!-- Botones acción -->
+          <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
+            ${!esComp&&!esRecib?`<button onclick="event.stopPropagation();_bsMarcarComprado('${safe(it.IDCOMPRAS)}')"
+              style="font-size:10px;padding:4px 8px;border-radius:8px;border:1px solid #3b82f6;background:#eff6ff;color:#1d4ed8;cursor:pointer;white-space:nowrap">🛒 Comprado</button>`:''}
+            ${esComp&&!esRecib?`<button onclick="event.stopPropagation();_bsMarcarRecibido('${safe(it.IDCOMPRAS)}')"
+              style="font-size:10px;padding:4px 8px;border-radius:8px;border:1px solid #10b981;background:#d1fae5;color:#065f46;cursor:pointer;white-space:nowrap">✅ Recibido</button>`:''}
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+
+    return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;margin-bottom:12px;overflow:hidden">
+      <!-- Cabecera OC -->
+      <div style="padding:12px 14px;border-bottom:1px solid var(--border)">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+          <div style="display:flex;gap:10px;align-items:flex-start;flex:1;min-width:0">
+            ${imgUrl?`<img src="${imgUrl}" style="width:48px;height:48px;object-fit:cover;border-radius:8px;flex-shrink:0" loading="lazy">`:'<div style="width:48px;height:48px;border-radius:8px;background:var(--border);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">🪨</div>'}
+            <div style="min-width:0">
+              <div style="font-size:12px;font-weight:700;color:var(--accent)">${esc(oc)}</div>
+              <div style="font-size:13px;font-weight:600;color:var(--text);margin-top:2px">
+                OP-${esc(r0['#OP']||'—')} · ${esc(r0['EMPRESA/CLIENTE']||'—')}
+              </div>
+              <div style="font-size:11px;color:var(--muted);margin-top:2px">
+                👤 ${esc(r0.COLABORADOR||'—')} · 📅 ${r0['FECHA DE PEDIDO']||'—'}
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+            <span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:10px;background:${estadoColor}22;color:${estadoColor}">${estadoLabel}</span>
+            ${autJD?'<span style="font-size:10px;background:#d1fae5;color:#065f46;padding:2px 6px;border-radius:10px">✔ Autorizado JD</span>':
+              `<button onclick="event.stopPropagation();_bsAutorizar('${safe(oc)}')" 
+                style="font-size:10px;padding:3px 8px;border-radius:8px;border:1px solid #8b5cf6;background:#f5f3ff;color:#7c3aed;cursor:pointer">Autorizar</button>`}
+          </div>
+        </div>
+      </div>
+      <!-- Items -->
+      <div style="padding:8px 14px">${itemRows}</div>
+    </div>`;
+  }).join('') || `<div class="empty"><div class="empty-icon">🧱</div><p>No hay pedidos${_bsFiltro!=='todos'?' en este estado':''}</p></div>`;
+
+  setContent(`
+    <div style="padding:12px 14px 0">
+      <input type="text" placeholder="🔍 Buscar por OP, producto, cliente..." value="${esc(_bsSearch)}"
+        oninput="_bsSearch=this.value;renderBienesServicios()"
+        style="width:100%;padding:9px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface);color:var(--text);font-size:13px;box-sizing:border-box;margin-bottom:10px">
+      <div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:10px;scrollbar-width:none">${chips}</div>
+      <div style="font-size:11px;color:var(--muted);padding-bottom:8px">${totalGrupos} orden(es) · ${filtradosRecientes.length} ítem(s)${_bsFiltro==='todos'?' (últimos 90 días)':''}</div>
+    </div>
+    <div style="padding:0 14px 80px">${ocCards}</div>
+  `);
+}
+
+async function _bsAutorizar(oc){
+  if(!confirm('¿Autorizar todos los ítems de '+oc+'?')) return;
+  toast('Autorizando...');
+  try{
+    await postBG('autorizarOrdenBS',{ordenCompra:oc, valor:'SI'});
+    DB.bienesServicios=null; localStorage.removeItem(CACHE_PFX+'bienesServicios');
+    await (async()=>{
+      try{
+        const r=await fetch(API+'?action=getBienesServicios');
+        const j=await r.json();
+        const todos=(j.data!==undefined?j.data:j)||[];
+        const opsActivasSet=new Set((DB.produccion||[]).filter(op=>!['CANCELADO','PAUSADO','TERMINADO'].includes(String(op.ESTADO||'').toUpperCase())).map(op=>String(op.OP||'').trim()).filter(Boolean));
+        DB.bienesServicios=Array.isArray(todos)?todos.filter(r=>opsActivasSet.has(String(r['#OP']||'').trim())):[];
+      }catch(e){ DB.bienesServicios=[]; }
+    })();
+    renderBienesServicios();
+    toast('✅ Autorizado');
+  }catch(e){ toast('❌ '+e.message,'error'); }
+}
+
+async function _bsMarcarComprado(idcompras){
+  const proveedor = prompt('Proveedor (opcional):') || '';
+  const costo = prompt('Costo sin IVA (opcional):') || '';
+  toast('Guardando...');
+  try{
+    await postBG('marcarCompradoBS',{IDCOMPRAS:idcompras, proveedor, costoReal:costo});
+    DB.bienesServicios=null; localStorage.removeItem(CACHE_PFX+'bienesServicios');
+    await (async()=>{
+      try{
+        const r=await fetch(API+'?action=getBienesServicios');
+        const j=await r.json();
+        const todos=(j.data!==undefined?j.data:j)||[];
+        const opsActivasSet=new Set((DB.produccion||[]).filter(op=>!['CANCELADO','PAUSADO','TERMINADO'].includes(String(op.ESTADO||'').toUpperCase())).map(op=>String(op.OP||'').trim()).filter(Boolean));
+        DB.bienesServicios=Array.isArray(todos)?todos.filter(r=>opsActivasSet.has(String(r['#OP']||'').trim())):[];
+      }catch(e){ DB.bienesServicios=[]; }
+    })();
+    renderBienesServicios();
+    toast('✅ Marcado como comprado');
+  }catch(e){ toast('❌ '+e.message,'error'); }
+}
+
+async function _bsMarcarRecibido(idcompras){
+  const factura = prompt('# Factura (opcional):') || '';
+  toast('Guardando...');
+  try{
+    await postBG('marcarRecibidoBS',{IDCOMPRAS:idcompras, numFactura:factura});
+    DB.bienesServicios=null; localStorage.removeItem(CACHE_PFX+'bienesServicios');
+    await (async()=>{
+      try{
+        const r=await fetch(API+'?action=getBienesServicios');
+        const j=await r.json();
+        const todos=(j.data!==undefined?j.data:j)||[];
+        const opsActivasSet=new Set((DB.produccion||[]).filter(op=>!['CANCELADO','PAUSADO','TERMINADO'].includes(String(op.ESTADO||'').toUpperCase())).map(op=>String(op.OP||'').trim()).filter(Boolean));
+        DB.bienesServicios=Array.isArray(todos)?todos.filter(r=>opsActivasSet.has(String(r['#OP']||'').trim())):[];
+      }catch(e){ DB.bienesServicios=[]; }
+    })();
+    renderBienesServicios();
+    toast('✅ Marcado como recibido');
+  }catch(e){ toast('❌ '+e.message,'error'); }
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// MÓDULO: ÍTEMS COTIZADOS — detalle de materiales/servicios por comercial
+// ══════════════════════════════════════════════════════════════════════
+let _icSearch = '';
+let _icFiltroAsesor = '';
+
+async function renderItemsCotizados(){
+  // Mostrar skeleton inmediato
+  setContent(`<div style="padding:20px;text-align:center;color:var(--muted)">⏳ Cargando ítems...</div>`);
+  await new Promise(r=>setTimeout(r,0)); // yield al DOM
+
+  if(!DB.elementos) await _cargarCatalogos();
+  const elementos = DB.elementos || [];
+  const produccion = DB.produccion || [];
+
+  // ── Mapas O(1) — construidos UNA vez, no dentro de loops ──
+  const norm = v => String(v??'').replace(/[^0-9]/g,'').replace(/^0+(?=\d)/,'');
+
+  // mapa cotNorm → {asesor, cliente}
+  const cotInfoMap = {};
+  produccion.forEach(op => {
+    const cn = norm(op.COTIZACION||op.COT||'');
+    if(cn && !cotInfoMap[cn]) cotInfoMap[cn] = {
+      asesor: String(op.ASESOR||'').trim(),
+      cliente: String(op.CLIENTE||'').trim()
+    };
+  });
+
+  // mapa cotNorm → Set de asesores (para filtro)
+  const asesorPorCot = {};
+  produccion.forEach(op => {
+    const cn = norm(op.COTIZACION||op.COT||'');
+    if(cn) asesorPorCot[cn] = String(op.ASESOR||'').trim();
+  });
+
+  const asesores = [...new Set(Object.values(asesorPorCot).filter(Boolean))].sort();
+
+  // Filtrar elementos con mapas O(1)
+  let filtrados = elementos.filter(e => {
+    if(_icFiltroAsesor){
+      const cn = norm(e.COTIZACION||'');
+      if((asesorPorCot[cn]||'') !== _icFiltroAsesor) return false;
+    }
+    if(_icSearch){
+      const q = _icSearch.toLowerCase();
+      const campos = [e.COTIZACION,e.ITEM,e['MATERIAL 1'],e['MATERIAL 2'],e['MATERIAL 3'],e['SERVICIO EXTERNO 1'],e['SERVICIO EXTERNO 2']];
+      if(!campos.some(v => String(v||'').toLowerCase().includes(q))) return false;
+    }
+    return true;
+  });
+
+  // Agrupar por cotización
+  const grupos = {};
+  filtrados.forEach(e => {
+    const cot = String(e.COTIZACION||'—');
+    if(!grupos[cot]) grupos[cot] = [];
+    grupos[cot].push(e);
+  });
+
+  const asesorOptions = ['', ...asesores].map(a =>
+    `<option value="${esc(a)}" ${_icFiltroAsesor===a?'selected':''}>${a||'Todos los asesores'}</option>`
+  ).join('');
+
+  const cotCards = Object.entries(grupos).sort((a,b)=>b[0].localeCompare(a[0])).map(([cot, items]) => {
+    const info = cotInfoMap[norm(cot)] || {};
+    const asesor = info.asesor || '—';
+    const cliente = info.cliente || '—';
+
+    const itemCards = items.map(e => {
+      const mats = [];
+      for(let i=1;i<=5;i++){
+        const m = String(e[`MATERIAL ${i}`]||'').trim();
+        if(m) mats.push({nombre:m, geo:e[`GEOMETRIA ${i} (mm)`]||'', diam:e[`DIAMETRO ${i} (mm)`]||'',
+          largo:e[`LARGO ${i} (mm)`]||'', ancho:e[`ANCHO ${i} (mm)`]||'',
+          cant:e[`CANTIDAD TOTAL MATERIAL ${i}`]||'', costo:e[`COSTO MAT ${i}`]||''});
+      }
+      const svcs = [];
+      for(let i=1;i<=3;i++){
+        const s = String(e[`SERVICIO EXTERNO ${i}`]||'').trim();
+        if(s) svcs.push({nombre:s, costo:e[`COSTO SERVICIO ${i}`]||''});
+      }
+      const matRows = mats.map(m =>
+        `<div style="background:#f8fafc;border-radius:8px;padding:8px 10px;margin-bottom:6px">
+          <div style="font-size:12px;font-weight:600;color:#1e40af">🪨 ${esc(m.nombre)}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:3px;display:flex;flex-wrap:wrap;gap:8px">
+            ${m.geo?`<span>Geo:<b>${esc(m.geo)}</b></span>`:''}${m.diam?`<span>⌀${m.diam}mm</span>`:''}
+            ${m.largo?`<span>L:${m.largo}mm</span>`:''}${m.ancho?`<span>A:${m.ancho}mm</span>`:''}
+            ${m.cant?`<span>Cant:<b>${m.cant}</b></span>`:''}${m.costo?`<span style="color:#10b981">💰${fmt(m.costo)}</span>`:''}
+          </div></div>`).join('');
+      const svcRows = svcs.map(s =>
+        `<div style="background:#fdf4ff;border-radius:8px;padding:8px 10px;margin-bottom:6px">
+          <div style="font-size:12px;font-weight:600;color:#7c3aed">🛠 ${esc(s.nombre)}</div>
+          ${s.costo?`<div style="font-size:11px;color:#10b981">💰${fmt(s.costo)}</div>`:''}
+        </div>`).join('');
+      return `<div style="border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:8px">
+        <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:6px">
+          Ítem ${esc(String(e.ITEM||'?'))} · ${esc(String(e.DESCRIPCION||e['DESCRIPCION ITEM']||'').slice(0,60))}
+        </div>
+        ${matRows}${svcRows}
+        ${!mats.length&&!svcs.length?'<div style="font-size:11px;color:var(--muted)">Sin materiales/servicios</div>':''}
+      </div>`;
+    }).join('');
+
+    return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;margin-bottom:12px;overflow:hidden">
+      <div style="padding:12px 14px;border-bottom:1px solid var(--border);background:linear-gradient(135deg,#1e3a8a11,#7c3aed11)">
+        <div style="font-size:13px;font-weight:700;color:var(--accent)">COT-${esc(cot)}</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px">
+          👤 <b>${esc(asesor)}</b> · 🏢 ${esc(cliente)} · ${items.length} ítem(s)
+        </div>
+      </div>
+      <div style="padding:10px 12px">${itemCards}</div>
+    </div>`;
+  }).join('') || `<div class="empty"><div class="empty-icon">📋</div><p>No hay ítems cotizados</p></div>`;
+
+  setContent(`
+    <div style="padding:12px 14px 0">
+      <input type="text" placeholder="🔍 Buscar material, servicio, cotización..." value="${esc(_icSearch)}"
+        oninput="_icSearch=this.value;renderItemsCotizados()"
+        style="width:100%;padding:9px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface);color:var(--text);font-size:13px;box-sizing:border-box;margin-bottom:8px">
+      <select onchange="_icFiltroAsesor=this.value;renderItemsCotizados()"
+        style="width:100%;padding:8px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface);color:var(--text);font-size:13px;margin-bottom:8px">
+        ${asesorOptions}
+      </select>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:8px">${filtrados.length} ítem(s) · ${Object.keys(grupos).length} cotización(es)</div>
+    </div>
+    <div style="padding:0 14px 80px">${cotCards}</div>
+  `);
+}
+
 </script>
 </body>
 </html>
