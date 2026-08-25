@@ -2679,6 +2679,17 @@ const DISEÑADORES = [
   'M. GOMEZ',
 ];
 
+// Mapa diseñador → correo (TEST: todos van a claudeiai518@gmail.com)
+// Para producción cambiar al correo real de cada uno:
+//   'A. MEZA':    'dibujo2@grupowedm.com',
+//   'F. GIRALDO': 'planeacion@grupowedm.com',
+//   'M. GOMEZ':   'dibujo@grupowedm.com',
+const DISEÑADOR_EMAILS = {
+  'A. MEZA':    'claudeiai518@gmail.com',
+  'F. GIRALDO': 'claudeiai518@gmail.com',
+  'M. GOMEZ':   'claudeiai518@gmail.com',
+};
+
 // (Copia truncada de formCot eliminada — la definición completa está más abajo)
 
 // ── RANGO STATE ──────────────────────────────────────────────────
@@ -8004,10 +8015,64 @@ async function ejecutarCrearOP(cotId, soloItemId){
       toast(`⚠️ OP-${numOP}: ${res.ok} creadas, ${res.fail} con error`, 'error');
     } else {
       toast(`✅ OP-${numOP} — ${nItems} ítem(s) creados en Producción`);
+      // Notificar al diseñador por correo
+      _enviarCorreoOP(opRows, cotId, c.Empresa||c.EMPRESA||'').catch(()=>{});
     }
     _autoSync(['produccion','items','cotizaciones'], () => { detailCot(cotId); });
     }catch(e){ toast(`⚠️ Error creando OP: ${e.message}`,'error'); }
   })(); // fin async IIFE background
+}
+
+// ── NOTIFICACIÓN EMAIL AL DISEÑADOR cuando se crea una OP ──────────
+// Llama a la acción sendEmailDisenador en el GAS backend.
+// El GAS usa MailApp.sendEmail() — funciona con cualquier cuenta @grupowedm.com
+async function _enviarCorreoOP(opRows, cotizacion, cliente){
+  if(!opRows || !opRows.length) return;
+  // Agrupar ítems por diseñador
+  const porDisenador = {};
+  for(const row of opRows){
+    const dis = row.DISEÑADOR || 'Sin asignar';
+    if(!porDisenador[dis]) porDisenador[dis] = [];
+    porDisenador[dis].push(row);
+  }
+  for(const [dis, rows] of Object.entries(porDisenador)){
+    const email = DISEÑADOR_EMAILS[dis];
+    if(!email){ console.warn('[Email] Sin correo para:', dis); continue; }
+    const op      = rows[0].OP || '—';
+    const fechaEntrega = rows[0]['FECHA PACTADA'] || '—';
+    const itemsList = rows.map(r =>
+      `  · Ítem ${r.ITEM} — ${r.DESCRIPCION||'—'} (${r.CANT||1} und)`
+    ).join('\n');
+    const asunto = `🔧 Nueva OP asignada — OP-${op} · ${cliente}`;
+    const cuerpo =
+`Hola ${dis},
+
+Se te ha asignado una nueva Orden de Producción.
+
+  OP:          OP-${op}
+  Cotización:  COT-${cotizacion}
+  Cliente:     ${cliente}
+  F. Entrega:  ${fechaEntrega}
+  Diseñador:   ${dis}
+
+Ítems asignados:
+${itemsList}
+
+Ingresa al ERP Diseño para ver los detalles y gestionar el diseño.
+
+— Sistema ERP · Grupo WEDM`;
+
+    try{
+      await POST_SILENT('sendEmailDisenador', {
+        to:      email,
+        subject: asunto,
+        body:    cuerpo,
+      });
+      console.log('[Email] Enviado a', email, 'para OP-'+op);
+    }catch(e){
+      console.warn('[Email] Error enviando a', email, e.message);
+    }
+  }
 }
 
 function getWeekNumber(d){
