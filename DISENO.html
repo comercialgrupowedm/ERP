@@ -15,7 +15,7 @@
   --mono:'JetBrains Mono','Fira Mono',monospace;
   --sans:-apple-system,'Segoe UI',sans-serif;
   --r:10px; --sh:0 2px 16px rgba(30,41,59,.08);
-  --nav-h:70px;
+  --nav-h:10px;
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;overflow:hidden;touch-action:manipulation}
@@ -47,9 +47,15 @@ body{display:flex;flex-direction:column;font-family:var(--sans);font-size:14px;b
 .tb-search input{background:none;border:none;outline:none;color:var(--text);font-size:13px;width:120px;}
 #refresh-btn{width:36px;height:36px;border-radius:10px;background:var(--bg);border:1.5px solid var(--border);
   display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:15px;flex-shrink:0;
-  -webkit-tap-highlight-color:transparent;transition:transform .2s;}
+  position:relative;-webkit-tap-highlight-color:transparent;transition:transform .15s,background .15s,border-color .15s;}
+#refresh-btn:hover{background:rgba(124,58,237,.08);border-color:var(--purple);color:var(--purple)}
+#refresh-btn:active{transform:scale(.9)}
 @keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
-#refresh-btn.spinning{animation:spin .7s linear infinite}
+#refresh-btn.spinning{animation:spin .7s linear infinite;pointer-events:none;background:rgba(124,58,237,.08);border-color:var(--purple);color:var(--purple)}
+#refresh-btn .rb-dot{position:absolute;top:-2px;right:-2px;width:9px;height:9px;border-radius:50%;
+  background:#10b981;border:2px solid var(--card);opacity:0;transform:scale(.4);
+  transition:all .25s cubic-bezier(.34,1.56,.64,1);}
+#refresh-btn .rb-dot.show{opacity:1;transform:scale(1)}
 
 /* ═══ SIDEBAR ════════════════════════════════════════= */
 #sidebar-overlay{position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:299;display:none}
@@ -75,6 +81,21 @@ body{display:flex;flex-direction:column;font-family:var(--sans);font-size:14px;b
   color:var(--purple);box-shadow:inset 3px 0 0 var(--purple);}
 .nav-icon{font-size:18px;flex-shrink:0;width:24px;text-align:center}
 .nav-badge{margin-left:auto;background:var(--danger);color:#fff;font-size:10px;padding:2px 7px;border-radius:10px;font-weight:800;}
+
+/* ═══ TOP TABS (cambio de módulo rápido) ══════════════ */
+#top-tabs{display:flex;align-items:center;gap:2px;background:var(--card);border-bottom:1px solid var(--border);
+  overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;flex-shrink:0;padding:0 8px;}
+#top-tabs::-webkit-scrollbar{display:none}
+.top-tab{flex:0 0 auto;display:flex;align-items:center;gap:6px;padding:11px 14px;cursor:pointer;
+  font-size:13px;font-weight:700;color:var(--muted);border-bottom:2.5px solid transparent;
+  white-space:nowrap;user-select:none;transition:all .12s;-webkit-tap-highlight-color:transparent;}
+.top-tab:hover{color:var(--text)}
+.top-tab.active{color:var(--purple);border-bottom-color:var(--purple)}
+.top-tab .tt-badge{background:var(--danger);color:#fff;font-size:10px;padding:1px 6px;border-radius:10px;font-weight:800}
+.top-tab-sep{flex:0 0 auto;width:1px;height:20px;background:var(--border);margin:0 4px;align-self:center}
+
+/* Barra inferior eliminada: se reemplazó por #top-tabs (cambio rápido arriba) */
+#bottom-nav{display:none!important}
 
 /* ═══ CONTENT ═════════════════════════════════════════ */
 #content{flex:1;overflow-y:auto;overflow-x:hidden;padding:14px 12px;-webkit-overflow-scrolling:touch;
@@ -327,10 +348,14 @@ td.mono{font-family:var(--mono);font-size:11px}
 .progreso-fill.danger{background:linear-gradient(90deg,var(--danger),#f87171)}
 
 /* ═══ VIEW TOGGLE ══════════════════════════════════════ */
-.vt-btn{background:var(--card);border:1.5px solid var(--border);color:var(--muted);
-  cursor:pointer;border-radius:8px;transition:all .12s;display:flex;align-items:center;justify-content:center}
+.vt-group{display:inline-flex;gap:4px;background:var(--card);border:1px solid var(--border);
+  border-radius:9px;padding:3px}
+.vt-btn{background:transparent;border:1px solid transparent;color:var(--muted);font-size:12px;
+  font-weight:700;padding:6px 12px;cursor:pointer;border-radius:6px;transition:all .12s;
+  display:flex;align-items:center;gap:5px;justify-content:center;white-space:nowrap}
 .vt-btn.active{background:var(--purple);border-color:var(--purple);color:#fff}
-.vt-btn:active{transform:scale(.92)}
+.vt-btn:active{transform:scale(.94)}
+.vt-btn:hover:not(.active){background:var(--card2)}
 
 /* ═══ EMPTY ════════════════════════════════════════════ */
 .empty{text-align:center;padding:48px 20px;color:var(--muted)}
@@ -400,7 +425,26 @@ td.mono{font-family:var(--mono);font-size:11px}
     <span style="color:var(--muted);font-size:14px">🔍</span>
     <input type="text" id="globalSearch" placeholder="Buscar..." oninput="_debounceSearch(this.value)">
   </div>
-  <div id="refresh-btn" onclick="refreshCurrent()" title="Actualizar">↻</div>
+  <div id="refresh-btn" onclick="refreshCurrent()" title="Actualizar">↻<span class="rb-dot" id="rb-dot"></span></div>
+</div>
+
+<!-- TOP TABS: cambio de módulo rápido (igual que en Compras) -->
+<div id="top-tabs">
+  <div class="top-tab active" data-m="dashboard" onclick="nav('dashboard')">📊 Inicio</div>
+  <div class="top-tab" data-m="pendiente" onclick="nav('pendiente')">🎨 Mis Items<span class="tt-badge" id="tt-pend" style="display:none">0</span></div>
+  <div class="top-tab" data-m="ingenieria" onclick="nav('ingenieria')">⚙️ Ingeniería</div>
+  <div class="top-tab" data-m="planos" onclick="nav('planos')">📄 Planos</div>
+  <div class="top-tab" data-m="produccion" onclick="nav('produccion')">🏭 Producción</div>
+  <div class="top-tab admin-only" data-m="todos" onclick="nav('todos')" style="display:none">🗂️ Todas<span class="tt-badge" id="tt-todos" style="display:none">0</span></div>
+  <div class="top-tab" data-m="bsmodulo" onclick="nav('bsmodulo')">🧱 Pedidos<span class="tt-badge" id="tt-bs" style="display:none">0</span></div>
+  <div class="top-tab" data-m="itemscot" onclick="nav('itemscot')">📋 Ítems Cot.</div>
+  <div class="top-tab" data-m="all" onclick="nav('all')">🗂️ ALL</div>
+  <div class="top-tab-sep"></div>
+  <div class="top-tab" data-m="f-pendiente-diseno" onclick="nav('f-pendiente-diseno')">🎨 Pendiente Diseño</div>
+  <div class="top-tab" data-m="f-mis-activas" onclick="nav('f-mis-activas')">🏭 Mis Activas</div>
+  <div class="top-tab" data-m="f-pendiente-mp" onclick="nav('f-pendiente-mp')">🧱 Pendiente MP</div>
+  <div class="top-tab" data-m="f-con-plano" onclick="nav('f-con-plano')">📄 Con Plano</div>
+  <div class="top-tab" data-m="f-sin-plano" onclick="nav('f-sin-plano')">🗒️ Sin Plano</div>
 </div>
 
 <div id="sidebar-overlay" onclick="closeSidebar()"></div>
@@ -423,6 +467,7 @@ td.mono{font-family:var(--mono);font-size:11px}
     <div class="nav-item" data-m="planos" onclick="nav('planos');closeSidebar()"><span class="nav-icon">📄</span>Planos</div>
     <div class="nav-item" data-m="produccion" onclick="nav('produccion');closeSidebar()"><span class="nav-icon">🏭</span>En Producción</div>
     <div class="nav-item admin-only" data-m="todos" onclick="nav('todos');closeSidebar()" style="display:none"><span class="nav-icon">🗂️</span>Todas las OPs<span class="nav-badge" id="b-todos" style="display:none">0</span></div>
+    <div class="nav-item" data-m="all" onclick="nav('all');closeSidebar()"><span class="nav-icon">🗂️</span>ALL — Todos los Ítems</div>
   </div>
   <div style="padding:14px 16px;border-top:1px solid rgba(255,255,255,.07)">
     <div id="sidebar-user-info" style="font-size:12px;color:rgba(255,255,255,.45);margin-bottom:8px;line-height:1.4">👤 Cargando…</div>
@@ -654,8 +699,8 @@ async function iniciarApp(){
   const refBtn=document.getElementById('refresh-btn');
   if(refBtn) refBtn.classList.add('spinning');
   try {
-    // Sincronizar siempre al entrar: ignora caché y trae datos frescos
-    ['produccion','cotizaciones','bienesServicios'].forEach(k=>localStorage.removeItem(CACHE_PFX+k));
+    // Sincronizar siempre al entrar: ignora TODA la caché y trae datos frescos
+    ['produccion','cotizaciones','bienesServicios','materiales','servicios'].forEach(k=>localStorage.removeItem(CACHE_PFX+k));
     setSplash(30,'Cargando órdenes de producción...');
     await loadData('produccion','getControlProduccion');
     setSplash(60,'Cargando cotizaciones...');
@@ -704,6 +749,7 @@ async function iniciarApp(){
     updateBadges();
     nav('dashboard');
     setTimeout(hideSplash, 250);
+    setTimeout(()=>toast('✅ Sincronizado al inicio'), 500);
   } catch(e){
     setSplash(100,'⚠️ '+e.message);
     setTimeout(()=>{
@@ -844,6 +890,7 @@ const TITLES = {
   ingenieria:'Ingeniería & Planeación', planos:'Planos',
   produccion:'En Producción', todos:'Todas las OPs (Admin)',
   bsmodulo:'Bienes & Servicios — Pedidos', itemscot:'Ítems Cotizados',
+  all:'Todos los Ítems (ALL)',
 };
 
 function nav(m){
@@ -851,6 +898,10 @@ function nav(m){
   document.getElementById('page-title').textContent=TITLES[m]||(FILTROS_DASH[m]&&FILTROS_DASH[m].title)||m;
   document.querySelectorAll('.nav-item[data-m]').forEach(n=>n.classList.toggle('active',n.dataset.m===m));
   document.querySelectorAll('.bn-item[data-m]').forEach(n=>n.classList.toggle('active',n.dataset.m===m));
+  document.querySelectorAll('.top-tab[data-m]').forEach(n=>{
+    n.classList.toggle('active',n.dataset.m===m);
+    if(n.dataset.m===m) n.scrollIntoView({behavior:'smooth',inline:'center',block:'nearest'});
+  });
   _disSearch=''; _disFiltEst='';
   closeDetail();
   switch(m){
@@ -860,6 +911,7 @@ function nav(m){
     case 'planos':      renderPlanos(); break;
     case 'produccion':  renderEnProduccion(); break;
     case 'todos':       _esAdmin()?renderTodos():nav('dashboard'); break;
+    case 'all':         renderAll(); break;
     case 'bsmodulo':    renderBienesServicios(); break;
     case 'itemscot':   renderItemsCotizados(); break;
     default:
@@ -868,14 +920,40 @@ function nav(m){
   }
 }
 
+let _lastSync = null;
 function refreshCurrent(){
-  ['produccion','cotizaciones'].forEach(k=>localStorage.removeItem(CACHE_PFX+k));
   const btn=document.getElementById('refresh-btn');
+  if(btn.classList.contains('spinning')) return; // evita doble clic
+  ['produccion','cotizaciones','bienesServicios','materiales','servicios'].forEach(k=>localStorage.removeItem(CACHE_PFX+k));
   btn.classList.add('spinning');
+  syncStart('Actualizando datos…','Producción y cotizaciones');
   loadData('produccion','getControlProduccion')
-    .then(()=>loadData('cotizaciones','getCotizaciones'))
-    .then(()=>{ updateBadges(); nav(MOD); toast('✅ Datos actualizados'); })
-    .catch(e=>toast('❌ '+e.message,'error'))
+    .then(()=>{ syncProgress(35,'Cotizaciones…'); return loadData('cotizaciones','getCotizaciones'); })
+    .then(()=>{ syncProgress(60,'Materiales y servicios…');
+      return Promise.all([
+        loadData('materiales','getMateriales').catch(()=>{ DB.materiales=[]; }),
+        loadData('servicios','getServicios').catch(()=>{ DB.servicios=[]; }),
+      ]);
+    })
+    .then(()=>{ syncProgress(85,'Bienes y servicios…');
+      return fetch(API+'?action=getBienesServicios').then(r=>r.json()).then(j=>{
+        const todos=(j.data!==undefined?j.data:j)||[];
+        const opsActivasSet=new Set((DB.produccion||[])
+          .filter(op=>!ESTADOS_EXCLUIDOS.includes(String(op.ESTADO||'').toUpperCase()))
+          .map(op=>String(op.OP||'').trim()).filter(Boolean));
+        DB.bienesServicios=Array.isArray(todos)?todos.filter(r=>opsActivasSet.has(String(r['#OP']||'').trim())):[];
+      }).catch(()=>{ DB.bienesServicios=DB.bienesServicios||[]; });
+    })
+    .then(()=>{
+      updateBadges(); nav(MOD);
+      _lastSync=new Date();
+      const hora=_lastSync.toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
+      btn.title='Última actualización: '+hora;
+      syncDone('✅ Actualizado', hora);
+      const dot=document.getElementById('rb-dot');
+      if(dot){ dot.classList.add('show'); setTimeout(()=>dot.classList.remove('show'),2500); }
+    })
+    .catch(e=>syncError('❌ '+e.message))
     .finally(()=>btn.classList.remove('spinning'));
 }
 
@@ -942,6 +1020,15 @@ function toggleView(m,v){
   else { const cur=_viewMode[m]||'cards'; _viewMode[m]=cur==='cards'?'project':cur==='project'?'table':'cards'; }
   nav(m); 
 }
+// ── Selector de vista unificado (mismo estilo que módulo COMPRAS) ──
+function vistaToggleHTML(m){
+  const v=getView(m);
+  return `<div class="vt-group">
+    <button class="vt-btn ${v==='project'?'active':''}" onclick="toggleView('${m}','project')" title="Proyecto">🗂 Proyecto</button>
+    <button class="vt-btn ${v==='cards'?'active':''}" onclick="toggleView('${m}','cards')" title="Tarjetas">☰ Tarjetas</button>
+    <button class="vt-btn ${v==='table'?'active':''}" onclick="toggleView('${m}','table')" title="Tabla">⊞ Tabla</button>
+  </div>`;
+}
 function _debounceSearch(val){ clearTimeout(_searchTimer);_searchTimer=setTimeout(()=>{_disSearch=val;nav(MOD);},320); }
 
 function updateBadges(){
@@ -949,8 +1036,8 @@ function updateBadges(){
   const todos = _esAdmin() ? opsActivas().length : 0;
   const setBadge=(ids,n)=>ids.forEach(id=>{const el=document.getElementById(id);if(!el)return;
     if(n>0){el.textContent=n;el.style.display='';}else el.style.display='none';});
-  setBadge(['b-pend','bb-pend'],pend);
-  setBadge(['b-todos','bb-todos'],todos);
+  setBadge(['b-pend','bb-pend','tt-pend'],pend);
+  setBadge(['b-todos','bb-todos','tt-todos'],todos);
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -1187,11 +1274,7 @@ function renderMisItems(){
     </div>
   </div>
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-    <div style="display:flex;gap:3px">
-      <button class="vt-btn ${v==='project'?'active':''}" onclick="toggleView('pendiente','project')" style="width:34px;height:34px;font-size:15px" title="Proyecto">🗂</button>
-      <button class="vt-btn ${v==='cards'?'active':''}" onclick="toggleView('pendiente','cards')" style="width:34px;height:34px;font-size:16px" title="Tarjetas">☰</button>
-      <button class="vt-btn ${v==='table'?'active':''}" onclick="toggleView('pendiente','table')" style="width:34px;height:34px;font-size:16px" title="Tabla">⊞</button>
-    </div>
+    ${vistaToggleHTML('pendiente')}
     <span style="font-size:11px;color:var(--muted)">${lista.length} ítem(s)</span>
   </div>
   ${!lista.length?`<div class="empty"><div class="empty-icon">${base.length?'🔍':'✅'}</div>
@@ -1512,11 +1595,7 @@ function renderIngenieria(){
     </div>
   </div>
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-    <div style="display:flex;gap:3px">
-      <button class="vt-btn ${v==='project'?'active':''}" onclick="toggleView('ingenieria','project')" style="width:34px;height:34px;font-size:15px" title="Proyecto">🗂</button>
-      <button class="vt-btn ${v==='cards'?'active':''}" onclick="toggleView('ingenieria','cards')" style="width:34px;height:34px;font-size:16px" title="Tarjetas">☰</button>
-      <button class="vt-btn ${v==='table'?'active':''}" onclick="toggleView('ingenieria','table')" style="width:34px;height:34px;font-size:16px" title="Tabla">⊞</button>
-    </div>
+    ${vistaToggleHTML('ingenieria')}
     <span style="font-size:11px;color:var(--muted)">${lista.length} ítem(s)</span>
   </div>
   ${!lista.length?`<div class="empty"><div class="empty-icon">${pendAprobacion.length?'🔍':'✅'}</div>
@@ -1618,11 +1697,7 @@ function renderFiltroDash(m){
     </div>
   </div>
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-    <div style="display:flex;gap:3px">
-      <button class="vt-btn ${v==='project'?'active':''}" onclick="toggleView('${m}','project')" style="width:34px;height:34px;font-size:15px" title="Proyecto">🗂</button>
-      <button class="vt-btn ${v==='cards'?'active':''}" onclick="toggleView('${m}','cards')" style="width:34px;height:34px;font-size:16px" title="Tarjetas">☰</button>
-      <button class="vt-btn ${v==='table'?'active':''}" onclick="toggleView('${m}','table')" style="width:34px;height:34px;font-size:16px" title="Tabla">⊞</button>
-    </div>
+    ${vistaToggleHTML(m)}
     <span style="font-size:11px;color:var(--muted)">${lista.length} ítem(s)</span>
   </div>
   ${!lista.length?`<div class="empty"><div class="empty-icon">${base.length?'🔍':'✅'}</div>
@@ -1659,11 +1734,7 @@ function renderEnProduccion(){
     </div>
   </div>
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-    <div style="display:flex;gap:3px">
-      <button class="vt-btn ${v==='project'?'active':''}" onclick="toggleView('produccion','project')" style="width:34px;height:34px;font-size:15px" title="Proyecto">🗂</button>
-      <button class="vt-btn ${v==='cards'?'active':''}" onclick="toggleView('produccion','cards')" style="width:34px;height:34px;font-size:16px" title="Tarjetas">☰</button>
-      <button class="vt-btn ${v==='table'?'active':''}" onclick="toggleView('produccion','table')" style="width:34px;height:34px;font-size:16px" title="Tabla">⊞</button>
-    </div>
+    ${vistaToggleHTML('produccion')}
     <span style="font-size:11px;color:var(--muted)">${lista.length} ítem(s)</span>
   </div>
   ${!lista.length?`<div class="empty"><div class="empty-icon">${base.length?'🔍':'🏭'}</div>
@@ -1677,6 +1748,170 @@ function renderEnProduccion(){
 // TODAS LAS OPs (ADMIN ONLY)
 // ══════════════════════════════════════════════════════════════════════
 let _curDisFilter='';
+// ══════════════════════════════════════════════════════════════════════
+// VISTA "ALL" — todos los ítems, cualquier estado, con filtro de periodo
+// ══════════════════════════════════════════════════════════════════════
+let _allPeriod = '1m'; // 1m | 3m | 6m | 1a | all
+let _allSearch = '';
+let _allEst=''; let _allTipo=''; let _allPrioridad=''; let _allAsesor=''; let _allSemana=''; let _allDis='';
+let _allChip=''; // filtro rápido por chip de estado
+const PERIODOS_ALL = [
+  {k:'1m', label:'1 mes',  dias:30},
+  {k:'3m', label:'3 meses',dias:90},
+  {k:'6m', label:'6 meses',dias:180},
+  {k:'1a', label:'1 año',  dias:365},
+  {k:'all',label:'Todo',   dias:null},
+];
+function _allDentroPeriodo(op){
+  if(_allPeriod==='all') return true;
+  const p = PERIODOS_ALL.find(x=>x.k===_allPeriod);
+  if(!p || p.dias==null) return true;
+  const f = op['FECHA INICIO']||op['FECHA_INICIO']||op['FECHA DE OP']||'';
+  if(!f) return true; // sin fecha: no la excluimos, para no perder registros
+  const d = new Date(f);
+  if(isNaN(d)) return true;
+  const cutoff = new Date(); cutoff.setDate(cutoff.getDate()-p.dias);
+  return d>=cutoff;
+}
+function setAllPeriod(k){ _allPeriod=k; renderAll(); }
+function renderAll(){
+  const base = DB.produccion||[];
+  let lista = base.filter(_allDentroPeriodo);
+
+  if(_allChip) lista = lista.filter(op=>{
+    const est=String(op.ESTADO||'').toUpperCase();
+    const sem=String(op['SEMAFORO AVANCE']||'').toUpperCase();
+    if(_allChip==='proceso')   return est==='EN PROCESO';
+    if(_allChip==='terminado') return est==='TERMINADO';
+    if(_allChip==='pendmp')    return sem.includes('PENDIENTE MP')&&!sem.includes('DISEÑO');
+    if(_allChip==='penddis')   return esPendienteDiseño(op);
+    if(_allChip==='penddesp')  return sem.includes('DESPACHO')||est.includes('DESPACHO');
+    if(_allChip==='externo')   return String(op.TIPO||'').toUpperCase().includes('EXTERNO');
+    return true;
+  });
+  if(_allSearch.trim()){ const q=_allSearch.toLowerCase();
+    lista=lista.filter(op=>[op.OP,op.COTIZACION,op.COT,op.DESCRIPCION,op.CLIENTE,op.ASESOR,op.DISEÑADOR,op.ESTADO]
+      .some(v=>String(v||'').toLowerCase().includes(q))); }
+  if(_allEst)       lista=lista.filter(op=>(op.ESTADO||'')===_allEst);
+  if(_allTipo)      lista=lista.filter(op=>(op.TIPO||'')===_allTipo);
+  if(_allPrioridad) lista=lista.filter(op=>(op.PRIORIDAD||'')===_allPrioridad);
+  if(_allAsesor)    lista=lista.filter(op=>(op.ASESOR||'')===_allAsesor);
+  if(_allSemana)    lista=lista.filter(op=>String(op.SEMANA||'')===_allSemana);
+  if(_allDis)       lista=lista.filter(op=>(op.DISEÑADOR||'Sin asignar')===_allDis);
+
+  const pool = k => [...new Set(base.map(op=>op[k]||'').filter(Boolean))].sort();
+  const estadosPool=pool('ESTADO'), tiposPool=pool('TIPO'), prioridadPool=pool('PRIORIDAD'),
+        asesorPool=pool('ASESOR'), semanaPool=pool('SEMANA'), disPool=pool('DISEÑADOR');
+  const activeFilters=[_allSearch,_allEst,_allTipo,_allPrioridad,_allAsesor,_allSemana,_allDis,_allChip].filter(Boolean).length;
+  const v=getView('all');
+
+  const chips=[
+    {k:'proceso',  label:'🔵 En Proceso'},
+    {k:'terminado',label:'✅ Terminado'},
+    {k:'pendmp',   label:'🧱 Pend. MP'},
+    {k:'penddis',  label:'🎨 Pend. Diseño'},
+    {k:'penddesp', label:'🚚 Pend. Despacho'},
+    {k:'externo',  label:'🛠 T. Externo'},
+  ];
+
+  setContent(`
+  <div style="background:linear-gradient(135deg,#7c3aed,#a855f7);border-radius:16px;padding:16px 18px;margin-bottom:12px;color:#fff">
+    <div style="font-size:15px;font-weight:800">🗂️ Todos los Ítems</div>
+    <div style="font-size:12px;opacity:.85;margin-bottom:12px">Vista completa · ${lista.length} de ${base.length} registros</div>
+    <div style="display:flex;gap:4px;flex-wrap:wrap">
+      ${PERIODOS_ALL.map(p=>`<button onclick="setAllPeriod('${p.k}')"
+        style="padding:6px 14px;border-radius:9px;border:none;cursor:pointer;font-size:12px;font-weight:700;
+        background:${_allPeriod===p.k?'#fff':'rgba(255,255,255,.18)'};color:${_allPeriod===p.k?'#7c3aed':'#fff'}">${p.label}</button>`).join('')}
+    </div>
+  </div>
+
+  <div class="filter-bar" style="margin-bottom:10px">
+    <div class="filter-bar-top">
+      <div class="filter-search-wrap">
+        <input type="text" placeholder="Buscar OP, cotización, cliente, asesor, diseñador…"
+          value="${_allSearch.replace(/"/g,'&quot;')}" autocomplete="off" data-fkey="allSearch"
+          oninput="_allSearch=this.value;renderAll()">
+      </div>
+      <button class="filter-toggle-btn ${activeFilters?'active':''}" onclick="_toggleFiltros('all-fbs')">
+        ⚙️ Filtros${activeFilters?` <span style='background:var(--purple);color:#fff;border-radius:99px;padding:1px 6px;font-size:10px;font-weight:800'>${activeFilters}</span>`:''}
+      </button>
+      <span class="filter-count">${lista.length}/${base.length}</span>
+    </div>
+    <div class="filter-bar-selects" id="all-fbs">
+      <select onchange="_allEst=this.value;renderAll()"><option value="">Estado</option>
+        ${estadosPool.map(e=>`<option ${_allEst===e?'selected':''}>${esc(e)}</option>`).join('')}</select>
+      <select onchange="_allTipo=this.value;renderAll()"><option value="">Tipo</option>
+        ${tiposPool.map(e=>`<option ${_allTipo===e?'selected':''}>${esc(e)}</option>`).join('')}</select>
+      <select onchange="_allPrioridad=this.value;renderAll()"><option value="">Prioridad</option>
+        ${prioridadPool.map(e=>`<option ${_allPrioridad===e?'selected':''}>${esc(e)}</option>`).join('')}</select>
+      <select onchange="_allAsesor=this.value;renderAll()"><option value="">Asesor</option>
+        ${asesorPool.map(e=>`<option ${_allAsesor===e?'selected':''}>${esc(e)}</option>`).join('')}</select>
+      <select onchange="_allSemana=this.value;renderAll()"><option value="">Semana</option>
+        ${semanaPool.map(e=>`<option ${_allSemana===e?'selected':''}>${esc(e)}</option>`).join('')}</select>
+      <select onchange="_allDis=this.value;renderAll()"><option value="">Diseñador</option>
+        ${disPool.map(e=>`<option ${_allDis===e?'selected':''}>${esc(e)}</option>`).join('')}</select>
+      <button class="filter-reset" onclick="_allSearch='';_allEst='';_allTipo='';_allPrioridad='';_allAsesor='';_allSemana='';_allDis='';_allChip='';renderAll()">✕ Limpiar</button>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+    ${chips.map(c=>`<button onclick="_allChip=_allChip==='${c.k}'?'':'${c.k}';renderAll()"
+      style="padding:6px 12px;border-radius:20px;border:1.5px solid ${_allChip===c.k?'var(--purple)':'var(--border)'};cursor:pointer;font-size:11px;font-weight:700;
+      background:${_allChip===c.k?'rgba(124,58,237,.1)':'var(--card)'};color:${_allChip===c.k?'var(--purple)':'var(--muted)'}">${c.label}</button>`).join('')}
+  </div>
+
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+    ${vistaToggleHTML('all')}
+    <span style="font-size:11px;color:var(--muted)">${lista.length} registro(s)</span>
+  </div>
+
+  ${!lista.length?`<div class="empty"><div class="empty-icon">🔍</div><p>Sin resultados en este periodo/filtro</p></div>`:
+  v==='table'?renderTablaAll(lista):v==='project'?renderProyecto(lista):
+  `<div class="card-list">${lista.map(op=>renderOpCard(op)).join('')}</div>`}
+  `);
+}
+
+function renderTablaAll(items){
+  return `<div class="tbl-wrap"><div class="tbl-scroll"><table>
+    <thead><tr>
+      <th>OP</th><th>COT</th><th>Estado</th><th>Tipo</th><th>Prioridad</th><th>Cliente</th>
+      <th>Descripción</th><th>Asesor</th><th>Diseñador</th><th>Avance</th><th>Días Ent.</th>
+      <th>F. Inicio</th><th>F. Pactada</th><th>Valor</th><th>Hrs Total</th><th>Semana</th>
+    </tr></thead>
+    <tbody>
+      ${items.map(op=>{
+        const d=diasHasta(op['FECHA PACTADA']||op['FECHA ENTREGA']);
+        const normId=String(op.IDQR||op.OP||'').replace(/\.0*$/,'').trim();
+        const avance = op['% DE AVANCE']||op.AVANCE||0;
+        const pct = isNaN(parseFloat(avance))?0:Math.round(parseFloat(avance)<=1?parseFloat(avance)*100:parseFloat(avance));
+        return `<tr onclick="verDetalle('${safe(normId)}')" style="cursor:pointer">
+          <td class="mono">OP-${esc(op.OP||'—')}</td>
+          <td class="mono">${op.COTIZACION||op.COT?'COT-'+esc(op.COTIZACION||op.COT):'—'}</td>
+          <td>${badgeEstado(op.ESTADO)}</td>
+          <td>${esc(op.TIPO||'—')}</td>
+          <td>${esc(op.PRIORIDAD||'—')}</td>
+          <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(op.CLIENTE||'—')}</td>
+          <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(op.DESCRIPCION||'—')}</td>
+          <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(op.ASESOR||'—')}</td>
+          <td>${esc(op.DISEÑADOR||'Sin asignar')}</td>
+          <td style="min-width:70px">
+            <div style="height:5px;border-radius:3px;background:rgba(0,0,0,.08);overflow:hidden">
+              <div style="height:100%;width:${pct}%;background:${pct>=100?'#10b981':pct>=50?'#3b82f6':'#f59e0b'}"></div>
+            </div>
+            <span style="font-size:9px;color:var(--muted)">${pct}%</span>
+          </td>
+          <td class="td-num">${d!==null?`<span class="badge ${d<0?'rojo':d<3?'naranja':'gris'}">${d<0?'Vencido':d+'d'}</span>`:'—'}</td>
+          <td class="mono">${fmtFecha(op['FECHA INICIO'])}</td>
+          <td class="mono">${fmtFecha(op['FECHA PACTADA'])}</td>
+          <td class="mono">${op.VALOR?fmt(op.VALOR):'—'}</td>
+          <td class="td-num">${op['HORAS TOTAL']?esc(String(op['HORAS TOTAL']))+'h':'—'}</td>
+          <td>${esc(op.SEMANA||'—')}</td>
+        </tr>`;
+      }).join('')}
+    </tbody>
+  </table></div></div>`;
+}
+
 function renderTodos(){
   if(!_esAdmin()){ nav('dashboard'); return; }
   const ops=DB.produccion||[];
@@ -3005,12 +3240,12 @@ function _hrBuildPrintHtml(op,data){
     @media print{body{padding:10px}}
   
 /* ── Progress toast (sync indicator) ── */
-#sync-toast{position:fixed;bottom:80px;right:14px;z-index:9999;
+#sync-toast{position:fixed;bottom:20px;right:14px;z-index:9999;
   background:#1e293b;color:#fff;border-radius:12px;padding:10px 14px;
   min-width:200px;max-width:280px;box-shadow:0 4px 20px rgba(0,0,0,.35);
-  transform:translateY(20px);opacity:0;pointer-events:none;
+  transform:translateY(20px);opacity:0;pointer-events:none;display:none;
   transition:all .25s cubic-bezier(.4,0,.2,1);font-size:12px}
-#sync-toast.show{transform:translateY(0);opacity:1}
+#sync-toast.show{display:block;transform:translateY(0);opacity:1}
 #sync-bar-wrap{background:rgba(255,255,255,.15);border-radius:99px;height:4px;margin-top:8px;overflow:hidden}
 #sync-bar{height:100%;border-radius:99px;background:var(--accent);width:0%;transition:width .3s ease}
 
@@ -3094,8 +3329,10 @@ function renderBienesServicios(){
   });
 
     const pendCount = bs.filter(r => !_bsYes(r.COMPRADO) && !_bsYes(r.RECIBIDO) && !_bsYes(r.RECHAZADO)).length;
-  const badgeEl = document.getElementById('bb-bs');
-  if(badgeEl){ badgeEl.textContent=pendCount; badgeEl.style.display=pendCount>0?'':'none'; }
+  ['bb-bs','tt-bs'].forEach(id=>{
+    const badgeEl = document.getElementById(id);
+    if(badgeEl){ badgeEl.textContent=pendCount; badgeEl.style.display=pendCount>0?'':'none'; }
+  });
 
   const chips = ['todos','pendiente','comprado','recibido','rechazado'].map(f =>
     `<button onclick="_bsFiltro='${f}';renderBienesServicios()" style="padding:6px 12px;border-radius:20px;border:none;cursor:pointer;font-size:12px;font-weight:600;
@@ -3173,9 +3410,8 @@ function renderBienesServicios(){
           <div style="display:flex;gap:10px;align-items:flex-start;flex:1;min-width:0">
             ${imgUrl?`<img src="${imgUrl}" style="width:72px;height:72px;object-fit:cover;border-radius:8px;flex-shrink:0" loading="lazy">`:'<div style="width:72px;height:72px;border-radius:8px;background:var(--border);display:flex;align-items:center;justify-content:center;font-size:28px;flex-shrink:0">🪨</div>'}
             <div style="min-width:0">
-              <div style="font-size:12px;font-weight:700;color:var(--accent)">${esc(oc)}</div>
-              <div style="font-size:13px;font-weight:600;color:var(--text);margin-top:2px">
-                OP-${esc(r0['#OP']||'—')} · ${esc(r0['EMPRESA/CLIENTE']||'—')}
+              <div style="font-size:12px;font-weight:700;color:var(--accent)">
+                OP-${esc(r0['#OP']||'—')}${r0.ITEM?' · Item '+esc(r0.ITEM):''} · ${esc(r0['EMPRESA/CLIENTE']||'—')} · COT-${esc(opData?.COTIZACION||opData?.COT||'—')}
               </div>
               <div style="font-size:11px;color:var(--muted);margin-top:2px">
                 👤 ${esc(r0.COLABORADOR||'—')} · 📅 ${r0['FECHA DE PEDIDO']||'—'}
@@ -3410,10 +3646,11 @@ function syncStart(msg, detail=''){
   if(msgEl) msgEl.textContent=msg;
   if(detEl) detEl.textContent=detail;
   if(bar){ bar.style.width='0%'; setTimeout(()=>bar.style.width='60%',50); }
-  el.classList.add('show');
+  el.style.display='block';
+  requestAnimationFrame(()=>el.classList.add('show'));
   clearTimeout(_syncTimer);
 }
-function syncDone(msg='✅ Listo', detail=''){
+function syncDone(msg='✅ Sincronizado', detail=''){
   const el=document.getElementById('sync-toast');
   const msgEl=document.getElementById('sync-msg');
   const detEl=document.getElementById('sync-detail');
@@ -3422,18 +3659,24 @@ function syncDone(msg='✅ Listo', detail=''){
   if(msgEl) msgEl.textContent=msg;
   if(detEl) detEl.textContent=detail;
   if(bar) bar.style.width='100%';
+  el.style.display='block';
+  el.classList.add('show');
   clearTimeout(_syncTimer);
-  _syncTimer=setTimeout(()=>el.classList.remove('show'),2000);
+  _syncTimer=setTimeout(()=>{ el.classList.remove('show'); setTimeout(()=>{ if(!el.classList.contains('show')) el.style.display='none'; },260); },2000);
 }
 function syncError(msg='❌ Error'){
   const el=document.getElementById('sync-toast');
   const msgEl=document.getElementById('sync-msg');
   const bar=document.getElementById('sync-bar');
+  if(!el) return;
   if(msgEl) msgEl.textContent=msg;
   if(bar){ bar.style.background='#ef4444'; bar.style.width='100%'; }
+  el.style.display='block';
+  el.classList.add('show');
   clearTimeout(_syncTimer);
   _syncTimer=setTimeout(()=>{
     el.classList.remove('show');
+    setTimeout(()=>{ if(!el.classList.contains('show')) el.style.display='none'; },260);
     if(bar){ bar.style.background='var(--accent)'; bar.style.width='0%'; }
   },3000);
 }
@@ -5809,7 +6052,7 @@ function docCSS() {
 </script>
 <!-- SYNC PROGRESS TOAST -->
 <div id="sync-toast">
-  <div id="sync-msg" style="font-weight:600">Sincronizando...</div>
+  <div id="sync-msg" style="font-weight:600"></div>
   <div id="sync-detail" style="font-size:10px;opacity:.7;margin-top:2px"></div>
   <div id="sync-bar-wrap"><div id="sync-bar"></div></div>
 </div>
