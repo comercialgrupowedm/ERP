@@ -361,6 +361,165 @@ tr:hover td{background:#f8f9fb}
 </button>
 
 <!-- ═══════════════════════════════════════════
+     MODAL: EDITAR ÍTEM (sin cambiar estado)
+═══════════════════════════════════════════ -->
+<div class="overlay" id="modal-editar">
+  <div class="modal" style="max-width:640px">
+    <div class="modal-handle"></div>
+    <div class="modal-head">
+      <span>✏️</span>
+      <h3>Editar ítem</h3>
+      <button class="btn btn-ghost btn-sm" onclick="closeModal('modal-editar')">✖</button>
+    </div>
+
+    <div id="me-producto" style="background:#f4f6f9;border-bottom:1px solid var(--border);padding:12px 20px;font-size:13px"></div>
+
+    <!-- Sub-tabs del modal -->
+    <div style="display:flex;gap:2px;border-bottom:1px solid var(--border);padding:0 20px">
+      <div class="me-tab active" data-metab="datos" onclick="goMeTab('datos')" style="padding:10px 14px;font-size:13px;font-weight:700;cursor:pointer;color:var(--accent);border-bottom:2px solid var(--accent)">📦 Datos</div>
+      <div class="me-tab" data-metab="compra" onclick="goMeTab('compra')" style="padding:10px 14px;font-size:13px;font-weight:700;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent">🛒 Compra</div>
+      <div class="me-tab" data-metab="estado" onclick="goMeTab('estado')" style="padding:10px 14px;font-size:13px;font-weight:700;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent">✅ Estado</div>
+    </div>
+
+    <div class="modal-body">
+
+      <!-- TAB: DATOS -->
+      <div class="me-pane" data-mepane="datos">
+        <div class="fg">
+          <label class="fl">Producto / Descripción</label>
+          <input class="fi" id="me-descripcion" type="text" placeholder="Descripción del producto"/>
+        </div>
+        <div class="fg2">
+          <div>
+            <label class="fl">Tipo de pedido</label>
+            <select class="fi" id="me-tipo">
+              <option value="MATERIAL">Material</option>
+              <option value="SERVICIO EXTERNO">Servicio externo</option>
+            </select>
+          </div>
+          <div>
+            <label class="fl">Cantidad</label>
+            <input class="fi" id="me-cant" type="number" min="0" placeholder="0"/>
+          </div>
+        </div>
+        <div class="fg2">
+          <div>
+            <label class="fl">Asesor</label>
+            <input class="fi" id="me-asesor" type="text" placeholder="Nombre del asesor"/>
+          </div>
+          <div>
+            <label class="fl">Colaborador</label>
+            <input class="fi" id="me-colaborador" type="text" placeholder="Nombre del colaborador"/>
+          </div>
+        </div>
+        <div class="fg">
+          <label class="fl">Observaciones</label>
+          <textarea class="fi" id="me-obs" placeholder="Notas adicionales..."></textarea>
+        </div>
+      </div>
+
+      <!-- TAB: COMPRA / LOGÍSTICA -->
+      <div class="me-pane" data-mepane="compra" style="display:none">
+        <div class="fg2">
+          <div>
+            <label class="fl">Proveedor</label>
+            <input class="fi" id="me-proveedor" type="text" placeholder="Nombre del proveedor" list="prov-list"/>
+          </div>
+          <div>
+            <label class="fl">Costo sin IVA</label>
+            <input class="fi" id="me-costo" type="number" min="0" placeholder="0"/>
+          </div>
+        </div>
+        <div class="fg2">
+          <div>
+            <label class="fl">Fecha de compra</label>
+            <input class="fi" id="me-fecha-compra" type="date"/>
+          </div>
+          <div>
+            <label class="fl">Días para entrega</label>
+            <input class="fi" id="me-dias" type="number" min="0" placeholder="Ej: 5"/>
+          </div>
+        </div>
+        <div class="fg2">
+          <div>
+            <label class="fl"># Factura</label>
+            <input class="fi" id="me-factura" type="text" placeholder="Núm. de factura"/>
+          </div>
+          <div>
+            <label class="fl">Orden de compra</label>
+            <input class="fi" id="me-orden" type="text" placeholder="Ej: OC-20250825-001"/>
+          </div>
+        </div>
+        <div class="fg">
+          <label class="fl">Precio cotizado</label>
+          <input class="fi" id="me-preciocot" type="number" min="0" placeholder="0"/>
+        </div>
+      </div>
+
+      <!-- TAB: ESTADO -->
+      <div class="me-pane" data-mepane="estado" style="display:none">
+        <div class="fg2">
+          <div>
+            <label class="fl">Autorización Juan Diego</label>
+            <select class="fi" id="me-autjd">
+              <option value="">— Sin definir —</option>
+              <option value="SI">Sí</option>
+              <option value="NO">No</option>
+            </select>
+          </div>
+          <div>
+            <label class="fl">Comprado</label>
+            <select class="fi" id="me-comprado">
+              <option value="">— Sin definir —</option>
+              <option value="SI">Sí</option>
+              <option value="NO">No</option>
+            </select>
+          </div>
+        </div>
+        <div class="fg2">
+          <div>
+            <label class="fl">Recibido</label>
+            <select class="fi" id="me-recibido">
+              <option value="">— Sin definir —</option>
+              <option value="SI">Sí</option>
+              <option value="NO">No</option>
+            </select>
+          </div>
+          <div>
+            <label class="fl">Fecha recibido</label>
+            <input class="fi" id="me-fecha-recibido" type="date"/>
+          </div>
+        </div>
+        <div class="fg2">
+          <div>
+            <label class="fl">Rechazado</label>
+            <select class="fi" id="me-rechazado">
+              <option value="">— Sin definir —</option>
+              <option value="SI">Sí</option>
+              <option value="NO">No</option>
+            </select>
+          </div>
+          <div>
+            <label class="fl">% de avance</label>
+            <input class="fi" id="me-avance" type="number" min="0" max="100" placeholder="0"/>
+          </div>
+        </div>
+        <div class="fg">
+          <label class="fl">Motivo de rechazo</label>
+          <textarea class="fi" id="me-motivo-rechazo" placeholder="Solo si fue rechazado..."></textarea>
+        </div>
+      </div>
+
+      <input type="hidden" id="me-idcompras"/>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal('modal-editar')">Cancelar</button>
+      <button class="btn btn-primary" onclick="confirmarEditar()">💾 Guardar cambios</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
      MODAL: MARCAR COMPRADO (ítem individual)
 ═══════════════════════════════════════════ -->
 <div class="overlay" id="modal-comprado">
@@ -1064,6 +1223,9 @@ function renderOCCard(oc, items){
   // Barra de acciones rápidas (siempre visible)
   html += '<div class="oc-actions-row">';
   html += '<button class="btn btn-xs btn-purple" onclick="openOCModalFromGroup(\''+esc(oc)+'\')">📄 OC PDF</button>';
+  if(items.length===1){
+    html += '<button class="btn btn-xs btn-ghost" style="border:1px solid var(--border)" onclick="openEditarItem(\''+esc(items[0].IDCOMPRAS)+'\')">✏️ Editar</button>';
+  }
   if(!comp && !recib){
     html += '<button class="btn btn-xs btn-primary" onclick="marcarGrupoComprado(\''+esc(oc)+'\')">🛒 Marcar comprado</button>';
   }
@@ -1218,6 +1380,7 @@ function renderItRow(it){
   else html += '<span class="badge badge-pend">⏳ Pendiente</span>';
   if(bsYes(it['AUTORIZACION JUAN DIEGO'])) html += '<span class="badge badge-autjd" style="font-size:9px">✔ JD</span>';
 
+  html += '<button class="btn btn-xs btn-ghost" style="border:1px solid var(--border)" onclick="openEditarItem(\''+esc(it.IDCOMPRAS)+'\')" title="Editar">✏️ Editar</button>';
   if(!comp && !recib && !rechaz){
     html += '<button class="btn btn-xs btn-primary" onclick="openComprado(\''+esc(it.IDCOMPRAS)+'\')">🛒 Comprado</button>';
     html += '<button class="btn btn-xs btn-danger" onclick="openRechazar(\''+esc(it.IDCOMPRAS)+'\')">✖</button>';
@@ -1282,6 +1445,132 @@ function updateSelBar(){
   const cnt = document.getElementById('sel-count');
   if(cnt) cnt.textContent = SELECTED.size;
   bar.classList.toggle('show', SELECTED.size > 0);
+}
+
+// ═══════════════════════════════════════════════════
+// ACCIONES: EDITAR (sin cambiar estado a la fuerza)
+// ═══════════════════════════════════════════════════
+function goMeTab(t){
+  document.querySelectorAll('.me-tab').forEach(el=>{
+    const on = el.dataset.metab===t;
+    el.style.color = on ? 'var(--accent)' : 'var(--muted)';
+    el.style.borderBottomColor = on ? 'var(--accent)' : 'transparent';
+  });
+  document.querySelectorAll('.me-pane').forEach(el=>{
+    el.style.display = el.dataset.mepane===t ? '' : 'none';
+  });
+}
+
+function bsSel(v){ // normaliza SI/NO/'' para los <select>
+  if(v===true || /^(si|sí|true|x)$/i.test(String(v||'').trim())) return 'SI';
+  if(v===false || /^(no|false)$/i.test(String(v||'').trim())) return 'NO';
+  return '';
+}
+
+function openEditarItem(idcompras){
+  const it = DB.bs.find(r=>r.IDCOMPRAS===idcompras);
+  if(!it) return;
+  goMeTab('datos');
+  document.getElementById('me-idcompras').value = idcompras;
+  document.getElementById('me-producto').innerHTML = '<b>'+esc(it.IDCOMPRAS||'')+'</b><br><span style="color:var(--muted2);font-size:11px">OP: '+esc(it['#OP']||'—')+' · Ítem '+esc(it.ITEM||'—')+' · '+esc(it['EMPRESA/CLIENTE']||'—')+' · Cot. '+esc(it.COTIZACION||'—')+'</span>';
+
+  // Tab Datos
+  document.getElementById('me-descripcion').value = it.PRODUCTO||'';
+  document.getElementById('me-tipo').value        = it['TIPO DE PEDIDO']==='SERVICIO EXTERNO' ? 'SERVICIO EXTERNO' : 'MATERIAL';
+  document.getElementById('me-cant').value        = it.CANT||'';
+  document.getElementById('me-asesor').value      = it.ASESOR||'';
+  document.getElementById('me-colaborador').value = it.COLABORADOR||'';
+  document.getElementById('me-obs').value         = it.OBSERVACIONES||'';
+
+  // Tab Compra
+  document.getElementById('me-proveedor').value    = it.PROVEEDOR||'';
+  document.getElementById('me-costo').value        = it['COSTO SIN IVA']||it['$COSTO MP  (Pesos)']||it['$COSTO SERVICIO EXT.']||'';
+  document.getElementById('me-fecha-compra').value = toDateInput(it['FECHA  DE COMPRA']||it['FECHA DE COMPRA']);
+  document.getElementById('me-dias').value         = it['DIAS PARA ENTREGA']||'';
+  document.getElementById('me-factura').value      = it['# FACTURA']||'';
+  document.getElementById('me-orden').value        = it['ORDEN DE COMPRA']||'';
+  document.getElementById('me-preciocot').value    = it['PRECIO COTIZADO']||'';
+
+  // Tab Estado
+  document.getElementById('me-autjd').value          = bsSel(it['AUTORIZACION JUAN DIEGO']);
+  document.getElementById('me-comprado').value       = bsSel(it.COMPRADO);
+  document.getElementById('me-recibido').value       = bsSel(it.RECIBIDO);
+  document.getElementById('me-fecha-recibido').value = toDateInput(it['FECHA RECIBIDO ']||it['FECHA RECIBIDO']);
+  document.getElementById('me-rechazado').value      = bsSel(it.RECHAZADO);
+  document.getElementById('me-avance').value         = it['% DE AVANCE']||'';
+  document.getElementById('me-motivo-rechazo').value = it['MOTIVO DE RECHAZO']||'';
+
+  openModal('modal-editar');
+}
+
+function toDateInput(v){
+  if(!v) return '';
+  const d = new Date(v);
+  if(isNaN(d)) return '';
+  return d.toISOString().slice(0,10);
+}
+
+async function confirmarEditar(){
+  const idcompras = document.getElementById('me-idcompras').value;
+
+  const payload = {
+    IDCOMPRAS: idcompras,
+    producto:        document.getElementById('me-descripcion').value.trim(),
+    tipoPedido:      document.getElementById('me-tipo').value,
+    cantidad:        document.getElementById('me-cant').value,
+    asesor:          document.getElementById('me-asesor').value.trim(),
+    colaborador:     document.getElementById('me-colaborador').value.trim(),
+    observaciones:   document.getElementById('me-obs').value.trim(),
+
+    proveedor:       document.getElementById('me-proveedor').value.trim(),
+    costo:           document.getElementById('me-costo').value,
+    fechaCompra:     document.getElementById('me-fecha-compra').value,
+    diasEntrega:     document.getElementById('me-dias').value,
+    numFactura:      document.getElementById('me-factura').value.trim(),
+    ordenCompra:     document.getElementById('me-orden').value.trim(),
+    precioCotizado:  document.getElementById('me-preciocot').value,
+
+    autorizacionJD:  document.getElementById('me-autjd').value,
+    comprado:        document.getElementById('me-comprado').value,
+    recibido:        document.getElementById('me-recibido').value,
+    fechaRecibido:   document.getElementById('me-fecha-recibido').value,
+    rechazado:       document.getElementById('me-rechazado').value,
+    avance:          document.getElementById('me-avance').value,
+    motivoRechazo:   document.getElementById('me-motivo-rechazo').value.trim()
+  };
+
+  try{
+    await POST('editarItemBS', payload);
+    const it = DB.bs.find(r=>r.IDCOMPRAS===idcompras);
+    if(it){
+      it.PRODUCTO = payload.producto;
+      it['TIPO DE PEDIDO'] = payload.tipoPedido;
+      it.CANT = payload.cantidad;
+      it.ASESOR = payload.asesor;
+      it.COLABORADOR = payload.colaborador;
+      it.OBSERVACIONES = payload.observaciones;
+
+      it.PROVEEDOR = payload.proveedor;
+      it['COSTO SIN IVA'] = payload.costo;
+      it['FECHA  DE COMPRA'] = payload.fechaCompra;
+      it['DIAS PARA ENTREGA'] = payload.diasEntrega;
+      it['# FACTURA'] = payload.numFactura;
+      it['ORDEN DE COMPRA'] = payload.ordenCompra;
+      it['PRECIO COTIZADO'] = payload.precioCotizado;
+
+      if(payload.autorizacionJD!=='') it['AUTORIZACION JUAN DIEGO'] = payload.autorizacionJD;
+      if(payload.comprado!=='')       it.COMPRADO = payload.comprado;
+      if(payload.recibido!=='')       it.RECIBIDO = payload.recibido;
+      it['FECHA RECIBIDO '] = payload.fechaRecibido;
+      if(payload.rechazado!=='')      it.RECHAZADO = payload.rechazado;
+      it['% DE AVANCE'] = payload.avance;
+      it['MOTIVO DE RECHAZO'] = payload.motivoRechazo;
+    }
+    closeModal('modal-editar');
+    updateBadges();
+    render();
+    toast('✅ Ítem actualizado');
+  } catch(e){ toast('Error: '+e.message,'error'); }
 }
 
 // ═══════════════════════════════════════════════════
