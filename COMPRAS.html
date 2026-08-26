@@ -1,0 +1,1888 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
+<meta name="theme-color" content="#0a0f1e"/>
+<title>COMPRAS — WEDM ERP</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<style>
+/* ═══════════════════════════════════════════
+   TOKENS
+═══════════════════════════════════════════ */
+:root{
+  --bg:#0a0f1e; --bg2:#0f1628; --bg3:#141d35;
+  --card:#182040; --card2:#1e2a4a;
+  --border:#253060; --border2:#2d3a6e;
+  --accent:#4f8ef7; --accent2:#3d7ae0;
+  --purple:#7c3aed; --purple2:#6d28d9;
+  --green:#10b981; --yellow:#f59e0b;
+  --red:#ef4444; --teal:#0d9488;
+  --text:#e2e8f0; --muted:#64748b; --muted2:#94a3b8;
+  --r:12px; --r2:8px;
+  --mono:'JetBrains Mono','Fira Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden;font-family:-apple-system,'Segoe UI',sans-serif;font-size:14px;background:var(--bg);color:var(--text)}
+
+/* ═══════════════════════════════════════════
+   SPLASH
+═══════════════════════════════════════════ */
+#splash{position:fixed;inset:0;background:linear-gradient(135deg,#060b18,#0a1530,#060b18);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;transition:opacity .4s}
+#splash.hide{opacity:0;pointer-events:none}
+.splash-icon{font-size:56px;margin-bottom:16px;filter:drop-shadow(0 4px 20px rgba(79,142,247,.4))}
+.splash-title{font-size:22px;font-weight:800;color:#fff;letter-spacing:1px;margin-bottom:6px}
+.splash-sub{color:rgba(255,255,255,.4);font-size:12px;margin-bottom:28px}
+.splash-bar{width:200px;height:3px;background:rgba(255,255,255,.1);border-radius:2px;overflow:hidden}
+.splash-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--purple));border-radius:2px;width:0;transition:width .3s}
+
+/* ═══════════════════════════════════════════
+   LAYOUT
+═══════════════════════════════════════════ */
+#shell{display:flex;flex-direction:column;height:100vh;overflow:hidden}
+
+/* TOPBAR */
+#topbar{height:52px;background:var(--bg2);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;padding:0 14px;gap:10px;flex-shrink:0;z-index:100}
+#topbar h1{font-size:16px;font-weight:800;color:var(--accent);letter-spacing:.5px}
+#topbar .sub{font-size:11px;color:var(--muted);margin-left:4px}
+.tb-spacer{flex:1}
+#search-wrap{display:flex;align-items:center;gap:6px;background:var(--bg3);border:1px solid var(--border);
+  border-radius:20px;padding:5px 12px;transition:border-color .2s;max-width:220px}
+#search-wrap:focus-within{border-color:var(--accent)}
+#search-wrap input{background:none;border:none;outline:none;color:var(--text);font-size:13px;width:140px}
+#btn-refresh{width:34px;height:34px;border-radius:8px;background:var(--bg3);border:1px solid var(--border);
+  display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:15px;transition:border-color .2s}
+#btn-refresh:hover{border-color:var(--accent)}
+@keyframes spin{to{transform:rotate(360deg)}}
+#btn-refresh.spinning{animation:spin .7s linear infinite}
+
+/* NAV TABS */
+#tabs{background:var(--bg2);border-bottom:1px solid var(--border);display:flex;gap:0;
+  padding:0 12px;flex-shrink:0;overflow-x:auto;scrollbar-width:none}
+#tabs::-webkit-scrollbar{display:none}
+.tab{padding:12px 16px;font-size:13px;font-weight:600;color:var(--muted2);cursor:pointer;
+  border-bottom:2px solid transparent;white-space:nowrap;transition:all .15s;user-select:none;
+  display:flex;align-items:center;gap:6px}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.tab-badge{background:var(--red);color:#fff;font-size:9px;padding:1px 6px;border-radius:10px;font-weight:800}
+
+/* CONTENT */
+#content{flex:1;overflow-y:auto;overflow-x:hidden;padding:14px;-webkit-overflow-scrolling:touch;scroll-behavior:smooth}
+
+/* ═══════════════════════════════════════════
+   COMPONENTES GENERALES
+═══════════════════════════════════════════ */
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:16px;margin-bottom:12px}
+.card-title{font-size:13px;font-weight:700;color:var(--muted2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+
+/* KPIs */
+.kpi-row{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:14px}
+@media(min-width:480px){.kpi-row{grid-template-columns:repeat(4,1fr)}}
+.kpi{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:14px 12px;text-align:center;position:relative;overflow:hidden}
+.kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:3px}
+.kpi.blue::before{background:var(--accent)}
+.kpi.green::before{background:var(--green)}
+.kpi.yellow::before{background:var(--yellow)}
+.kpi.red::before{background:var(--red)}
+.kpi .val{font-size:26px;font-weight:800;font-family:var(--mono);line-height:1}
+.kpi.blue .val{color:var(--accent)}
+.kpi.green .val{color:var(--green)}
+.kpi.yellow .val{color:var(--yellow)}
+.kpi.red .val{color:var(--red)}
+.kpi .lbl{font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:.5px;margin-top:5px}
+
+/* Chips filtro */
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+.chip{padding:6px 14px;border-radius:20px;border:1px solid var(--border);background:var(--bg3);
+  color:var(--muted2);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;user-select:none;display:flex;align-items:center;gap:5px}
+.chip:hover{border-color:var(--accent);color:var(--accent)}
+.chip.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.chip-count{background:rgba(255,255,255,.2);font-size:10px;padding:1px 5px;border-radius:8px}
+
+/* OC Cards */
+.oc-card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);margin-bottom:10px;overflow:hidden;transition:border-color .15s}
+.oc-card:hover{border-color:var(--border2)}
+.oc-head{padding:12px 14px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:10px;cursor:pointer}
+.oc-head-img{width:52px;height:52px;border-radius:8px;object-fit:cover;flex-shrink:0;border:1px solid var(--border)}
+.oc-head-noimg{width:52px;height:52px;border-radius:8px;background:var(--bg3);border:1px solid var(--border);
+  flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:22px}
+.oc-head-info{flex:1;min-width:0}
+.oc-id{font-family:var(--mono);font-size:11px;color:var(--accent);font-weight:700}
+.oc-op{font-size:14px;font-weight:700;margin-top:2px}
+.oc-meta{font-size:11px;color:var(--muted2);margin-top:3px}
+.oc-status{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0}
+
+/* Item rows dentro de OC */
+.oc-items{display:none;padding:10px 14px 14px;border-top:1px solid var(--border)}
+.oc-card.expanded .oc-items{display:block}
+.oc-card.expanded .oc-chevron{transform:rotate(180deg)}
+.oc-chevron{transition:transform .2s;color:var(--muted)}
+
+.it-row{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r2);padding:12px;margin-bottom:8px}
+.it-row:last-child{margin-bottom:0}
+.it-top{display:flex;align-items:flex-start;gap:10px}
+.it-icon{font-size:20px;flex-shrink:0;margin-top:2px}
+.it-info{flex:1;min-width:0}
+.it-prod{font-size:13px;font-weight:600;word-break:break-word}
+.it-sub{font-size:11px;color:var(--muted2);margin-top:3px;display:flex;flex-wrap:wrap;gap:8px}
+.it-actions{display:flex;flex-direction:column;gap:5px;flex-shrink:0}
+.it-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+.it-detail{margin-top:10px;padding-top:10px;border-top:1px solid var(--border);display:none;grid-template-columns:1fr 1fr;gap:8px}
+.it-row.expanded .it-detail{display:grid}
+
+/* Badges */
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:6px;font-size:10px;font-weight:700}
+.badge-pend{background:rgba(245,158,11,.15);color:var(--yellow);border:1px solid rgba(245,158,11,.3)}
+.badge-comp{background:rgba(79,142,247,.15);color:var(--accent);border:1px solid rgba(79,142,247,.3)}
+.badge-recib{background:rgba(16,185,129,.15);color:var(--green);border:1px solid rgba(16,185,129,.3)}
+.badge-rechaz{background:rgba(239,68,68,.15);color:var(--red);border:1px solid rgba(239,68,68,.3)}
+.badge-autjd{background:rgba(124,58,237,.15);color:var(--purple);border:1px solid rgba(124,58,237,.3)}
+.badge-mat{background:rgba(13,148,136,.15);color:var(--teal);border:1px solid rgba(13,148,136,.3)}
+.badge-svc{background:rgba(219,39,119,.15);color:#db2777;border:1px solid rgba(219,39,119,.3)}
+
+/* Botones */
+.btn{display:inline-flex;align-items:center;gap:5px;padding:7px 13px;border-radius:var(--r2);
+  border:none;cursor:pointer;font-size:12px;font-weight:600;transition:all .15s;user-select:none}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:hover{background:var(--accent2)}
+.btn-success{background:var(--green);color:#fff}
+.btn-success:hover{background:#0da070}
+.btn-warn{background:var(--yellow);color:#000}
+.btn-warn:hover{background:#d97706}
+.btn-danger{background:var(--red);color:#fff}
+.btn-danger:hover{background:#dc3333}
+.btn-purple{background:var(--purple);color:#fff}
+.btn-purple:hover{background:var(--purple2)}
+.btn-ghost{background:transparent;border:1px solid var(--border);color:var(--muted2)}
+.btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
+.btn-sm{padding:5px 10px;font-size:11px;border-radius:6px}
+.btn-xs{padding:3px 8px;font-size:10px;border-radius:5px}
+
+/* Forms */
+label.fl{display:block;font-size:11px;color:var(--muted2);font-weight:600;margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px}
+input.fi,select.fi,textarea.fi{width:100%;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);
+  padding:8px 10px;color:var(--text);font-size:13px;outline:none;transition:border-color .2s}
+input.fi:focus,select.fi:focus,textarea.fi:focus{border-color:var(--accent)}
+textarea.fi{resize:vertical;min-height:65px}
+.fg{margin-bottom:12px}
+.fg2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+@media(max-width:480px){.fg2{grid-template-columns:1fr}}
+.field-hint{font-size:10px;color:var(--muted);margin-top:3px}
+
+/* Modal */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);display:none;align-items:flex-end;justify-content:center;z-index:900}
+.overlay.open{display:flex}
+@media(min-width:600px){.overlay{align-items:center}}
+.modal{background:var(--card);border:1px solid var(--border);border-radius:16px 16px 0 0;
+  width:100%;max-width:600px;max-height:90vh;display:flex;flex-direction:column}
+@media(min-width:600px){.modal{border-radius:16px;max-height:85vh}}
+.modal-handle{width:40px;height:4px;background:var(--border);border-radius:2px;margin:10px auto 0;flex-shrink:0}
+.modal-head{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0}
+.modal-head h3{flex:1;font-size:15px;font-weight:700}
+.modal-body{flex:1;overflow-y:auto;padding:16px 18px;-webkit-overflow-scrolling:touch}
+.modal-foot{padding:12px 18px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px;flex-shrink:0}
+
+/* OC selection sidebar */
+.sel-bar{position:fixed;bottom:0;left:0;right:0;background:var(--bg2);border-top:2px solid var(--accent);
+  padding:10px 16px;display:none;align-items:center;gap:10px;z-index:200;flex-wrap:wrap}
+.sel-bar.show{display:flex}
+.sel-info{font-size:13px;font-weight:600;flex:1}
+.sel-info span{color:var(--accent)}
+
+/* Proveedor tabla */
+.tbl-wrap{border-radius:var(--r);overflow:hidden;border:1px solid var(--border);margin-bottom:12px}
+table{width:100%;border-collapse:collapse}
+th{background:var(--bg3);padding:9px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted2);border-bottom:1px solid var(--border);font-weight:700}
+td{padding:9px 12px;border-bottom:1px solid rgba(255,255,255,.04);font-size:12px;vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(255,255,255,.02)}
+
+/* Toast */
+#toast{position:fixed;bottom:24px;right:16px;background:var(--green);color:#fff;padding:11px 18px;
+  border-radius:10px;font-size:13px;font-weight:600;z-index:9000;display:none;
+  box-shadow:0 4px 20px rgba(0,0,0,.5);max-width:300px}
+#toast.error{background:var(--red)}
+#toast.warn{background:var(--yellow);color:#000}
+
+/* Estado vacío */
+.empty{text-align:center;padding:48px 20px;color:var(--muted)}
+.empty-icon{font-size:44px;margin-bottom:12px}
+
+/* Loading */
+.loading{text-align:center;padding:40px;color:var(--muted2)}
+.spin-el{display:inline-block;width:22px;height:22px;border:3px solid var(--border);border-top-color:var(--accent);
+  border-radius:50%;animation:spin .7s linear infinite;margin-right:8px;vertical-align:middle}
+
+/* Totales OC */
+.oc-totales{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r2);padding:14px;margin-top:12px}
+.tot-row{display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px}
+.tot-row:last-child{border-top:1px solid var(--border);padding-top:8px;margin-top:4px;font-weight:700;font-size:15px;color:var(--accent)}
+
+/* Dashboard barras */
+.bar-row{margin-bottom:12px}
+.bar-label{display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px}
+.bar-track{background:var(--bg3);border-radius:4px;height:8px;overflow:hidden}
+.bar-fill{height:100%;border-radius:4px;background:var(--accent);transition:width .6s}
+.bar-fill.green{background:var(--green)}
+.bar-fill.yellow{background:var(--yellow)}
+</style>
+</head>
+<body>
+
+<!-- SPLASH -->
+<div id="splash">
+  <div class="splash-icon">🛒</div>
+  <div class="splash-title">COMPRAS</div>
+  <div class="splash-sub">Grupo WEDM · ERP</div>
+  <div class="splash-bar"><div class="splash-fill" id="spl-fill"></div></div>
+</div>
+
+<!-- SHELL -->
+<div id="shell">
+
+  <!-- TOPBAR -->
+  <div id="topbar">
+    <div>🛒</div>
+    <h1>COMPRAS <span class="sub">WEDM</span></h1>
+    <div class="tb-spacer"></div>
+    <div id="search-wrap">
+      <span style="color:var(--muted)">🔍</span>
+      <input type="text" id="g-search" placeholder="Buscar OC, OP, producto..." oninput="gSearchDebounce()"/>
+    </div>
+    <div id="btn-refresh" onclick="reloadAll()">🔄</div>
+  </div>
+
+  <!-- TABS -->
+  <div id="tabs">
+    <div class="tab active" data-tab="pendiente" onclick="goTab('pendiente')">⏳ Pendientes <span class="tab-badge" id="tb-pend" style="display:none">0</span></div>
+    <div class="tab" data-tab="comprado" onclick="goTab('comprado')">🛒 Comprados <span class="tab-badge" id="tb-comp" style="display:none" style="background:var(--accent)">0</span></div>
+    <div class="tab" data-tab="recibido" onclick="goTab('recibido')">✅ Recibidos</div>
+    <div class="tab" data-tab="rechazado" onclick="goTab('rechazado')">❌ Rechazados</div>
+    <div class="tab" data-tab="todos" onclick="goTab('todos')">📋 Todos</div>
+    <div class="tab" data-tab="proveedores" onclick="goTab('proveedores')">🏢 Proveedores</div>
+    <div class="tab" data-tab="dashboard" onclick="goTab('dashboard')">📊 Dashboard</div>
+  </div>
+
+  <!-- CONTENT -->
+  <div id="content">
+    <div class="loading"><span class="spin-el"></span>Cargando datos...</div>
+  </div>
+
+</div><!-- /shell -->
+
+<!-- BARRA DE SELECCIÓN (para OC agrupada) -->
+<div class="sel-bar" id="sel-bar">
+  <div class="sel-info"><span id="sel-count">0</span> ítem(s) seleccionados</div>
+  <button class="btn btn-ghost btn-sm" onclick="clearSelection()">✖ Limpiar</button>
+  <button class="btn btn-purple btn-sm" onclick="openOCModal()">📄 Generar OC</button>
+  <button class="btn btn-primary btn-sm" onclick="openMarcarCompradoLote()">🛒 Marcar comprados</button>
+</div>
+
+<!-- BOTÓN FLOTANTE: Nueva solicitud -->
+<button id="fab-nueva" onclick="openNuevaSolicitud()"
+  style="position:fixed;bottom:80px;right:16px;width:52px;height:52px;border-radius:50%;
+         background:linear-gradient(135deg,var(--accent),var(--purple));border:none;
+         color:#fff;font-size:22px;cursor:pointer;z-index:150;
+         box-shadow:0 4px 20px rgba(79,142,247,.4);display:flex;align-items:center;justify-content:center;
+         transition:transform .15s" title="Nueva solicitud"
+  onmouseenter="this.style.transform='scale(1.1)'" onmouseleave="this.style.transform='scale(1)'">
+  ➕
+</button>
+
+<!-- ═══════════════════════════════════════════
+     MODAL: MARCAR COMPRADO (ítem individual)
+═══════════════════════════════════════════ -->
+<div class="overlay" id="modal-comprado">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-head">
+      <span>🛒</span>
+      <h3>Marcar como Comprado</h3>
+      <button class="btn btn-ghost btn-sm" onclick="closeModal('modal-comprado')">✖</button>
+    </div>
+    <div class="modal-body">
+      <div id="mc-producto" style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r2);padding:12px;margin-bottom:16px;font-size:13px"></div>
+      <div class="fg2">
+        <div>
+          <label class="fl">Proveedor *</label>
+          <input class="fi" id="mc-proveedor" type="text" placeholder="Nombre del proveedor" list="prov-list"/>
+          <datalist id="prov-list"></datalist>
+        </div>
+        <div>
+          <label class="fl">Costo sin IVA</label>
+          <input class="fi" id="mc-costo" type="number" min="0" placeholder="0"/>
+        </div>
+      </div>
+      <div class="fg2">
+        <div>
+          <label class="fl">Fecha de compra</label>
+          <input class="fi" id="mc-fecha" type="date"/>
+        </div>
+        <div>
+          <label class="fl">Días para entrega</label>
+          <input class="fi" id="mc-dias" type="number" min="0" placeholder="Ej: 5"/>
+        </div>
+      </div>
+      <div class="fg">
+        <label class="fl">Número de OC / referencia</label>
+        <input class="fi" id="mc-oc-ref" type="text" placeholder="Ej: OC-20250825-001"/>
+        <div class="field-hint">Si dejas vacío se genera automáticamente desde la OC agrupada</div>
+      </div>
+      <div class="fg">
+        <label class="fl">Observaciones</label>
+        <textarea class="fi" id="mc-obs" placeholder="Notas adicionales..."></textarea>
+      </div>
+      <input type="hidden" id="mc-idcompras"/>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal('modal-comprado')">Cancelar</button>
+      <button class="btn btn-primary" onclick="confirmarComprado()">💾 Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     MODAL: MARCAR RECIBIDO
+═══════════════════════════════════════════ -->
+<div class="overlay" id="modal-recibido">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-head">
+      <span>✅</span>
+      <h3>Marcar como Recibido</h3>
+      <button class="btn btn-ghost btn-sm" onclick="closeModal('modal-recibido')">✖</button>
+    </div>
+    <div class="modal-body">
+      <div id="mr-producto" style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r2);padding:12px;margin-bottom:16px;font-size:13px"></div>
+      <div class="fg2">
+        <div>
+          <label class="fl">Fecha de recibido</label>
+          <input class="fi" id="mr-fecha" type="date"/>
+        </div>
+        <div>
+          <label class="fl"># Factura</label>
+          <input class="fi" id="mr-factura" type="text" placeholder="Núm. de factura"/>
+        </div>
+      </div>
+      <div class="fg">
+        <label class="fl">Observaciones</label>
+        <textarea class="fi" id="mr-obs" placeholder="Novedades, faltantes..."></textarea>
+      </div>
+      <input type="hidden" id="mr-idcompras"/>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal('modal-recibido')">Cancelar</button>
+      <button class="btn btn-success" onclick="confirmarRecibido()">✅ Confirmar recepción</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     MODAL: RECHAZAR
+═══════════════════════════════════════════ -->
+<div class="overlay" id="modal-rechazar">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-head">
+      <span>❌</span>
+      <h3>Rechazar ítem</h3>
+      <button class="btn btn-ghost btn-sm" onclick="closeModal('modal-rechazar')">✖</button>
+    </div>
+    <div class="modal-body">
+      <div id="mrej-producto" style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r2);padding:12px;margin-bottom:16px;font-size:13px"></div>
+      <div class="fg">
+        <label class="fl">Motivo de rechazo *</label>
+        <textarea class="fi" id="mrej-motivo" placeholder="Describe el motivo del rechazo..."></textarea>
+      </div>
+      <input type="hidden" id="mrej-idcompras"/>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal('modal-rechazar')">Cancelar</button>
+      <button class="btn btn-danger" onclick="confirmarRechazo()">❌ Rechazar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     MODAL: GENERAR OC PDF (agrupado)
+═══════════════════════════════════════════ -->
+<div class="overlay" id="modal-oc">
+  <div class="modal" style="max-width:640px">
+    <div class="modal-handle"></div>
+    <div class="modal-head">
+      <span>📄</span>
+      <h3>Generar Orden de Compra</h3>
+      <button class="btn btn-ghost btn-sm" onclick="closeModal('modal-oc')">✖</button>
+    </div>
+    <div class="modal-body">
+
+      <!-- Ítems EDITABLES en costos -->
+      <div style="margin-bottom:14px">
+        <div style="font-size:11px;color:var(--muted2);font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">Ítems · costos editables</div>
+        <div id="moc-items-list" style="max-height:220px;overflow-y:auto;display:flex;flex-direction:column;gap:6px"></div>
+        <div style="margin-top:8px;display:flex;justify-content:flex-end">
+          <span style="font-size:11px;color:var(--muted2)">Edita los costos directamente en cada ítem ↑</span>
+        </div>
+      </div>
+
+      <!-- Proveedor con autocompletado reactivo -->
+      <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r2);padding:14px;margin-bottom:14px">
+        <div style="font-size:11px;color:var(--muted2);font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px">Proveedor</div>
+        <div class="fg">
+          <label class="fl">Nombre / Razón social *</label>
+          <input class="fi" id="moc-proveedor" type="text" placeholder="Escribe para buscar proveedor..." list="prov-list"
+                 oninput="onMocProveedorInput(this.value)" onchange="onMocProveedorChange(this.value)"/>
+          <datalist id="prov-list"></datalist>
+          <div id="moc-prov-hint" style="font-size:10px;color:var(--green);margin-top:3px;display:none">✔ Datos cargados automáticamente</div>
+        </div>
+        <div class="fg2">
+          <div>
+            <label class="fl">NIT</label>
+            <input class="fi" id="moc-nit" type="text" placeholder="NIT"/>
+          </div>
+          <div>
+            <label class="fl">Teléfono</label>
+            <input class="fi" id="moc-tel" type="text" placeholder="Teléfono"/>
+          </div>
+          <div><label class="fl">Email</label><input class="fi" id="moc-email" type="email" placeholder="correo@proveedor.com"/></div>
+          <div><label class="fl">Ciudad</label><input class="fi" id="moc-ciudad" type="text"/></div>
+          <div style="grid-column:1/-1"><label class="fl">Dirección</label><input class="fi" id="moc-direccion" type="text"/></div>
+        </div>
+      </div>
+
+      <div class="fg2">
+        <div><label class="fl">IVA %</label><input class="fi" id="moc-iva" type="number" value="19" min="0" max="100" oninput="calcOCTotales()"/></div>
+        <div><label class="fl">Forma de pago</label><input class="fi" id="moc-forma-pago" type="text" placeholder="Ej: 30 días"/></div>
+        <div><label class="fl">Solicitó</label><input class="fi" id="moc-solicito" type="text" placeholder="Nombre"/></div>
+        <div><label class="fl">Autorizó</label><input class="fi" id="moc-autorizo" type="text" placeholder="Nombre"/></div>
+      </div>
+      <div class="fg">
+        <label class="fl">Observaciones / condiciones</label>
+        <textarea class="fi" id="moc-obs"></textarea>
+      </div>
+      <!-- Totales -->
+      <div class="oc-totales">
+        <div class="tot-row"><span style="color:var(--muted2)">Subtotal sin IVA</span><span id="moc-sub">$0</span></div>
+        <div class="tot-row"><span style="color:var(--muted2)">IVA</span><span id="moc-iva-val">$0</span></div>
+        <div class="tot-row"><span>TOTAL CON IVA</span><span id="moc-total">$0</span></div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal('modal-oc')">Cancelar</button>
+      <button class="btn btn-purple" onclick="generarOCPDF()">🖨️ Solo PDF</button>
+      <button class="btn btn-primary" onclick="generarOCPDF(true)">💾 Guardar + PDF</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     MODAL: NUEVA SOLICITUD DESDE COMPRAS
+═══════════════════════════════════════════ -->
+<div class="overlay" id="modal-nueva-sol">
+  <div class="modal" style="max-width:600px">
+    <div class="modal-handle"></div>
+    <div class="modal-head">
+      <span>➕</span>
+      <h3>Nueva solicitud en Bienes y Servicios</h3>
+      <button class="btn btn-ghost btn-sm" onclick="closeModal('modal-nueva-sol')">✖</button>
+    </div>
+    <div class="modal-body">
+      <!-- Buscar OP -->
+      <div class="fg">
+        <label class="fl">Buscar OP *</label>
+        <input class="fi" id="ns-op-search" type="text" placeholder="Escribe N° de OP..." oninput="nsSearchOP(this.value)"/>
+        <div id="ns-op-results" style="max-height:160px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--r2);margin-top:6px;display:none;background:var(--bg2)"></div>
+      </div>
+      <!-- OP seleccionada -->
+      <div id="ns-op-selected" style="display:none;background:var(--bg3);border:1px solid var(--accent);border-radius:var(--r2);padding:10px 12px;margin-bottom:12px">
+        <div style="font-size:12px;color:var(--muted2)">OP seleccionada</div>
+        <div id="ns-op-info" style="font-size:13px;font-weight:700;margin-top:3px"></div>
+      </div>
+
+      <div class="fg2">
+        <div>
+          <label class="fl">Tipo *</label>
+          <select class="fi" id="ns-tipo">
+            <option value="MATERIAL">🪨 Material</option>
+            <option value="SERVICIO EXTERNO">🛠 Servicio externo</option>
+          </select>
+        </div>
+        <div>
+          <label class="fl">Proveedor</label>
+          <input class="fi" id="ns-proveedor" type="text" placeholder="Proveedor (opcional)" list="prov-list"
+                 oninput="onNsProveedorInput(this.value)"/>
+        </div>
+      </div>
+      <div class="fg">
+        <label class="fl">Descripción / Producto *</label>
+        <textarea class="fi" id="ns-producto" placeholder="Ej: ACERO SAE 4140: Cilindro - Ø22 x 350mm / 1 UND - $320.000"></textarea>
+      </div>
+      <div class="fg2">
+        <div>
+          <label class="fl">Costo sin IVA</label>
+          <input class="fi" id="ns-costo" type="number" min="0" placeholder="0"/>
+        </div>
+        <div>
+          <label class="fl">Días para entrega</label>
+          <input class="fi" id="ns-dias" type="number" min="0" placeholder="Ej: 5"/>
+        </div>
+      </div>
+      <div class="fg">
+        <label class="fl">Observaciones</label>
+        <textarea class="fi" id="ns-obs" style="min-height:50px"></textarea>
+      </div>
+      <!-- Opción: marcar comprado de inmediato -->
+      <div style="display:flex;align-items:center;gap:8px;padding:10px;background:var(--bg3);border-radius:var(--r2);border:1px solid var(--border)">
+        <input type="checkbox" id="ns-marcar-comprado" style="width:16px;height:16px;accent-color:var(--accent)"/>
+        <label for="ns-marcar-comprado" style="font-size:13px;cursor:pointer;color:var(--text2)">Marcar como comprado inmediatamente</label>
+      </div>
+      <input type="hidden" id="ns-op-idqr"/>
+      <input type="hidden" id="ns-op-data" value="{}"/>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal('modal-nueva-sol')">Cancelar</button>
+      <button class="btn btn-success" onclick="guardarNuevaSolicitud()">💾 Crear solicitud</button>
+      <button class="btn btn-primary" onclick="guardarNuevaSolicitud(true)">💾 Crear + OC PDF</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     MODAL: PROVEEDOR CRUD
+═══════════════════════════════════════════ -->
+<div class="overlay" id="modal-prov">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-head">
+      <span>🏢</span>
+      <h3 id="mprov-title">Nuevo Proveedor</h3>
+      <button class="btn btn-ghost btn-sm" onclick="closeModal('modal-prov')">✖</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="mprov-id"/>
+      <div class="fg2">
+        <div>
+          <label class="fl">Nombre / Razón social *</label>
+          <input class="fi" id="mprov-nombre" type="text"/>
+        </div>
+        <div>
+          <label class="fl">NIT</label>
+          <input class="fi" id="mprov-nit" type="text"/>
+        </div>
+        <div>
+          <label class="fl">Teléfono</label>
+          <input class="fi" id="mprov-tel" type="text"/>
+        </div>
+        <div>
+          <label class="fl">Email</label>
+          <input class="fi" id="mprov-email" type="email"/>
+        </div>
+        <div>
+          <label class="fl">Ciudad</label>
+          <input class="fi" id="mprov-ciudad" type="text"/>
+        </div>
+        <div>
+          <label class="fl">Categoría</label>
+          <input class="fi" id="mprov-categoria" type="text" placeholder="Ej: Aceros, Servicios..."/>
+        </div>
+      </div>
+      <div class="fg">
+        <label class="fl">Dirección</label>
+        <input class="fi" id="mprov-contacto" type="text" placeholder="Dirección o referencia"/>
+      </div>
+      <div class="fg">
+        <label class="fl">Notas</label>
+        <textarea class="fi" id="mprov-obs" placeholder="Condiciones, observaciones..."></textarea>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal('modal-prov')">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarProveedor()">💾 Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════════
+// CONFIG — reemplazar con la URL del GAS de DISENO
+// ═══════════════════════════════════════════════════
+const API = 'https://script.google.com/macros/s/AKfycbzvVCgj3lxZZS4RFbucb-onZ6nLP-LdygX9CFSBuyx_qri8cEioETTnIjm3jJ-rI83eKg/exec';
+// SS_ID compras (para proveedores): mismo SS del ERP
+// La hoja PROVEEDORES_COMPRAS se crea vía GAS si no existe
+const SS_ID = '1cGD_MqaS3gpsA2ynLRlvtotAiEtF0KvzjfZxGDwvhsM';
+
+// ═══════════════════════════════════════════════════
+// ESTADO
+// ═══════════════════════════════════════════════════
+const DB = { bs: [], proveedores: [], produccion: [] };
+let TAB = 'pendiente';
+let GSEARCH = '';
+let SELECTED = new Set(); // IDCOMPRASs seleccionados
+let _gsTimer = null;
+
+// ═══════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════
+function fmt(n){ return '$' + Number(n||0).toLocaleString('es-CO',{minimumFractionDigits:0,maximumFractionDigits:0}); }
+function fmtDate(s){ return s ? String(s).substring(0,10) : '—'; }
+function today(){ return new Date().toISOString().slice(0,10); }
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function bsYes(v){ return String(v||'').toUpperCase()==='SI' || v===true || v===1; }
+function normIdqr(v){ return String(v||'').replace(/\.0*$/,'').trim(); }
+
+function toast(msg, type){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = type||''; t.style.display='block';
+  clearTimeout(t._t); t._t = setTimeout(()=>{ t.style.display='none'; }, 3200);
+}
+function openModal(id){ document.getElementById(id).classList.add('open'); }
+function closeModal(id){ document.getElementById(id).classList.remove('open'); }
+
+function imgSrc(op){
+  if(!op) return '';
+  if(op.IMAGEN_B64 && op.IMAGEN_B64.length>20) return 'data:image/jpeg;base64,' + op.IMAGEN_B64;
+  if(op.IMAGEN && op.IMAGEN.includes('lh3.googleusercontent.com')) return op.IMAGEN;
+  return '';
+}
+
+// ═══════════════════════════════════════════════════
+// API
+// ═══════════════════════════════════════════════════
+function GET(action, params){
+  let qs = 'action=' + action;
+  if(params) Object.keys(params).forEach(k=>{ qs += '&'+k+'='+encodeURIComponent(params[k]); });
+  return fetch(API+'?'+qs).then(r=>r.json());
+}
+function POST(action, data){
+  return fetch(API, {method:'POST', headers:{'Content-Type':'text/plain'},
+    body: JSON.stringify({action, data}) }).then(r=>r.json());
+}
+
+// ═══════════════════════════════════════════════════
+// CARGA INICIAL
+// ═══════════════════════════════════════════════════
+async function init(){
+  splashProgress(20);
+  try{
+    // Cargar BS + Producción en paralelo
+    const [rBS, rCP, rProv] = await Promise.allSettled([
+      GET('getBienesServicios'),
+      GET('getControlProduccion', {modo:'todo'}),
+      GET('getProveedoresCompras')
+    ]);
+
+    if(rBS.status==='fulfilled'){
+      const raw = rBS.value;
+      const todos = raw?.data ?? raw ?? [];
+      DB.bs = Array.isArray(todos) ? todos : [];
+    }
+
+    if(rCP.status==='fulfilled'){
+      const raw = rCP.value;
+      DB.produccion = Array.isArray(raw?.data ?? raw) ? (raw?.data ?? raw) : [];
+    }
+
+    if(rProv.status==='fulfilled'){
+      DB.proveedores = rProv.value?.proveedores || [];
+    }
+
+    splashProgress(100);
+    updateBadges();
+    fillProvDatalist();
+    setTimeout(hideSplash, 350);
+    render();
+  } catch(e){
+    toast('Error cargando datos: ' + e.message, 'error');
+    splashProgress(100);
+    setTimeout(hideSplash, 300);
+    render();
+  }
+}
+
+function splashProgress(pct){
+  const f = document.getElementById('spl-fill');
+  if(f) f.style.width = pct+'%';
+}
+function hideSplash(){
+  const s = document.getElementById('splash');
+  if(s){ s.classList.add('hide'); setTimeout(()=>s.remove(), 500); }
+}
+
+async function reloadAll(){
+  const btn = document.getElementById('btn-refresh');
+  btn.classList.add('spinning');
+  toast('Actualizando...');
+  try{
+    const [rBS, rProv] = await Promise.all([
+      GET('getBienesServicios'),
+      GET('getProveedoresCompras')
+    ]);
+    const raw = rBS?.data ?? rBS;
+    DB.bs = Array.isArray(raw) ? raw : [];
+    DB.proveedores = rProv?.proveedores || [];
+    fillProvDatalist();
+    updateBadges();
+    SELECTED.clear();
+    updateSelBar();
+    render();
+    toast('✅ Datos actualizados');
+  } catch(e){ toast('Error: '+e.message, 'error'); }
+  finally{ btn.classList.remove('spinning'); }
+}
+
+// ═══════════════════════════════════════════════════
+// DATALIST PROVEEDORES
+// ═══════════════════════════════════════════════════
+function fillProvDatalist(){
+  const dl = document.getElementById('prov-list');
+  if(!dl) return;
+  const nombres = [...new Set([
+    ...DB.proveedores.map(p=>p.NOMBRE||''),
+    ...DB.bs.map(b=>b.PROVEEDOR||'').filter(Boolean)
+  ])].filter(Boolean).sort();
+  dl.innerHTML = nombres.map(n=>'<option value="'+esc(n)+'">').join('');
+}
+
+// ═══════════════════════════════════════════════════
+// BADGES
+// ═══════════════════════════════════════════════════
+function updateBadges(){
+  const pend = DB.bs.filter(r=>!bsYes(r.COMPRADO)&&!bsYes(r.RECIBIDO)&&!bsYes(r.RECHAZADO)).length;
+  const comp = DB.bs.filter(r=>bsYes(r.COMPRADO)&&!bsYes(r.RECIBIDO)).length;
+  const tb = document.getElementById('tb-pend');
+  const tc = document.getElementById('tb-comp');
+  if(tb){ tb.textContent=pend; tb.style.display=pend>0?'':'none'; }
+  if(tc){ tc.textContent=comp; tc.style.display=comp>0?'':'none'; }
+}
+
+// ═══════════════════════════════════════════════════
+// NAV
+// ═══════════════════════════════════════════════════
+function goTab(t){
+  TAB = t;
+  SELECTED.clear();
+  updateSelBar();
+  document.querySelectorAll('.tab').forEach(el=>el.classList.toggle('active', el.dataset.tab===t));
+  render();
+}
+
+function gSearchDebounce(){
+  clearTimeout(_gsTimer);
+  _gsTimer = setTimeout(()=>{ GSEARCH=document.getElementById('g-search').value; render(); }, 320);
+}
+
+// ═══════════════════════════════════════════════════
+// RENDER PRINCIPAL
+// ═══════════════════════════════════════════════════
+function render(){
+  if(TAB==='proveedores'){ renderProveedores(); return; }
+  if(TAB==='dashboard')  { renderDashboard();   return; }
+  renderBS();
+}
+
+// ═══════════════════════════════════════════════════
+// RENDER BS — Bienes y Servicios
+// ═══════════════════════════════════════════════════
+function renderBS(){
+  const content = document.getElementById('content');
+  let rows = DB.bs;
+
+  // Filtro por tab
+  rows = rows.filter(r=>{
+    const comp  = bsYes(r.COMPRADO);
+    const recib = bsYes(r.RECIBIDO);
+    const rechaz= bsYes(r.RECHAZADO);
+    if(TAB==='pendiente') return !comp && !recib && !rechaz;
+    if(TAB==='comprado')  return comp && !recib;
+    if(TAB==='recibido')  return recib;
+    if(TAB==='rechazado') return rechaz;
+    return true; // todos
+  });
+
+  // Filtro búsqueda global
+  if(GSEARCH){
+    const q = GSEARCH.toLowerCase();
+    rows = rows.filter(r=>[r['#OP'],r.PRODUCTO,r['EMPRESA/CLIENTE'],r.COLABORADOR,r['ORDEN DE COMPRA'],r.PROVEEDOR,r.IDCOMPRAS]
+      .some(v=>String(v||'').toLowerCase().includes(q)));
+  }
+
+  if(!rows.length){
+    content.innerHTML = '<div class="empty"><div class="empty-icon">'+(TAB==='pendiente'?'✅':'🔍')+'</div><p>'+(TAB==='pendiente'?'Sin pedidos pendientes':'Sin resultados')+'</p></div>';
+    return;
+  }
+
+  // Agrupar por ORDEN DE COMPRA
+  const grupos = {};
+  rows.forEach(r=>{
+    const oc = r['ORDEN DE COMPRA'] || r.IDCOMPRAS || '—';
+    if(!grupos[oc]) grupos[oc]=[];
+    grupos[oc].push(r);
+  });
+
+  // KPIs del tab actual
+  const total = rows.length;
+  const totalCosto = rows.reduce((s,r)=>s+parseFloat(r['COSTO SIN IVA']||r['$COSTO MP  (Pesos)']||r['PRECIO COTIZADO']||0),0);
+  const totalOCs = Object.keys(grupos).length;
+
+  let html = '';
+
+  // KPIs
+  html += '<div class="kpi-row">';
+  html += '<div class="kpi blue"><div class="val">'+totalOCs+'</div><div class="lbl">OC / Grupos</div></div>';
+  html += '<div class="kpi yellow"><div class="val">'+total+'</div><div class="lbl">Ítems</div></div>';
+  if(TAB==='pendiente') html += '<div class="kpi red"><div class="val">'+rows.filter(r=>!bsYes(r['AUTORIZACION JUAN DIEGO'])).length+'</div><div class="lbl">Sin autorizar</div></div>';
+  if(TAB!=='pendiente') html += '<div class="kpi green"><div class="val">'+fmt(totalCosto)+'</div><div class="lbl">Costo total</div></div>';
+  html += '</div>';
+
+  // Acciones bulk (solo en pendiente)
+  if(TAB==='pendiente'){
+    html += '<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">';
+    html += '<button class="btn btn-ghost btn-sm" onclick="selectAll()">☑ Seleccionar todo</button>';
+    html += '<button class="btn btn-ghost btn-sm" onclick="clearSelection()">✖ Limpiar selección</button>';
+    html += '</div>';
+  }
+
+  // Cards por OC
+  const entries = Object.entries(grupos).sort((a,b)=>b[0].localeCompare(a[0]));
+  entries.forEach(([oc, items])=>{
+    html += renderOCCard(oc, items);
+  });
+
+  content.innerHTML = html;
+}
+
+function renderOCCard(oc, items){
+  const r0 = items[0];
+  const comp  = items.every(r=>bsYes(r.COMPRADO));
+  const recib = items.every(r=>bsYes(r.RECIBIDO));
+  const rechaz= items.some(r=>bsYes(r.RECHAZADO));
+  const autJD = bsYes(r0['AUTORIZACION JUAN DIEGO']);
+
+  const estadoBadge = recib
+    ? '<span class="badge badge-recib">✅ RECIBIDO</span>'
+    : comp ? '<span class="badge badge-comp">🛒 COMPRADO</span>'
+    : rechaz ? '<span class="badge badge-rechaz">❌ RECHAZADO</span>'
+    : '<span class="badge badge-pend">⏳ PENDIENTE</span>';
+
+  // Imagen desde DB.produccion
+  const opData = DB.produccion.find(op=>String(op.OP||'').trim()===String(r0['#OP']||'').trim());
+  const src = imgSrc(opData);
+  const imgEl = src
+    ? '<img class="oc-head-img" src="'+src+'" loading="lazy" onerror="this.style.display=\'none\'">'
+    : '<div class="oc-head-noimg">🪨</div>';
+
+  // Items seleccionados
+  const allSel = items.every(it=>SELECTED.has(it.IDCOMPRAS));
+  const someSel = items.some(it=>SELECTED.has(it.IDCOMPRAS));
+
+  let html = '<div class="oc-card" id="occ-'+CSS.escape(oc)+'">';
+  // HEAD
+  html += '<div class="oc-head" onclick="toggleOCCard(\''+esc(oc)+'\')">';
+  html += imgEl;
+  html += '<div class="oc-head-info">';
+  html += '<div class="oc-id">'+esc(oc)+'</div>';
+  html += '<div class="oc-op">OP-'+esc(r0['#OP']||'—')+'  ·  '+esc(r0['EMPRESA/CLIENTE']||'—')+'</div>';
+  html += '<div class="oc-meta">👤 '+esc(r0.COLABORADOR||'—')+'  ·  📅 '+fmtDate(r0['FECHA DE PEDIDO'])+'  ·  '+items.length+' ítem(s)</div>';
+  html += '</div>';
+  html += '<div class="oc-status">';
+  html += estadoBadge;
+  html += autJD ? '<span class="badge badge-autjd">✔ Aut. JD</span>'
+    : '<button class="btn btn-xs" style="background:rgba(124,58,237,.15);color:var(--purple);border:1px solid rgba(124,58,237,.3)" onclick="event.stopPropagation();autorizarOC(\''+esc(oc)+'\')">Autorizar JD</button>';
+  html += '<span class="oc-chevron" style="font-size:14px">▾</span>';
+  html += '</div>';
+  html += '</div>';
+
+  // ITEMS
+  html += '<div class="oc-items">';
+
+  // Toolbar OC
+  html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center">';
+  if(TAB==='pendiente' || TAB==='todos'){
+    html += '<input type="checkbox" '+(allSel?'checked':someSel?'indeterminate':'')+' onclick="toggleSelectOC(\''+esc(oc)+'\')" style="accent-color:var(--accent);width:16px;height:16px">';
+    html += '<span style="font-size:11px;color:var(--muted2);margin-right:4px">Seleccionar grupo</span>';
+  }
+  html += '<button class="btn btn-xs btn-purple" onclick="openOCModalFromGroup(\''+esc(oc)+'\')">📄 OC PDF</button>';
+  if(!comp && !recib){
+    html += '<button class="btn btn-xs btn-primary" onclick="marcarGrupoComprado(\''+esc(oc)+'\')">🛒 Marcar grupo comprado</button>';
+  }
+  html += '</div>';
+
+  items.forEach(it=>{
+    html += renderItRow(it);
+  });
+
+  html += '</div>'; // oc-items
+  html += '</div>'; // oc-card
+  return html;
+}
+
+function renderItRow(it){
+  const comp  = bsYes(it.COMPRADO);
+  const recib = bsYes(it.RECIBIDO);
+  const rechaz= bsYes(it.RECHAZADO);
+  const esSvc = it['TIPO DE PEDIDO']==='SERVICIO EXTERNO';
+  const isSel = SELECTED.has(it.IDCOMPRAS);
+
+  const costo = parseFloat(it['COSTO SIN IVA']||it['$COSTO MP  (Pesos)']||it['$COSTO SERVICIO EXT.']||it['PRECIO COTIZADO']||0);
+
+  let html = '<div class="it-row'+(isSel?' it-sel':'')+'" id="itr-'+CSS.escape(it.IDCOMPRAS)+'" style="'+(isSel?'border-color:var(--accent);background:rgba(79,142,247,.06)':'')+'">';
+  html += '<div class="it-top">';
+
+  // Checkbox selección
+  if(TAB==='pendiente'||TAB==='todos'){
+    html += '<input type="checkbox" '+(isSel?'checked':'')+' onclick="toggleSelectItem(\''+esc(it.IDCOMPRAS)+'\')" style="accent-color:var(--accent);width:16px;height:16px;margin-top:3px;flex-shrink:0">';
+  }
+
+  html += '<div class="it-icon">'+(esSvc?'🛠':'🪨')+'</div>';
+  html += '<div class="it-info">';
+  html += '<div class="it-prod">'+esc(it.PRODUCTO||'Sin descripción')+'</div>';
+  html += '<div class="it-sub">';
+  html += '<span>'+esc(it['TIPO DE PEDIDO']||'—')+'</span>';
+  if(it.PROVEEDOR) html += '<span>🏭 '+esc(it.PROVEEDOR)+'</span>';
+  if(costo) html += '<span style="color:var(--green)">'+fmt(costo)+'</span>';
+  if(it['FECHA  DE COMPRA']||it['FECHA DE COMPRA']) html += '<span>🛒 '+fmtDate(it['FECHA  DE COMPRA']||it['FECHA DE COMPRA'])+'</span>';
+  if(it['FECHA RECIBIDO ']||it['FECHA RECIBIDO']) html += '<span>✅ '+fmtDate(it['FECHA RECIBIDO ']||it['FECHA RECIBIDO'])+'</span>';
+  if(it['# FACTURA']) html += '<span>📄 '+esc(it['# FACTURA'])+'</span>';
+  html += '</div>';
+
+  // Tags estado
+  html += '<div class="it-tags">';
+  html += esSvc ? '<span class="badge badge-svc">🛠 Servicio</span>' : '<span class="badge badge-mat">🪨 Material</span>';
+  if(bsYes(it['AUTORIZACION JUAN DIEGO'])) html += '<span class="badge badge-autjd">✔ Aut. JD</span>';
+  if(recib) html += '<span class="badge badge-recib">✅ Recibido</span>';
+  else if(comp) html += '<span class="badge badge-comp">🛒 Comprado</span>';
+  else if(rechaz) html += '<span class="badge badge-rechaz">❌ Rechazado</span>';
+  else html += '<span class="badge badge-pend">⏳ Pendiente</span>';
+  html += '</div>';
+
+  html += '</div>'; // it-info
+
+  // Botones acción
+  html += '<div class="it-actions">';
+  if(!comp && !recib && !rechaz){
+    html += '<button class="btn btn-xs btn-primary" onclick="openComprado(\''+esc(it.IDCOMPRAS)+'\')">🛒 Comprado</button>';
+    html += '<button class="btn btn-xs btn-danger" onclick="openRechazar(\''+esc(it.IDCOMPRAS)+'\')">❌</button>';
+  } else if(comp && !recib){
+    html += '<button class="btn btn-xs btn-success" onclick="openRecibido(\''+esc(it.IDCOMPRAS)+'\')">✅ Recibido</button>';
+  }
+  html += '</div>';
+
+  html += '</div>'; // it-top
+
+  html += '</div>'; // it-row
+  return html;
+}
+
+function toggleOCCard(oc){
+  // Buscar el elemento por el id generado con CSS.escape
+  const card = document.getElementById('occ-'+CSS.escape(oc));
+  if(card) card.classList.toggle('expanded');
+}
+
+// ═══════════════════════════════════════════════════
+// SELECCIÓN MÚLTIPLE
+// ═══════════════════════════════════════════════════
+function toggleSelectItem(idcompras){
+  if(SELECTED.has(idcompras)) SELECTED.delete(idcompras);
+  else SELECTED.add(idcompras);
+  // Update visual del row
+  const row = document.getElementById('itr-'+CSS.escape(idcompras));
+  if(row){
+    const sel = SELECTED.has(idcompras);
+    row.style.borderColor = sel?'var(--accent)':'';
+    row.style.background  = sel?'rgba(79,142,247,.06)':'';
+    const cb = row.querySelector('input[type=checkbox]');
+    if(cb) cb.checked = sel;
+  }
+  updateSelBar();
+}
+
+function toggleSelectOC(oc){
+  const items = DB.bs.filter(r=>(r['ORDEN DE COMPRA']||r.IDCOMPRAS)===oc);
+  const allSel = items.every(it=>SELECTED.has(it.IDCOMPRAS));
+  items.forEach(it=>{ if(allSel) SELECTED.delete(it.IDCOMPRAS); else SELECTED.add(it.IDCOMPRAS); });
+  updateSelBar();
+  render();
+}
+
+function selectAll(){
+  const rows = DB.bs.filter(r=>!bsYes(r.COMPRADO)&&!bsYes(r.RECIBIDO)&&!bsYes(r.RECHAZADO));
+  rows.forEach(r=>SELECTED.add(r.IDCOMPRAS));
+  updateSelBar();
+  render();
+}
+
+function clearSelection(){
+  SELECTED.clear();
+  updateSelBar();
+  render();
+}
+
+function updateSelBar(){
+  const bar = document.getElementById('sel-bar');
+  const cnt = document.getElementById('sel-count');
+  if(cnt) cnt.textContent = SELECTED.size;
+  bar.classList.toggle('show', SELECTED.size > 0);
+}
+
+// ═══════════════════════════════════════════════════
+// ACCIONES: COMPRADO
+// ═══════════════════════════════════════════════════
+function openComprado(idcompras){
+  const it = DB.bs.find(r=>r.IDCOMPRAS===idcompras);
+  if(!it) return;
+  document.getElementById('mc-idcompras').value = idcompras;
+  document.getElementById('mc-producto').innerHTML = '<b>'+esc(it.PRODUCTO||'—')+'</b><br><span style="color:var(--muted2);font-size:11px">OP: '+esc(it['#OP']||'—')+' · '+esc(it['EMPRESA/CLIENTE']||'—')+'</span>';
+  document.getElementById('mc-proveedor').value = it.PROVEEDOR||'';
+  document.getElementById('mc-costo').value     = it['COSTO SIN IVA']||it['$COSTO MP  (Pesos)']||it['PRECIO COTIZADO']||'';
+  document.getElementById('mc-fecha').value     = today();
+  document.getElementById('mc-dias').value      = it['DIAS PARA ENTREGA']||'';
+  document.getElementById('mc-oc-ref').value    = it['ORDEN DE COMPRA']||'';
+  document.getElementById('mc-obs').value       = '';
+  openModal('modal-comprado');
+}
+
+async function confirmarComprado(){
+  const idcompras  = document.getElementById('mc-idcompras').value;
+  const proveedor  = document.getElementById('mc-proveedor').value.trim();
+  const costoReal  = document.getElementById('mc-costo').value;
+  const fecha      = document.getElementById('mc-fecha').value;
+  const dias       = document.getElementById('mc-dias').value;
+  const obs        = document.getElementById('mc-obs').value.trim();
+
+  if(!proveedor){ toast('Ingresa el proveedor','warn'); return; }
+
+  try{
+    await POST('marcarCompradoBS', {IDCOMPRAS:idcompras, proveedor, costoReal, fechaCompra:fecha, diasEntrega:dias});
+    // Actualizar local
+    const it = DB.bs.find(r=>r.IDCOMPRAS===idcompras);
+    if(it){ it.COMPRADO='SI'; it.PROVEEDOR=proveedor; it['COSTO SIN IVA']=costoReal; it['FECHA  DE COMPRA']=fecha; it['DIAS PARA ENTREGA']=dias; }
+    closeModal('modal-comprado');
+    updateBadges();
+    render();
+    toast('✅ Marcado como comprado');
+  } catch(e){ toast('Error: '+e.message,'error'); }
+}
+
+async function marcarGrupoComprado(oc){
+  // Abre modal de comprado con el primer ítem pendiente del grupo y aplica a todos
+  const items = DB.bs.filter(r=>(r['ORDEN DE COMPRA']||r.IDCOMPRAS)===oc && !bsYes(r.COMPRADO) && !bsYes(r.RECIBIDO));
+  if(!items.length){ toast('No hay ítems pendientes en este grupo','warn'); return; }
+  // Usar modal con el primer ítem, pero al confirmar marcar todos
+  const it = items[0];
+  document.getElementById('mc-idcompras').value = '_GRUPO_:'+oc;
+  document.getElementById('mc-producto').innerHTML = '<b>Grupo: '+esc(oc)+'</b> — '+items.length+' ítem(s)<br><span style="color:var(--muted2);font-size:11px">Se aplicará el mismo proveedor/precio a todos los ítems del grupo</span>';
+  document.getElementById('mc-proveedor').value = it.PROVEEDOR||'';
+  document.getElementById('mc-costo').value     = '';
+  document.getElementById('mc-fecha').value     = today();
+  document.getElementById('mc-dias').value      = '';
+  document.getElementById('mc-oc-ref').value    = oc;
+  document.getElementById('mc-obs').value       = '';
+  openModal('modal-comprado');
+}
+
+// Override confirmarComprado para grupos
+const _origConfComprado = window.confirmarComprado;
+window.confirmarComprado = async function(){
+  const raw = document.getElementById('mc-idcompras').value;
+  if(raw.startsWith('_GRUPO_:')){
+    const oc = raw.replace('_GRUPO_:','');
+    const proveedor = document.getElementById('mc-proveedor').value.trim();
+    const fecha     = document.getElementById('mc-fecha').value;
+    const dias      = document.getElementById('mc-dias').value;
+    if(!proveedor){ toast('Ingresa el proveedor','warn'); return; }
+    const items = DB.bs.filter(r=>(r['ORDEN DE COMPRA']||r.IDCOMPRAS)===oc && !bsYes(r.COMPRADO) && !bsYes(r.RECIBIDO));
+    toast('Guardando '+items.length+' ítems...');
+    for(const it of items){
+      const costo = document.getElementById('mc-costo').value || it['COSTO SIN IVA']||it['PRECIO COTIZADO']||0;
+      await POST('marcarCompradoBS',{IDCOMPRAS:it.IDCOMPRAS,proveedor,costoReal:costo,fechaCompra:fecha,diasEntrega:dias});
+      it.COMPRADO='SI'; it.PROVEEDOR=proveedor; it['FECHA  DE COMPRA']=fecha;
+    }
+    closeModal('modal-comprado');
+    updateBadges();
+    render();
+    toast('✅ Grupo marcado como comprado');
+    return;
+  }
+  // Ítem individual
+  const idcompras  = raw;
+  const proveedor  = document.getElementById('mc-proveedor').value.trim();
+  const costoReal  = document.getElementById('mc-costo').value;
+  const fecha      = document.getElementById('mc-fecha').value;
+  const dias       = document.getElementById('mc-dias').value;
+  const obs        = document.getElementById('mc-obs').value.trim();
+  if(!proveedor){ toast('Ingresa el proveedor','warn'); return; }
+  try{
+    await POST('marcarCompradoBS',{IDCOMPRAS:idcompras,proveedor,costoReal,fechaCompra:fecha,diasEntrega:dias});
+    const it = DB.bs.find(r=>r.IDCOMPRAS===idcompras);
+    if(it){ it.COMPRADO='SI'; it.PROVEEDOR=proveedor; it['COSTO SIN IVA']=costoReal; it['FECHA  DE COMPRA']=fecha; it['DIAS PARA ENTREGA']=dias; }
+    closeModal('modal-comprado');
+    updateBadges();
+    render();
+    toast('✅ Marcado como comprado');
+  } catch(e){ toast('Error: '+e.message,'error'); }
+};
+
+// ═══════════════════════════════════════════════════
+// ACCIONES: RECIBIDO
+// ═══════════════════════════════════════════════════
+function openRecibido(idcompras){
+  const it = DB.bs.find(r=>r.IDCOMPRAS===idcompras);
+  if(!it) return;
+  document.getElementById('mr-idcompras').value  = idcompras;
+  document.getElementById('mr-producto').innerHTML = '<b>'+esc(it.PRODUCTO||'—')+'</b><br><span style="color:var(--muted2);font-size:11px">Proveedor: '+esc(it.PROVEEDOR||'—')+'</span>';
+  document.getElementById('mr-fecha').value    = today();
+  document.getElementById('mr-factura').value  = it['# FACTURA']||'';
+  document.getElementById('mr-obs').value      = '';
+  openModal('modal-recibido');
+}
+
+async function confirmarRecibido(){
+  const idcompras = document.getElementById('mr-idcompras').value;
+  const factura   = document.getElementById('mr-factura').value.trim();
+  const fecha     = document.getElementById('mr-fecha').value;
+  const obs       = document.getElementById('mr-obs').value.trim();
+  try{
+    await POST('marcarRecibidoBS',{IDCOMPRAS:idcompras,numFactura:factura,fechaRecibido:fecha,observaciones:obs});
+    const it = DB.bs.find(r=>r.IDCOMPRAS===idcompras);
+    if(it){ it.RECIBIDO='SI'; it['# FACTURA']=factura; it['FECHA RECIBIDO ']=fecha; }
+    closeModal('modal-recibido');
+    updateBadges();
+    render();
+    toast('✅ Recepción registrada');
+  } catch(e){ toast('Error: '+e.message,'error'); }
+}
+
+// ═══════════════════════════════════════════════════
+// ACCIONES: RECHAZAR
+// ═══════════════════════════════════════════════════
+function openRechazar(idcompras){
+  const it = DB.bs.find(r=>r.IDCOMPRAS===idcompras);
+  if(!it) return;
+  document.getElementById('mrej-idcompras').value = idcompras;
+  document.getElementById('mrej-producto').innerHTML = '<b>'+esc(it.PRODUCTO||'—')+'</b>';
+  document.getElementById('mrej-motivo').value = '';
+  openModal('modal-rechazar');
+}
+
+async function confirmarRechazo(){
+  const idcompras = document.getElementById('mrej-idcompras').value;
+  const motivo    = document.getElementById('mrej-motivo').value.trim();
+  if(!motivo){ toast('Ingresa el motivo','warn'); return; }
+  try{
+    await POST('rechazarBS',{IDCOMPRAS:idcompras,motivo});
+    const it = DB.bs.find(r=>r.IDCOMPRAS===idcompras);
+    if(it){ it.RECHAZADO='SI'; it['MOTIVO DE RECHAZO']=motivo; }
+    closeModal('modal-rechazar');
+    updateBadges();
+    render();
+    toast('❌ Ítem rechazado');
+  } catch(e){ toast('Error: '+e.message,'error'); }
+}
+
+// ═══════════════════════════════════════════════════
+// ACCIONES: AUTORIZAR JD
+// ═══════════════════════════════════════════════════
+async function autorizarOC(oc){
+  if(!confirm('¿Autorizar todos los ítems de la OC '+oc+'?')) return;
+  try{
+    await POST('autorizarOrdenBS',{ordenCompra:oc,valor:'SI'});
+    DB.bs.filter(r=>(r['ORDEN DE COMPRA']||r.IDCOMPRAS)===oc).forEach(r=>r['AUTORIZACION JUAN DIEGO']='SI');
+    render();
+    toast('✅ OC autorizada por JD');
+  } catch(e){ toast('Error: '+e.message,'error'); }
+}
+
+// ═══════════════════════════════════════════════════
+// OC MODAL — generar PDF
+// ═══════════════════════════════════════════════════
+function openOCModal(){
+  // Desde selección múltiple
+  const items = DB.bs.filter(r=>SELECTED.has(r.IDCOMPRAS));
+  if(!items.length){ toast('Selecciona al menos un ítem','warn'); return; }
+  _openOCModalWithItems(items);
+}
+
+function openOCModalFromGroup(oc){
+  const items = DB.bs.filter(r=>(r['ORDEN DE COMPRA']||r.IDCOMPRAS)===oc);
+  _openOCModalWithItems(items, oc);
+}
+
+// _mocItems: copia local editable de los ítems en el modal OC
+let _mocItems = [];
+
+function _openOCModalWithItems(items, ocId){
+  // Clonar items para edición local sin mutar DB.bs
+  _mocItems = items.map(it=>({
+    ...it,
+    _costo_edit: parseFloat(it['COSTO SIN IVA']||it['$COSTO MP  (Pesos)']||it['$COSTO SERVICIO EXT.']||it['PRECIO COTIZADO']||0)
+  }));
+
+  renderMocItemsList();
+
+  // Pre-llenar proveedor si todos tienen el mismo
+  const provs = [...new Set(items.map(it=>it.PROVEEDOR||'').filter(Boolean))];
+  const provNombre = provs.length===1 ? provs[0] : '';
+  document.getElementById('moc-proveedor').value = provNombre;
+  _fillProveedorFields(provNombre);
+
+  document.getElementById('moc-iva').value       = 19;
+  document.getElementById('moc-forma-pago').value = '';
+  document.getElementById('moc-solicito').value   = '';
+  document.getElementById('moc-autorizo').value   = '';
+  document.getElementById('moc-obs').value        = '';
+  calcOCTotales();
+  openModal('modal-oc');
+}
+
+function renderMocItemsList(){
+  const list = document.getElementById('moc-items-list');
+  if(!list) return;
+  list.innerHTML = _mocItems.map((it,i)=>{
+    const esSvc = it['TIPO DE PEDIDO']==='SERVICIO EXTERNO';
+    return '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:10px;display:flex;align-items:center;gap:10px">'
+      +'<span style="font-size:18px;flex-shrink:0">'+(esSvc?'🛠':'🪨')+'</span>'
+      +'<div style="flex:1;min-width:0">'
+        +'<div style="font-size:12px;font-weight:600;word-break:break-word">'+esc(it.PRODUCTO||'—')+'</div>'
+        +'<div style="font-size:10px;color:var(--muted2);margin-top:2px">OP '+esc(it['#OP']||'—')+' · Ítem '+esc(it.ITEM||'—')+'</div>'
+      +'</div>'
+      +'<div style="flex-shrink:0;text-align:right">'
+        +'<div style="font-size:10px;color:var(--muted2);margin-bottom:3px">Costo sin IVA</div>'
+        +'<input type="number" min="0" value="'+it._costo_edit+'" '
+          +'style="width:110px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;'
+          +'padding:5px 8px;color:var(--text);font-size:13px;font-weight:600;text-align:right;outline:none" '
+          +'oninput="updateMocItemCosto('+i+',this.value)" onfocus="this.style.borderColor=\'var(--accent)\'" onblur="this.style.borderColor=\'var(--border)\'"/>'
+      +'</div>'
+      +'</div>';
+  }).join('');
+}
+
+function updateMocItemCosto(i, val){
+  _mocItems[i]._costo_edit = parseFloat(val)||0;
+  calcOCTotales();
+}
+
+// Autocompletado proveedor: al escribir, busca coincidencia exacta y rellena
+let _mocProvTimer = null;
+function onMocProveedorInput(val){
+  clearTimeout(_mocProvTimer);
+  _mocProvTimer = setTimeout(()=>{
+    _fillProveedorFields(val.trim());
+  }, 300);
+}
+function onMocProveedorChange(val){
+  _fillProveedorFields(val.trim());
+}
+
+function _fillProveedorFields(nombre){
+  const hint = document.getElementById('moc-prov-hint');
+  if(!nombre){ if(hint) hint.style.display='none'; return; }
+  const p = DB.proveedores.find(x=>(x.NOMBRE||'').toLowerCase()===nombre.toLowerCase())
+         || DB.proveedores.find(x=>(x.NOMBRE||'').toLowerCase().startsWith(nombre.toLowerCase()));
+  if(p){
+    document.getElementById('moc-nit').value      = p.NIT||'';
+    document.getElementById('moc-email').value    = p.EMAIL||'';
+    document.getElementById('moc-tel').value      = p.TELEFONO||'';
+    document.getElementById('moc-ciudad').value   = p.CIUDAD||'';
+    document.getElementById('moc-direccion').value= p.CONTACTO||p.DIRECCION||'';
+    if(hint){ hint.style.display='block'; hint.textContent='✔ '+p.NOMBRE+' — datos cargados'; }
+  } else {
+    if(hint) hint.style.display='none';
+  }
+}
+
+// Autocompletado proveedor en campo mc-proveedor (modal comprado individual)
+document.addEventListener('DOMContentLoaded', ()=>{
+  const mcProv = document.getElementById('mc-proveedor');
+  if(mcProv) mcProv.addEventListener('input', e=>{
+    const p = DB.proveedores.find(x=>(x.NOMBRE||'').toLowerCase()===e.target.value.toLowerCase())
+           || DB.proveedores.find(x=>(x.NOMBRE||'').toLowerCase().startsWith(e.target.value.toLowerCase()));
+    // No hay campos extra en modal comprado, solo es para el datalist
+  });
+});
+
+function calcOCTotales(){
+  const iva_pct = parseFloat(document.getElementById('moc-iva').value)||0;
+  const sub = _mocItems.reduce((s,it)=>s+(it._costo_edit||0), 0);
+  const iva = sub*iva_pct/100;
+  document.getElementById('moc-sub').textContent      = fmt(sub);
+  document.getElementById('moc-iva-val').textContent  = fmt(iva);
+  document.getElementById('moc-total').textContent    = fmt(sub+iva);
+}
+
+async function generarOCPDF(guardar){
+  const items    = _mocItems;
+  const prov     = document.getElementById('moc-proveedor').value.trim();
+  if(!prov){ toast('Ingresa el proveedor','warn'); return; }
+
+  const nit      = document.getElementById('moc-nit').value.trim();
+  const email    = document.getElementById('moc-email').value.trim();
+  const tel      = document.getElementById('moc-tel').value.trim();
+  const ciudad   = document.getElementById('moc-ciudad').value.trim();
+  const direccion= document.getElementById('moc-direccion').value.trim();
+  const iva_pct  = parseFloat(document.getElementById('moc-iva').value)||0;
+  const formaPago= document.getElementById('moc-forma-pago').value.trim();
+  const solicito = document.getElementById('moc-solicito').value.trim();
+  const autorizo = document.getElementById('moc-autorizo').value.trim();
+  const obs      = document.getElementById('moc-obs').value.trim();
+
+  const oc_num   = items[0]?.['ORDEN DE COMPRA'] || ('OC-'+Date.now());
+  const sub      = items.reduce((s,it)=>s+(it._costo_edit||0), 0);
+  const iva_val  = sub * iva_pct/100;
+  const total    = sub + iva_val;
+
+  const provObj = {
+    NOMBRE: prov, NIT: nit, EMAIL: email, TELEFONO: tel,
+    CIUDAD: ciudad, CONTACTO: direccion, DIRECCION: direccion,
+    EMPRESA: prov
+  };
+
+  // Buscar logo del proveedor si está guardado
+  const pDB = DB.proveedores.find(x=>(x.NOMBRE||'').toLowerCase()===prov.toLowerCase());
+  if(pDB) provObj.LOGO_URL = pDB.LOGO_URL || '';
+
+  // ── GUARDAR en ORDEN_COMPRAS + ELEMENTOS_OC ──────────────
+  if(guardar){
+    toast('Guardando OC en Sheets...');
+    try{
+      const itemsPayload = items.map(it=>({
+        ...it,
+        costoTotal: it._costo_edit||0,
+        unidades:   parseFloat(it.CANT||1)||1,
+        // campos de detalle del ítem (editados inline)
+        mat1:        it._mat1||'',
+        geo1:        it._geo1||'',
+        diam1:       it._diam1||'',
+        largo1:      it._largo1||'',
+        ancho1:      it._ancho1||'',
+        esp1:        it._esp1||'',
+        costoMat1:   it._costoMat1||'',
+        svcExt1:     it._svcExt1||'',
+        diasSvc1:    it._diasSvc1||it['DIAS PARA ENTREGA']||'',
+        costoSvc1:   it._costoSvc1||'',
+        costoFlete:  it._costoFlete||'',
+        fechaEntrega:it._fechaEntrega||''
+      }));
+
+      const res = await POST('createOrdenCompra',{
+        ordenCompra:  oc_num,
+        proveedor:    provObj,
+        items:        itemsPayload,
+        iva_pct,
+        observaciones:obs,
+        solicito,
+        autorizo,
+        formaPago
+      });
+
+      if(res.error){ toast('Error GAS: '+res.error,'error'); }
+      else {
+        toast('✅ OC guardada en Sheets');
+        SELECTED.clear();
+        updateSelBar();
+        updateBadges();
+        // Actualizar estado local de BS
+        items.forEach(it=>{
+          const dbIt = DB.bs.find(r=>r.IDCOMPRAS===it.IDCOMPRAS);
+          if(dbIt){ dbIt.COMPRADO='SI'; dbIt.PROVEEDOR=prov; dbIt['COSTO SIN IVA']=it._costo_edit||0; }
+        });
+      }
+    } catch(e){ toast('Error: '+e.message,'error'); }
+  }
+
+  // ── GENERAR PDF ───────────────────────────────────────────
+  const { jsPDF } = jspdf;
+  const doc = new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+  const W = doc.internal.pageSize.getWidth();
+  const H = doc.internal.pageSize.getHeight();
+  const M = 14;
+  let y = M;
+
+  // Header
+  doc.setFillColor(10,15,30);
+  doc.rect(0,0,W,34,'F');
+  doc.setFontSize(20);doc.setTextColor(79,142,247);doc.setFont('helvetica','bold');
+  doc.text('ORDEN DE COMPRA',M,14);
+  doc.setFontSize(9);doc.setTextColor(100,116,139);doc.setFont('helvetica','normal');
+  doc.text('Grupo WEDM · Mecanizado por hilo y electroerosión',M,21);
+  doc.setFontSize(18);doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');
+  doc.text(oc_num,W-M,16,{align:'right'});
+  doc.setFontSize(9);doc.setTextColor(100,116,139);doc.setFont('helvetica','normal');
+  doc.text(new Date().toLocaleDateString('es-CO',{day:'2-digit',month:'long',year:'numeric'}),W-M,23,{align:'right'});
+
+  y = 42;
+
+  // Caja proveedor
+  doc.setFillColor(24,32,64);
+  doc.roundedRect(M,y,W-M*2,34,3,3,'F');
+  doc.setFontSize(8);doc.setTextColor(100,116,139);doc.setFont('helvetica','bold');
+  doc.text('PROVEEDOR',M+4,y+7);
+  doc.setFontSize(12);doc.setTextColor(226,232,240);doc.setFont('helvetica','bold');
+  doc.text(prov,M+4,y+15);
+  doc.setFontSize(8.5);doc.setFont('helvetica','normal');doc.setTextColor(148,163,184);
+  const l1=[nit?'NIT: '+nit:'',tel?'Tel: '+tel:'',email||''].filter(Boolean).join('   ');
+  const l2=[direccion||'',ciudad||''].filter(Boolean).join(' — ');
+  if(l1) doc.text(l1,M+4,y+22);
+  if(l2) doc.text(l2,M+4,y+29);
+
+  y += 42;
+
+  // Tabla ítems
+  const rows = items.map((it,i)=>{
+    const esSvc = it['TIPO DE PEDIDO']==='SERVICIO EXTERNO';
+    return [
+      String(it['#OP']||'—'),
+      String(it.ITEM||'—'),
+      (it.PRODUCTO||'').substring(0,42),
+      esSvc?'Servicio':'Material',
+      String(parseFloat(it.CANT||1)||1),
+      fmt(it._costo_edit||0)
+    ];
+  });
+
+  doc.autoTable({
+    startY:y,
+    head:[['OP','Ítem','Descripción','Tipo','Und','Costo sin IVA']],
+    body:rows,
+    margin:{left:M,right:M},
+    styles:{fontSize:9,cellPadding:4,textColor:[226,232,240],fillColor:[19,26,53]},
+    headStyles:{fillColor:[30,40,80],textColor:[148,163,184],fontStyle:'bold',fontSize:8},
+    alternateRowStyles:{fillColor:[24,32,64]},
+    columnStyles:{0:{cellWidth:18},1:{cellWidth:12},2:{cellWidth:80},3:{cellWidth:20},4:{cellWidth:12},5:{cellWidth:28}}
+  });
+
+  y = doc.lastAutoTable.finalY+8;
+
+  // Totales
+  const tx=W-M-75;
+  doc.setFillColor(24,32,64);
+  doc.roundedRect(tx-4,y-4,79,46,3,3,'F');
+  doc.setFontSize(9);doc.setTextColor(100,116,139);doc.setFont('helvetica','normal');
+  doc.text('Subtotal sin IVA:',tx,y+5);doc.setTextColor(226,232,240);doc.text(fmt(sub),W-M,y+5,{align:'right'});
+  doc.setTextColor(100,116,139);
+  doc.text('IVA ('+iva_pct+'%):',tx,y+13);doc.setTextColor(226,232,240);doc.text(fmt(iva_val),W-M,y+13,{align:'right'});
+  doc.setFontSize(11);doc.setFont('helvetica','bold');doc.setTextColor(79,142,247);
+  doc.text('TOTAL CON IVA:',tx,y+25);doc.text(fmt(total),W-M,y+25,{align:'right'});
+  if(formaPago){ doc.setFontSize(8);doc.setFont('helvetica','normal');doc.setTextColor(100,116,139);
+    doc.text('Pago: '+formaPago,tx,y+34); }
+
+  y += 50;
+
+  // Condiciones / obs
+  if(obs){
+    doc.setFontSize(9);doc.setFont('helvetica','bold');doc.setTextColor(100,116,139);
+    doc.text('OBSERVACIONES:',M,y);
+    doc.setFont('helvetica','normal');doc.setTextColor(226,232,240);
+    const ls=doc.splitTextToSize(obs,W-M*2);
+    doc.text(ls,M,y+7);
+    y+=7+ls.length*5+8;
+  }
+
+  // Firmas
+  if(y+30<H-18){
+    doc.setDrawColor(45,58,110);
+    doc.line(M,y+20,M+55,y+20);
+    doc.line(W-M-55,y+20,W-M,y+20);
+    doc.setFontSize(8);doc.setTextColor(100,116,139);
+    doc.text(solicito||'Solicitó',M+5,y+26);
+    doc.text(autorizo||'Autorizó',W-M-48,y+26);
+  }
+
+  // Footer
+  doc.setFillColor(10,15,30);
+  doc.rect(0,H-16,W,16,'F');
+  doc.setFontSize(7.5);doc.setTextColor(60,80,120);
+  doc.text('Grupo WEDM — Documento generado el '+new Date().toLocaleString('es-CO'),M,H-6);
+  doc.text('Pág. 1',W-M,H-6,{align:'right'});
+
+  doc.save('OC_'+oc_num.replace(/[^a-zA-Z0-9-]/g,'_')+'.pdf');
+  toast('🖨️ PDF generado');
+
+  if(guardar){
+    render();
+  }
+  closeModal('modal-oc');
+}
+
+// ═══════════════════════════════════════════════════
+// MARCAR COMPRADO EN LOTE (desde sel-bar)
+// ═══════════════════════════════════════════════════
+async function openMarcarCompradoLote(){
+  const items = DB.bs.filter(r=>SELECTED.has(r.IDCOMPRAS));
+  if(!items.length){ toast('Selecciona ítems primero','warn'); return; }
+  const prov = prompt('Proveedor para todos los ítems seleccionados:');
+  if(!prov) return;
+  toast('Guardando '+items.length+' ítems...');
+  const fecha = today();
+  for(const it of items){
+    const costo = it['COSTO SIN IVA']||it['PRECIO COTIZADO']||0;
+    await POST('marcarCompradoBS',{IDCOMPRAS:it.IDCOMPRAS,proveedor:prov,costoReal:costo,fechaCompra:fecha}).catch(()=>{});
+    it.COMPRADO='SI'; it.PROVEEDOR=prov; it['FECHA  DE COMPRA']=fecha;
+  }
+  SELECTED.clear();
+  updateSelBar();
+  updateBadges();
+  render();
+  toast('✅ '+items.length+' ítems marcados como comprados');
+}
+
+// ═══════════════════════════════════════════════════
+// PROVEEDORES
+// ═══════════════════════════════════════════════════
+function renderProveedores(){
+  const content = document.getElementById('content');
+  const provs = DB.proveedores;
+
+  let html = '<div style="display:flex;justify-content:flex-end;margin-bottom:12px">';
+  html += '<button class="btn btn-primary btn-sm" onclick="openProvModal()">➕ Nuevo proveedor</button>';
+  html += '</div>';
+
+  if(!provs.length){
+    html += '<div class="empty"><div class="empty-icon">🏢</div><p>Sin proveedores registrados</p></div>';
+    content.innerHTML = html;
+    return;
+  }
+
+  html += '<div class="tbl-wrap"><table><thead><tr><th>Nombre</th><th>NIT</th><th>Categoría</th><th>Email</th><th>Teléfono</th><th>Ciudad</th><th></th></tr></thead><tbody>';
+  provs.forEach(p=>{
+    html += '<tr>';
+    html += '<td><b>'+esc(p.NOMBRE||'—')+'</b></td>';
+    html += '<td>'+esc(p.NIT||'—')+'</td>';
+    html += '<td>'+esc(p.CATEGORIA||p.CONTACTO||'—')+'</td>';
+    html += '<td>'+esc(p.EMAIL||'—')+'</td>';
+    html += '<td>'+esc(p.TELEFONO||'—')+'</td>';
+    html += '<td>'+esc(p.CIUDAD||'—')+'</td>';
+    html += '<td style="display:flex;gap:6px">';
+    html += '<button class="btn btn-ghost btn-xs" onclick="editProv(\''+esc(p.ID)+'\')">✏️</button>';
+    html += '<button class="btn btn-danger btn-xs" onclick="deleteProv(\''+esc(p.ID)+'\')">🗑️</button>';
+    html += '</td></tr>';
+  });
+  html += '</tbody></table></div>';
+  content.innerHTML = html;
+}
+
+function openProvModal(){
+  document.getElementById('mprov-id').value='';
+  document.getElementById('mprov-title').textContent='Nuevo Proveedor';
+  ['mprov-nombre','mprov-nit','mprov-contacto','mprov-email','mprov-tel','mprov-ciudad','mprov-categoria','mprov-obs']
+    .forEach(id=>document.getElementById(id).value='');
+  openModal('modal-prov');
+}
+
+function editProv(id){
+  const p = DB.proveedores.find(x=>x.ID===id);
+  if(!p) return;
+  document.getElementById('mprov-id').value        = p.ID;
+  document.getElementById('mprov-title').textContent = 'Editar Proveedor';
+  document.getElementById('mprov-nombre').value    = p.NOMBRE||'';
+  document.getElementById('mprov-nit').value       = p.NIT||'';
+  document.getElementById('mprov-contacto').value  = p.CONTACTO||'';
+  document.getElementById('mprov-email').value     = p.EMAIL||'';
+  document.getElementById('mprov-tel').value       = p.TELEFONO||'';
+  document.getElementById('mprov-ciudad').value    = p.CIUDAD||'';
+  document.getElementById('mprov-categoria').value = p.CATEGORIA||'';
+  document.getElementById('mprov-obs').value       = p.OBSERVACIONES||'';
+  openModal('modal-prov');
+}
+
+async function guardarProveedor(){
+  const nombre = document.getElementById('mprov-nombre').value.trim();
+  if(!nombre){ toast('El nombre es requerido','warn'); return; }
+  const data = {
+    ID:           document.getElementById('mprov-id').value,
+    NOMBRE:       nombre,
+    NIT:          document.getElementById('mprov-nit').value.trim(),
+    CONTACTO:     document.getElementById('mprov-contacto').value.trim(),
+    EMAIL:        document.getElementById('mprov-email').value.trim(),
+    TELEFONO:     document.getElementById('mprov-tel').value.trim(),
+    CIUDAD:       document.getElementById('mprov-ciudad').value.trim(),
+    CATEGORIA:    document.getElementById('mprov-categoria').value.trim(),
+    OBSERVACIONES:document.getElementById('mprov-obs').value.trim()
+  };
+  try{
+    const res = await POST('saveProveedorCompras', data);
+    if(res.error){ toast(res.error,'error'); return; }
+    if(data.ID){ const i=DB.proveedores.findIndex(x=>x.ID===data.ID); if(i>-1) DB.proveedores[i]={...data}; }
+    else{ data.ID=res.ID||'tmp-'+Date.now(); DB.proveedores.push(data); }
+    fillProvDatalist();
+    closeModal('modal-prov');
+    renderProveedores();
+    toast('✅ Proveedor guardado');
+  } catch(e){ toast('Error: '+e.message,'error'); }
+}
+
+async function deleteProv(id){
+  if(!confirm('¿Eliminar proveedor?')) return;
+  try{
+    await POST('deleteProveedorCompras',{ID:id});
+    DB.proveedores = DB.proveedores.filter(x=>x.ID!==id);
+    fillProvDatalist();
+    renderProveedores();
+    toast('Proveedor eliminado');
+  } catch(e){ toast('Error: '+e.message,'error'); }
+}
+
+// ═══════════════════════════════════════════════════
+// DASHBOARD
+// ═══════════════════════════════════════════════════
+function renderDashboard(){
+  const content = document.getElementById('content');
+  const bs = DB.bs;
+  if(!bs.length){ content.innerHTML='<div class="empty"><div class="empty-icon">📊</div><p>Sin datos</p></div>'; return; }
+
+  const pend   = bs.filter(r=>!bsYes(r.COMPRADO)&&!bsYes(r.RECIBIDO)&&!bsYes(r.RECHAZADO)).length;
+  const comp   = bs.filter(r=>bsYes(r.COMPRADO)&&!bsYes(r.RECIBIDO)).length;
+  const recib  = bs.filter(r=>bsYes(r.RECIBIDO)).length;
+  const rechaz = bs.filter(r=>bsYes(r.RECHAZADO)).length;
+
+  // Gastos por proveedor
+  const porProv = {};
+  bs.forEach(r=>{
+    const pv = r.PROVEEDOR||'Sin asignar';
+    const c  = parseFloat(r['COSTO SIN IVA']||r['$COSTO MP  (Pesos)']||r['PRECIO COTIZADO']||0);
+    porProv[pv]=(porProv[pv]||0)+c;
+  });
+  const topProv = Object.entries(porProv).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  const maxProv = topProv[0]?.[1]||1;
+
+  // Por tipo
+  const mats = bs.filter(r=>r['TIPO DE PEDIDO']!=='SERVICIO EXTERNO').length;
+  const svcs = bs.filter(r=>r['TIPO DE PEDIDO']==='SERVICIO EXTERNO').length;
+  const totalCosto = bs.reduce((s,r)=>s+parseFloat(r['COSTO SIN IVA']||r['$COSTO MP  (Pesos)']||r['PRECIO COTIZADO']||0),0);
+
+  let html = '';
+
+  // KPIs
+  html += '<div class="kpi-row" style="grid-template-columns:repeat(2,1fr)">';
+  html += kpi(pend,'Pendientes','red');
+  html += kpi(comp,'En tránsito','yellow');
+  html += kpi(recib,'Recibidos','green');
+  html += kpi(fmt(totalCosto),'Total compras','blue');
+  html += '</div>';
+
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">';
+
+  // Top proveedores
+  html += '<div class="card"><div class="card-title">🏢 Top Proveedores</div>';
+  topProv.forEach(([nombre,total])=>{
+    const pct = Math.round(total/maxProv*100);
+    html += '<div class="bar-row"><div class="bar-label"><span>'+esc(nombre.substring(0,20))+'</span><span style="color:var(--accent);font-weight:600">'+fmt(total)+'</span></div>';
+    html += '<div class="bar-track"><div class="bar-fill" style="width:'+pct+'%"></div></div></div>';
+  });
+  html += '</div>';
+
+  // Distribución
+  html += '<div class="card"><div class="card-title">📊 Distribución</div>';
+  const totalItems = bs.length||1;
+  html += '<div class="bar-row"><div class="bar-label"><span>⏳ Pendientes</span><span>'+pend+'</span></div><div class="bar-track"><div class="bar-fill" style="width:'+Math.round(pend/totalItems*100)+'%;background:var(--yellow)"></div></div></div>';
+  html += '<div class="bar-row"><div class="bar-label"><span>🛒 Comprados</span><span>'+comp+'</span></div><div class="bar-track"><div class="bar-fill" style="width:'+Math.round(comp/totalItems*100)+'%;background:var(--accent)"></div></div></div>';
+  html += '<div class="bar-row"><div class="bar-label"><span>✅ Recibidos</span><span>'+recib+'</span></div><div class="bar-track"><div class="bar-fill green" style="width:'+Math.round(recib/totalItems*100)+'%"></div></div></div>';
+  html += '<div class="bar-row"><div class="bar-label"><span>❌ Rechazados</span><span>'+rechaz+'</span></div><div class="bar-track"><div class="bar-fill" style="width:'+Math.round(rechaz/totalItems*100)+'%;background:var(--red)"></div></div></div>';
+  html += '<div style="height:1px;background:var(--border);margin:12px 0"></div>';
+  html += '<div class="bar-row"><div class="bar-label"><span>🪨 Materiales</span><span>'+mats+'</span></div><div class="bar-track"><div class="bar-fill" style="width:'+Math.round(mats/totalItems*100)+'%;background:var(--teal)"></div></div></div>';
+  html += '<div class="bar-row"><div class="bar-label"><span>🛠 Servicios</span><span>'+svcs+'</span></div><div class="bar-track"><div class="bar-fill" style="width:'+Math.round(svcs/totalItems*100)+'%;background:#db2777"></div></div></div>';
+  html += '</div>';
+
+  html += '</div>';
+  content.innerHTML = html;
+}
+
+function kpi(val,lbl,color){
+  return '<div class="kpi '+color+'"><div class="val">'+val+'</div><div class="lbl">'+lbl+'</div></div>';
+}
+
+// ═══════════════════════════════════════════════════
+// NUEVA SOLICITUD DESDE COMPRAS
+// ═══════════════════════════════════════════════════
+let _nsOPSeleccionada = null;
+let _nsSearchTimer = null;
+
+function openNuevaSolicitud(){
+  _nsOPSeleccionada = null;
+  document.getElementById('ns-op-search').value   = '';
+  document.getElementById('ns-op-results').style.display = 'none';
+  document.getElementById('ns-op-selected').style.display = 'none';
+  document.getElementById('ns-op-idqr').value     = '';
+  document.getElementById('ns-op-data').value     = '{}';
+  document.getElementById('ns-tipo').value         = 'MATERIAL';
+  document.getElementById('ns-proveedor').value    = '';
+  document.getElementById('ns-producto').value     = '';
+  document.getElementById('ns-costo').value        = '';
+  document.getElementById('ns-dias').value         = '';
+  document.getElementById('ns-obs').value          = '';
+  document.getElementById('ns-marcar-comprado').checked = false;
+  openModal('modal-nueva-sol');
+}
+
+function nsSearchOP(val){
+  clearTimeout(_nsSearchTimer);
+  if(!val || val.length < 2){
+    document.getElementById('ns-op-results').style.display = 'none';
+    return;
+  }
+  _nsSearchTimer = setTimeout(()=>{
+    const q = val.toLowerCase();
+    const matches = DB.produccion.filter(op=>{
+      return String(op.OP||'').toLowerCase().includes(q) ||
+             String(op.CLIENTE||'').toLowerCase().includes(q) ||
+             String(op.DESCRIPCION||'').toLowerCase().includes(q);
+    }).slice(0,8);
+
+    const wrap = document.getElementById('ns-op-results');
+    if(!matches.length){
+      wrap.innerHTML = '<div style="padding:12px;text-align:center;color:var(--muted2);font-size:12px">Sin resultados</div>';
+      wrap.style.display = 'block';
+      return;
+    }
+    wrap.innerHTML = matches.map(op=>{
+      const idqr = normIdqr(op.IDQR||op.OP||'');
+      const src = imgSrc(op);
+      return '<div onclick="nsSelectOP(\''+esc(idqr)+'\')" '
+        +'style="display:flex;align-items:center;gap:10px;padding:10px 12px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.05);transition:background .12s" '
+        +'onmouseenter="this.style.background=\'rgba(79,142,247,.1)\'" onmouseleave="this.style.background=\'\'">'
+        +(src?'<img src="'+src+'" style="width:38px;height:38px;border-radius:6px;object-fit:cover;flex-shrink:0">':'<div style="width:38px;height:38px;border-radius:6px;background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">🔩</div>')
+        +'<div style="flex:1;min-width:0">'
+          +'<div style="font-size:13px;font-weight:700">OP-'+esc(op.OP||'—')+'  ·  Ítem '+esc(op.ITEM||'—')+'</div>'
+          +'<div style="font-size:11px;color:var(--muted2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(op.CLIENTE||'—')+'  ·  '+esc((op.DESCRIPCION||'').substring(0,40))+'</div>'
+        +'</div>'
+        +'</div>';
+    }).join('');
+    wrap.style.display = 'block';
+  }, 300);
+}
+
+function nsSelectOP(idqr){
+  const op = DB.produccion.find(o=>normIdqr(o.IDQR||o.OP||'')===idqr || String(o.OP||'')===idqr);
+  if(!op) return;
+  _nsOPSeleccionada = op;
+  document.getElementById('ns-op-idqr').value = idqr;
+  document.getElementById('ns-op-data').value  = JSON.stringify(op);
+  document.getElementById('ns-op-results').style.display = 'none';
+  document.getElementById('ns-op-search').value = 'OP-'+op.OP+' · Ítem '+op.ITEM+' · '+op.CLIENTE;
+
+  const info = document.getElementById('ns-op-info');
+  info.innerHTML = 'OP-'+esc(op.OP||'—')+'  &mdash;  Ítem '+esc(op.ITEM||'—')
+    +'<br><span style="font-weight:400;color:var(--muted2);font-size:12px">'+esc(op.CLIENTE||'—')+'  ·  '+esc((op.DESCRIPCION||'').substring(0,60))+'</span>';
+  document.getElementById('ns-op-selected').style.display = 'block';
+}
+
+function onNsProveedorInput(val){
+  // solo autocompletado visual (datalist maneja el dropdown)
+}
+
+async function guardarNuevaSolicitud(generarOC){
+  const op = _nsOPSeleccionada;
+  if(!op){ toast('Selecciona una OP primero','warn'); return; }
+
+  const tipo     = document.getElementById('ns-tipo').value;
+  const producto = document.getElementById('ns-producto').value.trim();
+  const proveedor= document.getElementById('ns-proveedor').value.trim();
+  const costo    = parseFloat(document.getElementById('ns-costo').value)||0;
+  const dias     = document.getElementById('ns-dias').value;
+  const obs      = document.getElementById('ns-obs').value.trim();
+  const marcarComp = document.getElementById('ns-marcar-comprado').checked;
+
+  if(!producto){ toast('Ingresa la descripción del producto','warn'); return; }
+
+  const ahora  = new Date();
+  const ts     = ahora.getFullYear()+''+String(ahora.getMonth()+1).padStart(2,'0')+String(ahora.getDate()).padStart(2,'0')
+                 +String(ahora.getHours()).padStart(2,'0')+String(ahora.getMinutes()).padStart(2,'0');
+  const idqr   = normIdqr(op.IDQR||op.OP||'');
+  const noc    = 'CMP-'+ts+'-'+idqr;
+  const idCompra = noc+'-1';
+  const esSvc  = tipo === 'SERVICIO EXTERNO';
+
+  const payload = {
+    IDCOMPRAS:              idCompra,
+    '#OP':                  op.OP||'',
+    'FECHA DE OP':          op['FECHA INICIO']||'',
+    'FECHA DE PEDIDO':      ahora.toISOString().slice(0,10),
+    COLABORADOR:            'COMPRAS',
+    ASESOR:                 op.ASESOR||'',
+    'EMPRESA/CLIENTE':      op.CLIENTE||'',
+    'DISEÑADOR':            op['DISEÑADOR']||'',
+    COTIZACION:             op.COT||op.COTIZACION||'',
+    ITEM:                   op.ITEM||'',
+    PRODUCTO:               producto,
+    'TIPO DE PEDIDO':       tipo,
+    CANT:                   '',
+    OBSERVACIONES:          obs,
+    'AUTORIZACION JUAN DIEGO': '',
+    COMPRADO:               marcarComp && proveedor ? 'SI' : '',
+    'COSTO SIN IVA':        esSvc ? '' : costo,
+    '$COSTO MP  (Pesos)':   esSvc ? '' : costo,
+    'FECHA  DE COMPRA':     marcarComp ? ahora.toISOString().slice(0,10) : '',
+    RECIBIDO:               '',
+    'FECHA RECIBIDO ':      '',
+    '% DE AVANCE':          0,
+    'ORDEN DE COMPRA':      noc,
+    'ORDEN_COMPRA PDF':     '',
+    'CERTIFICADO MP PDF':   '',
+    'SERVICIO EXTERNO':     esSvc ? (producto||'') : '',
+    'PLANO PDF':            op.PLANO_URL||'',
+    DWG:                    '',
+    'FECHA DE ENVIO':       '',
+    TRATAMIENTO:            '',
+    '$COSTO SERVICIO EXT.': esSvc ? costo : '',
+    'FECHA RECIBIDO':       '',
+    'FACTURA SERVICIO EXT PDF': '',
+    '# FACTURA':            '',
+    PROVEEDOR:              proveedor,
+    RECHAZADO:              '',
+    'MOTIVO DE RECHAZO':    '',
+    'PRECIO COTIZADO':      costo,
+    'DIAS PARA ENTREGA':    dias,
+    MUESTRA:                '',
+    SALTO1:'', SALTO2:'', SALTO3:'',
+    REF_COTIZACION:         op.COT||op.COTIZACION||'',
+    REF_ELEMENTOS:          idqr,
+    BOTON:                  ''
+  };
+
+  try{
+    toast('Creando solicitud...');
+    await POST('createBienServicio', payload);
+
+    // Agregar al DB local para que aparezca de inmediato
+    DB.bs.unshift(payload);
+    updateBadges();
+    closeModal('modal-nueva-sol');
+    toast('✅ Solicitud creada en Bienes y Servicios');
+
+    // Si quiere generar OC de inmediato
+    if(generarOC){
+      _mocItems = [{
+        ...payload,
+        _costo_edit: costo
+      }];
+      renderMocItemsList();
+      document.getElementById('moc-proveedor').value   = proveedor;
+      _fillProveedorFields(proveedor);
+      document.getElementById('moc-iva').value         = 19;
+      document.getElementById('moc-forma-pago').value  = '';
+      document.getElementById('moc-solicito').value    = '';
+      document.getElementById('moc-autorizo').value    = '';
+      document.getElementById('moc-obs').value         = obs||'';
+      calcOCTotales();
+      openModal('modal-oc');
+    } else {
+      // Ir a tab todos para ver el nuevo ítem
+      goTab('todos');
+    }
+  } catch(e){ toast('Error: '+e.message, 'error'); }
+}
+
+// ═══════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════
+init();
+</script>
+</body>
+</html>
