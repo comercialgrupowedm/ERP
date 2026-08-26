@@ -262,7 +262,8 @@ tr:hover td{background:rgba(255,255,255,.02)}
     <div class="tab" data-tab="comprado" onclick="goTab('comprado')">🛒 Comprados <span class="tab-badge" id="tb-comp" style="display:none" style="background:var(--accent)">0</span></div>
     <div class="tab" data-tab="recibido" onclick="goTab('recibido')">✅ Recibidos</div>
     <div class="tab" data-tab="rechazado" onclick="goTab('rechazado')">❌ Rechazados</div>
-    <div class="tab" data-tab="todos" onclick="goTab('todos')">📋 Todos</div>
+    <div class="tab" data-tab="todos" onclick="goTab('todos')">📋 Todos BS</div>
+    <div class="tab" data-tab="ordenes" onclick="goTab('ordenes')">📄 Órdenes OC <span class="tab-badge" id="tb-oc" style="display:none;background:var(--green)">0</span></div>
     <div class="tab" data-tab="proveedores" onclick="goTab('proveedores')">🏢 Proveedores</div>
     <div class="tab" data-tab="dashboard" onclick="goTab('dashboard')">📊 Dashboard</div>
   </div>
@@ -621,7 +622,7 @@ const SS_ID = '1cGD_MqaS3gpsA2ynLRlvtotAiEtF0KvzjfZxGDwvhsM';
 // ═══════════════════════════════════════════════════
 // ESTADO
 // ═══════════════════════════════════════════════════
-const DB = { bs: [], proveedores: [], produccion: [] };
+const DB = { bs: [], proveedores: [], produccion: [], ocs: [] };
 let TAB = 'pendiente';
 let GSEARCH = '';
 let SELECTED = new Set(); // IDCOMPRASs seleccionados
@@ -690,7 +691,8 @@ async function init(){
     }
 
     if(rProv.status==='fulfilled'){
-      DB.proveedores = rProv.value?.proveedores || [];
+      const rawProv = rProv.value?.data ?? rProv.value ?? {};
+      DB.proveedores = rawProv?.proveedores || [];
     }
 
     splashProgress(100);
@@ -726,7 +728,8 @@ async function reloadAll(){
     ]);
     const raw = rBS?.data ?? rBS;
     DB.bs = Array.isArray(raw) ? raw : [];
-    DB.proveedores = rProv?.proveedores || [];
+    const rawProv = rProv?.data ?? rProv ?? {};
+    DB.proveedores = rawProv?.proveedores || [];
     fillProvDatalist();
     updateBadges();
     SELECTED.clear();
@@ -770,7 +773,10 @@ function goTab(t){
   SELECTED.clear();
   updateSelBar();
   document.querySelectorAll('.tab').forEach(el=>el.classList.toggle('active', el.dataset.tab===t));
-  render();
+  if(t==='proveedores')    renderProveedores();
+  else if(t==='dashboard') renderDashboard();
+  else if(t==='ordenes')   loadAndRenderOCs();
+  else                     render();
 }
 
 function gSearchDebounce(){
@@ -1877,6 +1883,246 @@ async function guardarNuevaSolicitud(generarOC){
       goTab('todos');
     }
   } catch(e){ toast('Error: '+e.message, 'error'); }
+}
+
+// ═══════════════════════════════════════════════════
+// ÓRDENES DE COMPRA — vista y detalle
+// ═══════════════════════════════════════════════════
+async function loadAndRenderOCs(){
+  const content = document.getElementById('content');
+  content.innerHTML = '<div class="loading"><span class="spin-el"></span>Cargando órdenes...</div>';
+  try{
+    const res = await GET('getOrdenesCompra');
+    const raw = res?.data ?? res ?? [];
+    DB.ocs = Array.isArray(raw) ? raw : [];
+    // Badge
+    const tb = document.getElementById('tb-oc');
+    if(tb){ tb.textContent = DB.ocs.length; tb.style.display = DB.ocs.length?'':'none'; }
+    renderOCsView();
+  } catch(e){
+    content.innerHTML = '<div class="empty"><div class="empty-icon">⚠️</div><p>Error: '+esc(e.message)+'</p></div>';
+  }
+}
+
+function renderOCsView(){
+  const content = document.getElementById('content');
+  let ocs = DB.ocs;
+
+  // Filtro búsqueda global
+  if(GSEARCH){
+    const q = GSEARCH.toLowerCase();
+    ocs = ocs.filter(o=>[o['ORDEN DE COMPRA'],o.PROVEEDOR,o.OP,o.EMPRESA,o['DESCRIPCIÓN DE ORDEN DE COMPRA']]
+      .some(v=>String(v||'').toLowerCase().includes(q)));
+  }
+
+  if(!ocs.length){
+    content.innerHTML='<div class="empty"><div class="empty-icon">📄</div><p>Sin órdenes de compra</p></div>';
+    return;
+  }
+
+  // KPIs
+  const activas  = ocs.filter(o=>String(o.ESTADO||'').toUpperCase()==='ACTIVA').length;
+  const anuladas = ocs.filter(o=>String(o.ESTADO||'').toUpperCase()==='ANULADA').length;
+  const totalVal = ocs.reduce((s,o)=>s+parseFloat(o['COSTO TOTAL OC CON IVA']||o['COSTO SIN IVA']||0),0);
+
+  let html = '<div class="kpi-row" style="grid-template-columns:repeat(3,1fr);margin-bottom:14px">';
+  html += kpi(ocs.length,'Total OCs','blue');
+  html += kpi(activas,'Activas','green');
+  html += kpi(fmt(totalVal),'Valor total','yellow');
+  html += '</div>';
+
+  // Filtros rápidos estado
+  const estados = [...new Set(ocs.map(o=>String(o.ESTADO||'ACTIVA').toUpperCase()))];
+  html += '<div class="chips" style="margin-bottom:12px">';
+  html += '<div class="chip '+(window._ocEstFil===''?'active':'')+'" onclick="filterOCEstado(\'\')">Todas</div>';
+  estados.forEach(e=>{
+    html += '<div class="chip '+(window._ocEstFil===e?'active':'')+'" onclick="filterOCEstado(\''+esc(e)+'\')">'+esc(e)+'</div>';
+  });
+  html += '</div>';
+
+  // Aplicar filtro estado
+  if(window._ocEstFil){
+    ocs = ocs.filter(o=>String(o.ESTADO||'ACTIVA').toUpperCase()===window._ocEstFil);
+  }
+
+  // Cards de OC
+  ocs.forEach((oc,i)=>{
+    const estado = String(oc.ESTADO||'ACTIVA').toUpperCase();
+    const badgeCls = estado==='ACTIVA'?'badge-green':estado==='ANULADA'?'badge-red':'badge-yellow';
+    const total = parseFloat(oc['COSTO TOTAL OC CON IVA']||oc['COSTO SIN IVA']||0);
+    const sinIVA= parseFloat(oc['COSTO SIN IVA']||0);
+
+    html += '<div class="oc-card" id="ocv-'+i+'">';
+
+    // Cabecera OC
+    html += '<div class="oc-head" onclick="toggleOCDetail('+i+')">';
+    html += '<div class="oc-head-noimg" style="font-size:16px">📄</div>';
+    html += '<div class="oc-head-info">';
+    html += '<div class="oc-id">'+esc(oc['ORDEN DE COMPRA']||'—')+'  <span style="color:var(--muted);font-weight:400;font-size:10px">#'+esc(String(oc.CONTADOR_ID||''))+'</span></div>';
+    html += '<div class="oc-op" style="font-size:13px">🏭 '+esc(oc.PROVEEDOR||'—')+'</div>';
+    html += '<div class="oc-meta">OP: '+esc(oc.OP||'—')+'  ·  '+esc(fmtDate(oc.FECHA))+'  ·  NIT: '+esc(oc['NIT O RUT']||'—')+'</div>';
+    html += '<div class="oc-meta" style="margin-top:3px">'+esc((oc['DESCRIPCIÓN DE ORDEN DE COMPRA']||'').substring(0,80))+'</div>';
+    html += '</div>';
+    html += '<div class="oc-status">';
+    html += '<span class="badge '+badgeCls+'">'+estado+'</span>';
+    html += '<span style="font-size:14px;font-weight:800;color:var(--green)">'+fmt(total)+'</span>';
+    html += '<span style="font-size:10px;color:var(--muted2)">sin IVA: '+fmt(sinIVA)+'</span>';
+    html += '<span class="oc-chevron">▾</span>';
+    html += '</div>';
+    html += '</div>'; // oc-head
+
+    // Detalle expandible
+    html += '<div class="oc-items" id="ocv-det-'+i+'" style="display:none">';
+
+    // Info proveedor
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;background:var(--bg3);border-radius:var(--r2);padding:12px">';
+    if(oc['E-MAIL'])   html += '<div><div style="font-size:10px;color:var(--muted2)">EMAIL</div><div style="font-size:12px">'+esc(oc['E-MAIL'])+'</div></div>';
+    if(oc.TELEFONO)    html += '<div><div style="font-size:10px;color:var(--muted2)">TELÉFONO</div><div style="font-size:12px">'+esc(oc.TELEFONO)+'</div></div>';
+    if(oc['DIRECCIÓN'])html += '<div><div style="font-size:10px;color:var(--muted2)">DIRECCIÓN</div><div style="font-size:12px">'+esc(oc['DIRECCIÓN'])+'</div></div>';
+    if(oc.CIUDAD)      html += '<div><div style="font-size:10px;color:var(--muted2)">CIUDAD</div><div style="font-size:12px">'+esc(oc.CIUDAD)+'</div></div>';
+    if(oc['FORMA DE PAGO']) html += '<div><div style="font-size:10px;color:var(--muted2)">FORMA DE PAGO</div><div style="font-size:12px">'+esc(oc['FORMA DE PAGO'])+'</div></div>';
+    if(oc['SOLICITÓ']) html += '<div><div style="font-size:10px;color:var(--muted2)">SOLICITÓ</div><div style="font-size:12px">'+esc(oc['SOLICITÓ'])+'</div></div>';
+    if(oc['AUTORIZÓ']) html += '<div><div style="font-size:10px;color:var(--muted2)">AUTORIZÓ</div><div style="font-size:12px">'+esc(oc['AUTORIZÓ'])+'</div></div>';
+    if(oc.OBSERVACIONES) html += '<div style="grid-column:1/-1"><div style="font-size:10px;color:var(--muted2)">OBSERVACIONES</div><div style="font-size:12px">'+esc(oc.OBSERVACIONES)+'</div></div>';
+    html += '</div>';
+
+    // Ítems de esta OC
+    html += '<div id="ocv-items-'+i+'" style="color:var(--muted2);font-size:12px;text-align:center;padding:10px"><span class="spin-el"></span> Cargando ítems...</div>';
+
+    // Acciones
+    html += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">';
+    html += '<button class="btn btn-purple btn-sm" onclick="reimprirOC('+i+')">🖨️ Reimprimir PDF</button>';
+    if(estado==='ACTIVA'){
+      html += '<button class="btn btn-success btn-sm" onclick="marcarOCRecibida(\''+esc(oc['ORDEN DE COMPRA']||'')+'\',\''+esc(oc.ID_ORDENCOMPRA||'')+'\')">✅ Marcar recibida</button>';
+      html += '<button class="btn btn-danger btn-sm" onclick="anularOC(\''+esc(oc.ID_ORDENCOMPRA||'')+'\')">❌ Anular OC</button>';
+    }
+    html += '</div>';
+
+    html += '</div>'; // oc-items
+    html += '</div>'; // oc-card
+  });
+
+  content.innerHTML = html;
+}
+
+window._ocEstFil = '';
+function filterOCEstado(estado){
+  window._ocEstFil = estado;
+  renderOCsView();
+}
+
+function toggleOCDetail(i){
+  const det = document.getElementById('ocv-det-'+i);
+  const card= document.getElementById('ocv-'+i);
+  if(!det) return;
+  const isOpen = det.style.display !== 'none';
+  det.style.display = isOpen ? 'none' : 'block';
+  card.classList.toggle('expanded', !isOpen);
+  if(!isOpen){
+    // Cargar ítems de esta OC
+    const oc = DB.ocs.filter(o=>{
+      if(GSEARCH){ const q=GSEARCH.toLowerCase(); return [o['ORDEN DE COMPRA'],o.PROVEEDOR,o.OP].some(v=>String(v||'').toLowerCase().includes(q)); }
+      return true;
+    })[i];
+    if(oc) cargarItemsOC(i, oc);
+  }
+}
+
+async function cargarItemsOC(i, oc){
+  const wrap = document.getElementById('ocv-items-'+i);
+  if(!wrap) return;
+  try{
+    const res = await GET('getElementosOC', {idOC: oc.ID_ORDENCOMPRA || oc['ORDEN DE COMPRA']});
+    const items = res?.data ?? res ?? [];
+    if(!items.length){
+      wrap.innerHTML='<div style="color:var(--muted2);font-size:12px;text-align:center;padding:8px">Sin ítems registrados</div>';
+      return;
+    }
+    let html = '<div style="display:flex;flex-direction:column;gap:6px">';
+    items.forEach((it,j)=>{
+      const costo = parseFloat(it['COSTO TOTAL']||0);
+      html += '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:10px">';
+      html += '<div style="display:flex;gap:8px;align-items:flex-start">';
+      html += '<div style="width:28px;height:28px;border-radius:6px;background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">'+(it['SERVICIO EXTERNO 1']?'🛠':'🪨')+'</div>';
+      html += '<div style="flex:1;min-width:0">';
+      html += '<div style="font-size:13px;font-weight:600">'+esc(it['DESCRIPCION ITEM']||it['DESCRIPCION DEL PROYECTO']||'—')+'</div>';
+      html += '<div style="font-size:11px;color:var(--muted2);margin-top:2px">OP-'+esc(it.OP||'—')+'  ·  Ítem '+esc(it.ITEM||'—')+'  ·  OC-Ítem '+esc(String(it['OC-ITEM']||j+1))+'</div>';
+      // Detalles material/geometría
+      const detalles = [
+        it['MATERIAL 1']?'Mat: '+it['MATERIAL 1']:'',
+        it['GEOMETRIA 1']?'Geo: '+it['GEOMETRIA 1']:'',
+        it['DIAMETRO 1 (mm)']?'Ø'+it['DIAMETRO 1 (mm)']+'mm':'',
+        it['LARGO 1 (mm)']?'L:'+it['LARGO 1 (mm)']+'mm':'',
+        it.UNIDADES?it.UNIDADES+' und':''
+      ].filter(Boolean).join('  ·  ');
+      if(detalles) html += '<div style="font-size:10px;color:var(--accent);margin-top:3px">'+esc(detalles)+'</div>';
+      html += '</div>';
+      html += '<div style="text-align:right;flex-shrink:0"><div style="font-size:14px;font-weight:700;color:var(--green)">'+fmt(costo)+'</div><div style="font-size:10px;color:var(--muted2)">'+esc(it['FECHA ENTREGA PACTADA']?'Entrega: '+fmtDate(it['FECHA ENTREGA PACTADA']):'')+'</div></div>';
+      html += '</div>';
+      html += '</div>';
+    });
+    html += '</div>';
+    wrap.innerHTML = html;
+  } catch(e){
+    wrap.innerHTML='<div style="color:var(--red);font-size:12px">Error cargando ítems: '+esc(e.message)+'</div>';
+  }
+}
+
+async function marcarOCRecibida(ordenCompra, idOC){
+  if(!confirm('¿Marcar la OC '+ordenCompra+' como RECIBIDA?')) return;
+  try{
+    // Actualizar ORDEN_COMPRAS
+    await POST('updateOrdenCompra',{ ID_ORDENCOMPRA: idOC, ESTADO: 'RECIBIDA' });
+    // Buscar ítems de BS con esta OC y marcarlos recibidos
+    const bsItems = DB.bs.filter(r=>String(r['ORDEN DE COMPRA']||'').trim()===ordenCompra.trim());
+    for(const it of bsItems){
+      if(!bsYes(it.RECIBIDO)){
+        await POST('marcarRecibidoBS',{ IDCOMPRAS: it.IDCOMPRAS, fechaRecibido: today() }).catch(()=>{});
+        it.RECIBIDO = 'SI';
+      }
+    }
+    toast('✅ OC marcada como recibida');
+    loadAndRenderOCs();
+    updateBadges();
+  } catch(e){ toast('Error: '+e.message,'error'); }
+}
+
+async function anularOC(idOC){
+  if(!confirm('¿Anular esta Orden de Compra?')) return;
+  try{
+    await POST('updateOrdenCompra',{ ID_ORDENCOMPRA: idOC, ESTADO: 'ANULADA' });
+    const oc = DB.ocs.find(o=>o.ID_ORDENCOMPRA===idOC);
+    if(oc) oc.ESTADO = 'ANULADA';
+    toast('OC anulada');
+    renderOCsView();
+  } catch(e){ toast('Error: '+e.message,'error'); }
+}
+
+function reimprirOC(i){
+  // Reconstruir los _mocItems desde DB.ocs para reimprimir
+  const oc = DB.ocs[i];
+  if(!oc){ toast('OC no encontrada','warn'); return; }
+  const bsItems = DB.bs.filter(r=>String(r['ORDEN DE COMPRA']||'').trim()===String(oc['ORDEN DE COMPRA']||'').trim());
+  _mocItems = bsItems.map(it=>({...it, _costo_edit: parseFloat(it['COSTO SIN IVA']||0)}));
+  if(!_mocItems.length){
+    // Si no hay BS, crear item sintético desde la OC
+    _mocItems = [{ 'ORDEN DE COMPRA': oc['ORDEN DE COMPRA'], PRODUCTO: oc['DESCRIPCIÓN DE ORDEN DE COMPRA']||'', '#OP': oc.OP||'', ITEM:'', _costo_edit: parseFloat(oc['COSTO SIN IVA']||0) }];
+  }
+  document.getElementById('moc-proveedor').value  = oc.PROVEEDOR||'';
+  document.getElementById('moc-nit').value        = oc['NIT O RUT']||'';
+  document.getElementById('moc-email').value      = oc['E-MAIL']||'';
+  document.getElementById('moc-tel').value        = oc.TELEFONO||'';
+  document.getElementById('moc-ciudad').value     = oc.CIUDAD||'';
+  document.getElementById('moc-direccion').value  = oc['DIRECCIÓN']||'';
+  document.getElementById('moc-iva').value        = 19;
+  document.getElementById('moc-forma-pago').value = oc['FORMA DE PAGO']||'';
+  document.getElementById('moc-solicito').value   = oc['SOLICITÓ']||'';
+  document.getElementById('moc-autorizo').value   = oc['AUTORIZÓ']||'';
+  document.getElementById('moc-obs').value        = oc.OBSERVACIONES||'';
+  renderMocItemsList();
+  calcOCTotales();
+  // Generar PDF directamente sin abrir modal
+  generarOCPDF(false);
 }
 
 // ═══════════════════════════════════════════════════
