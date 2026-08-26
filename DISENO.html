@@ -423,10 +423,7 @@ td.mono{font-family:var(--mono);font-size:11px}
   <div id="menu-btn" onclick="toggleSidebar()">🎨</div>
   <img src="" id="topbar-logo" alt="GRUPOWEDM" style="height:28px;width:auto;margin-right:4px;flex-shrink:0">
   <h2 id="page-title">Control Diseño</h2>
-  <div class="tb-search">
-    <span style="color:var(--muted);font-size:14px">🔍</span>
-    <input type="text" id="globalSearch" placeholder="Buscar..." oninput="_debounceSearch(this.value)">
-  </div>
+
   <div id="refresh-btn" onclick="refreshCurrent()" title="Actualizar">↻<span class="rb-dot" id="rb-dot"></span></div>
 </div>
 
@@ -1078,7 +1075,7 @@ function _countDis(dis, m){
   return base.filter(op=>(op.DISEÑADOR||'')===dis).length;
 }
 
-// Módulos donde los pills de diseñador no aplican
+// Módulos que tienen su propio filtro de diseñador integrado (no usan vistaToggleHTML)
 const _MODS_SIN_DIS = new Set(['bsmodulo','itemscot']);
 
 function vistaToggleHTML(m){
@@ -1506,9 +1503,20 @@ function renderOpCard(op){
       </div>
       <!-- Botones acción -->
       <div style="display:flex;gap:5px;margin-top:4px;flex-wrap:wrap" onclick="event.stopPropagation()">
-        <button onclick="qaOrdenCompra&&qaOrdenCompra('${safe(_idqr)}')" style="flex:1;min-width:0;font-size:10px;padding:5px 6px;border-radius:8px;border:1.5px solid var(--accent);background:var(--surface);color:var(--accent);cursor:pointer;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">📋 OC</button>
-        <button onclick="qaVerPedidos&&qaVerPedidos('${safe(_idqr)}')" style="flex:1;min-width:0;font-size:10px;padding:5px 6px;border-radius:8px;border:1.5px solid #0891b2;background:var(--surface);color:#0891b2;cursor:pointer;font-weight:700;white-space:nowrap">🛒</button>
-        <button onclick="qaVerHojaRuta&&qaVerHojaRuta('${safe(_idqr)}')" style="flex:1;min-width:0;font-size:10px;padding:5px 6px;border-radius:8px;border:1.5px solid #059669;background:var(--surface);color:#059669;cursor:pointer;font-weight:700;white-space:nowrap">🗺️ JD</button>
+        ${imgUrl
+          ?`<button onclick="_verImgOP('${safe(_idqr)}')"
+              style="flex:1;min-width:0;font-size:10px;padding:5px 6px;border-radius:8px;border:1.5px solid var(--accent);background:var(--surface);color:var(--accent);cursor:pointer;font-weight:700;white-space:nowrap">🖼️ Ver img</button>`
+          :`<button onclick="qaSubirImagen('${safe(_idqr)}')"
+              style="flex:1;min-width:0;font-size:10px;padding:5px 6px;border-radius:8px;border:1.5px solid var(--muted);background:var(--surface);color:var(--muted);cursor:pointer;font-weight:700;white-space:nowrap">📷 Imagen</button>`}
+        ${op.PLANO_URL
+          ?`<button onclick="qaSubirPlano('${safe(_idqr)}')"
+              style="flex:1;min-width:0;font-size:10px;padding:5px 6px;border-radius:8px;border:1.5px solid #0d9488;background:var(--surface);color:#0d9488;cursor:pointer;font-weight:700;white-space:nowrap">📄 Plano ↺</button>`
+          :`<button onclick="qaSubirPlano('${safe(_idqr)}')"
+              style="flex:1;min-width:0;font-size:10px;padding:5px 6px;border-radius:8px;border:1.5px solid var(--muted);background:var(--surface);color:var(--muted);cursor:pointer;font-weight:700;white-space:nowrap">📄 Plano</button>`}
+        <button onclick="qaPedirMaterial('${safe(_idqr)}')"
+          style="flex:1;min-width:0;font-size:10px;padding:5px 6px;border-radius:8px;border:1.5px solid #b45309;background:var(--surface);color:#b45309;cursor:pointer;font-weight:700;white-space:nowrap">🧱 Pedir</button>
+        <button onclick="qaFormatoQA('${safe(_idqr)}')"
+          style="flex:1;min-width:0;font-size:10px;padding:5px 6px;border-radius:8px;border:1.5px solid #7c3aed;background:var(--surface);color:#7c3aed;cursor:pointer;font-weight:700;white-space:nowrap">📋 QA</button>
       </div>
     </div>
   </div>`;
@@ -2122,8 +2130,13 @@ function verDetalle(opId){
   </div>
   <!-- ACCIONES RÁPIDAS -->
   <div class="qa-row">
-    <div class="qa-btn" onclick="qaSubirImagen('${safe(op.IDQR||op.OP)}')"><span class="qa-ic">🖼️</span>Subir Imagen</div>
-    <div class="qa-btn" onclick="qaSubirPlano('${safe(op.IDQR||op.OP)}')"><span class="qa-ic">📄</span>Subir Plano</div>
+    ${op.IMAGEN_B64
+      ?`<div class="qa-btn" onclick="qaSubirImagen('${safe(op.IDQR||op.OP)}')"><span class="qa-ic">🖼️</span>Cambiar Imagen</div>`
+      :`<div class="qa-btn" onclick="qaSubirImagen('${safe(op.IDQR||op.OP)}')"><span class="qa-ic">📷</span>Subir Imagen</div>`}
+    ${op.PLANO_URL
+      ?`<div class="qa-btn" style="border-color:#0d9488;color:#0d9488" onclick="window.open('${esc(op.PLANO_URL)}','_blank')"><span class="qa-ic">📄</span>Ver Plano</div>
+        <div class="qa-btn" onclick="qaSubirPlano('${safe(op.IDQR||op.OP)}')"><span class="qa-ic">🔄</span>Cambiar Plano</div>`
+      :`<div class="qa-btn" onclick="qaSubirPlano('${safe(op.IDQR||op.OP)}')"><span class="qa-ic">📄</span>Subir Plano</div>`}
     <div class="qa-btn" onclick="qaPedirMaterial('${safe(op.IDQR||op.OP)}')"><span class="qa-ic">🧱</span>Pedir Material</div>
     <div class="qa-btn" onclick="qaVerPedidos('${safe(op.IDQR||op.OP)}')"><span class="qa-ic">🛒</span>Ver Pedidos</div>
     <div class="qa-btn" onclick="qaHojaRuta('${safe(op.IDQR||op.OP)}')"><span class="qa-ic">🗺️</span>Hoja de Ruta</div>
@@ -2194,10 +2207,14 @@ function verDetalle(opId){
       return `<div style="border:1px solid var(--border);border-radius:10px;margin-bottom:8px;overflow:hidden">
         <div style="padding:8px 12px;background:${color}18;display:flex;justify-content:space-between;align-items:center">
           <div>
-            <div style="font-size:11px;font-weight:700;color:${color}">${esc(oc)}</div>
-            <div style="font-size:10px;color:var(--muted)">📅 ${r0['FECHA DE PEDIDO']||'—'} · 👤 ${esc(r0.COLABORADOR||'—')}</div>
+            <div style="font-size:12px;font-weight:800;color:var(--accent)">
+              OP-${esc(op.OP||'—')} · Ítem ${esc(op.ITEM||'—')} · ${esc(op.CLIENTE||'—')}${op.COTIZACION||op.COT?' · COT-'+esc(op.COTIZACION||op.COT):''}
+            </div>
+            <div style="font-size:10px;color:var(--muted);margin-top:2px">
+              👤 ${esc(r0.COLABORADOR||'—')} · 📅 ${(r0['FECHA DE PEDIDO']||'').slice(0,10)||'—'}
+            </div>
           </div>
-          <span style="font-size:10px;font-weight:700;color:${color}">${label}</span>
+          <span style="font-size:10px;font-weight:700;color:${color};white-space:nowrap">${label}</span>
         </div>
         <div style="padding:4px 12px">${itemRows}</div>
       </div>`;
@@ -3355,19 +3372,45 @@ function _hrBuildPrintHtml(op,data){
 #sync-bar-wrap{background:rgba(255,255,255,.15);border-radius:99px;height:4px;margin-top:8px;overflow:hidden}
 #sync-bar{height:100%;border-radius:99px;background:var(--accent);width:0%;transition:width .3s ease}
 
-/* ── Barra de acciones bulk ── */
-#bulk-bar{position:fixed;bottom:64px;left:0;right:0;z-index:500;
-  background:#1e293b;color:#fff;padding:10px 14px;
-  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
-  box-shadow:0 -4px 20px rgba(0,0,0,.3);border-top:1px solid #334155;
-  transform:translateY(calc(100% + 4px));transition:transform .25s cubic-bezier(.4,0,.2,1);
-  pointer-events:none}
-#bulk-bar.visible{transform:translateY(0);pointer-events:auto}
-.bulk-btn{padding:6px 12px;border-radius:8px;border:none;cursor:pointer;
-  font-size:11px;font-weight:700;transition:opacity .15s}
-.bulk-btn:hover{opacity:.85}
-.bulk-count{background:var(--accent);color:#fff;border-radius:99px;
-  padding:2px 8px;font-size:11px;font-weight:700;margin-right:4px}
+/* ── Barra de acciones bulk — flotante ── */
+#bulk-bar{
+  position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(120px);
+  z-index:600;display:flex;align-items:center;gap:6px;
+  background:rgba(15,23,42,.82);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  border:1px solid rgba(255,255,255,.10);border-radius:20px;
+  padding:8px 10px 8px 14px;
+  box-shadow:0 8px 40px rgba(0,0,0,.45),0 0 0 1px rgba(124,58,237,.18);
+  transition:transform .3s cubic-bezier(.34,1.56,.64,1),opacity .2s;
+  opacity:0;pointer-events:none;white-space:nowrap;
+}
+#bulk-bar.visible{
+  transform:translateX(-50%) translateY(0);opacity:1;pointer-events:auto;
+}
+/* chip contador */
+.bulk-count{
+  display:inline-flex;align-items:center;justify-content:center;
+  background:linear-gradient(135deg,#7c3aed,#a855f7);color:#fff;
+  border-radius:99px;padding:3px 10px;font-size:12px;font-weight:800;
+  min-width:28px;margin-right:2px;box-shadow:0 2px 8px rgba(124,58,237,.4);
+  line-height:1.3;
+}
+.bulk-sep{width:1px;height:24px;background:rgba(255,255,255,.12);margin:0 2px;flex-shrink:0}
+/* botones acción */
+.bulk-btn{
+  display:inline-flex;align-items:center;gap:5px;
+  padding:7px 13px;border-radius:12px;border:none;cursor:pointer;
+  font-size:12px;font-weight:700;color:#fff;line-height:1;
+  transition:transform .12s,filter .12s,opacity .12s;
+  position:relative;
+}
+.bulk-btn:hover{filter:brightness(1.15);transform:translateY(-1px)}
+.bulk-btn:active{transform:scale(.94)}
+/* botón limpiar */
+.bulk-btn-clear{
+  background:rgba(255,255,255,.08)!important;border:1px solid rgba(255,255,255,.12)!important;
+  color:rgba(255,255,255,.55)!important;padding:7px 10px!important;
+}
+.bulk-btn-clear:hover{background:rgba(255,255,255,.15)!important;color:#fff!important}
 </style></head><body>
   <table style="margin-bottom:14px"><tr>
     <td style="width:110px"><img src="${LOGO_B64_PNG}" style="width:100px"></td>
@@ -3401,9 +3444,19 @@ function _hrBuildPrintHtml(op,data){
 // ══════════════════════════════════════════════════════════════════════
 let _bsFiltro = 'todos'; // todos | pendiente | comprado | recibido
 let _bsSearch = '';
+let _bsViewMode = 'lista'; // lista | tarjetas
+let _bsFiltroDis = '';     // filtro por diseñador
 
 function renderBienesServicios(){
   const bs = DB.bienesServicios || [];
+
+  // mapa OP → diseñador
+  const opDiMap = {};
+  (DB.produccion||[]).forEach(op => {
+    const k = String(op.OP||'').trim();
+    if(k) opDiMap[k] = String(op.DISEÑADOR||'').trim();
+  });
+
   const filtrados = bs.filter(r => {
     const comp  = _bsYes(r.COMPRADO);
     const recib = _bsYes(r.RECIBIDO);
@@ -3412,6 +3465,11 @@ function renderBienesServicios(){
     if(_bsFiltro==='comprado'  && !comp) return false;
     if(_bsFiltro==='recibido'  && !recib) return false;
     if(_bsFiltro==='rechazado' && !rechaz) return false;
+    // filtro diseñador
+    if(_bsFiltroDis){
+      const dis = opDiMap[String(r['#OP']||'').trim()]||'';
+      if(dis !== _bsFiltroDis) return false;
+    }
     if(_bsSearch){
       const q = _bsSearch.toLowerCase();
       return [r['#OP'],r.PRODUCTO,r['EMPRESA/CLIENTE'],r.COLABORADOR,r['ORDEN DE COMPRA'],r.PROVEEDOR]
@@ -3424,7 +3482,7 @@ function renderBienesServicios(){
   const _bsCutoff = new Date(); _bsCutoff.setDate(_bsCutoff.getDate()-90);
   const filtradosRecientes = _bsFiltro==='todos'
     ? filtrados.filter(r => { const f=new Date(r['FECHA DE PEDIDO']||''); return isNaN(f)?true:f>=_bsCutoff; })
-    : filtrados; // en filtros específicos mostrar todos aunque sean viejos
+    : filtrados;
 
   // Agrupar por ORDEN DE COMPRA
   const grupos = {};
@@ -3434,11 +3492,40 @@ function renderBienesServicios(){
     grupos[oc].push(r);
   });
 
-    const pendCount = bs.filter(r => !_bsYes(r.COMPRADO) && !_bsYes(r.RECIBIDO) && !_bsYes(r.RECHAZADO)).length;
+  const pendCount = bs.filter(r => !_bsYes(r.COMPRADO) && !_bsYes(r.RECIBIDO) && !_bsYes(r.RECHAZADO)).length;
   ['bb-bs','tt-bs'].forEach(id=>{
     const badgeEl = document.getElementById(id);
     if(badgeEl){ badgeEl.textContent=pendCount; badgeEl.style.display=pendCount>0?'':'none'; }
   });
+
+  // pills diseñador (solo admin)
+  const disPills = _esAdmin() ? (() => {
+    const allBs = bs;
+    const countDis = d => d ? allBs.filter(r=>(opDiMap[String(r['#OP']||'').trim()]||'')=== d).length
+                           : allBs.length;
+    return [{ label:'Todos', key:'', color:'#64748b' },
+      ..._DIS_RAPIDOS.map(d=>({ label:d.split(' ')[0], key:d, color:DIS_COLORS[d]||'var(--purple)' }))
+    ].map(p => {
+      const active = _bsFiltroDis === p.key;
+      const cnt = countDis(p.key);
+      const bg = active ? p.color : 'transparent';
+      const clr = active ? '#fff' : 'var(--muted)';
+      const brd = active ? p.color : 'var(--border)';
+      const badgeBg = active ? 'rgba(255,255,255,.25)' : (p.color==='#64748b'?'rgba(100,116,139,.13)':'color-mix(in srgb,'+p.color+' 15%,transparent)');
+      const badgeClr = active ? '#fff' : p.color;
+      return `<button class="vt-btn dis-pill" onclick="_bsFiltroDis='${p.key}';renderBienesServicios()"
+        style="background:${bg};border-color:${brd};color:${clr};gap:5px">
+        ${p.label}
+        <span style="background:${badgeBg};color:${badgeClr};font-size:10px;font-weight:800;padding:1px 6px;border-radius:99px;min-width:18px;text-align:center">${cnt}</span>
+      </button>`;
+    }).join('');
+  })() : '';
+
+  // toggle vista
+  const viewToggle = `<div class="vt-group">
+    <button class="vt-btn ${_bsViewMode==='lista'?'active':''}" onclick="_bsViewMode='lista';renderBienesServicios()">☰ Lista</button>
+    <button class="vt-btn ${_bsViewMode==='tarjetas'?'active':''}" onclick="_bsViewMode='tarjetas';renderBienesServicios()">⊞ Tarjetas</button>
+  </div>`;
 
   const chips = ['todos','pendiente','comprado','recibido','rechazado'].map(f =>
     `<button onclick="_bsFiltro='${f}';renderBienesServicios()" style="padding:6px 12px;border-radius:20px;border:none;cursor:pointer;font-size:12px;font-weight:600;
@@ -3511,23 +3598,30 @@ function renderBienesServicios(){
 
     return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;margin-bottom:12px;overflow:hidden">
       <!-- Cabecera OC -->
-      <div style="padding:12px 14px;border-bottom:1px solid var(--border)">
+      <div style="padding:12px 14px;border-bottom:1px solid var(--border);${opData?'cursor:pointer;':''}"
+        ${opData?`onclick="verDetalle('${safe(String(opData.IDQR||opData.OP||'').replace(/\.0*$/,'').trim())}')"`:''}>
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
           <div style="display:flex;gap:10px;align-items:flex-start;flex:1;min-width:0">
-            ${imgUrl?`<img src="${imgUrl}" style="width:72px;height:72px;object-fit:cover;border-radius:8px;flex-shrink:0" loading="lazy">`:'<div style="width:72px;height:72px;border-radius:8px;background:var(--border);display:flex;align-items:center;justify-content:center;font-size:28px;flex-shrink:0">🪨</div>'}
-            <div style="min-width:0">
-              <div style="font-size:12px;font-weight:700;color:var(--accent)">
-                OP-${esc(r0['#OP']||'—')}${r0.ITEM?' · Item '+esc(r0.ITEM):''} · ${esc(r0['EMPRESA/CLIENTE']||'—')} · COT-${esc(opData?.COTIZACION||opData?.COT||'—')}
+            ${imgUrl?`<img src="${imgUrl}" style="width:60px;height:60px;object-fit:cover;border-radius:8px;flex-shrink:0" loading="lazy">`
+              :'<div style="width:60px;height:60px;border-radius:8px;background:var(--card2);display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0">🧱</div>'}
+            <div style="min-width:0;flex:1">
+              <div style="font-size:13px;font-weight:800;color:var(--accent);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                OP-${esc(r0['#OP']||'—')}${r0.ITEM?' · Ítem '+esc(r0.ITEM):''}
               </div>
-              <div style="font-size:11px;color:var(--muted);margin-top:2px">
-                👤 ${esc(r0.COLABORADOR||'—')} · 📅 ${r0['FECHA DE PEDIDO']||'—'}
+              <div style="font-size:12px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px">
+                ${esc(opData?.CLIENTE||r0['EMPRESA/CLIENTE']||'—')}
+              </div>
+              <div style="font-size:11px;color:var(--muted);margin-top:2px;display:flex;gap:8px;flex-wrap:wrap">
+                ${opData?.COTIZACION||opData?.COT?`<span>COT-${esc(opData.COTIZACION||opData.COT)}</span>`:''}
+                <span>👤 ${esc(r0.COLABORADOR||'—')}</span>
+                <span>📅 ${(r0['FECHA DE PEDIDO']||'').slice(0,10)||'—'}</span>
               </div>
             </div>
           </div>
-          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0" onclick="event.stopPropagation()">
             <span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:10px;background:${estadoColor}22;color:${estadoColor}">${estadoLabel}</span>
             ${autJD?'<span style="font-size:10px;background:#d1fae5;color:#065f46;padding:2px 6px;border-radius:10px">✔ Autorizado JD</span>':
-              `<button onclick="event.stopPropagation();_bsAutorizar('${safe(oc)}')" 
+              `<button onclick="_bsAutorizar('${safe(oc)}')" 
                 style="font-size:10px;padding:3px 8px;border-radius:8px;border:1px solid #8b5cf6;background:#f5f3ff;color:#7c3aed;cursor:pointer">Autorizar</button>`}
           </div>
         </div>
@@ -3537,15 +3631,64 @@ function renderBienesServicios(){
     </div>`;
   }).join('') || `<div class="empty"><div class="empty-icon">🧱</div><p>No hay pedidos${_bsFiltro!=='todos'?' en este estado':''}</p></div>`;
 
+  // Vista tarjetas: grid compacto por OP
+  const ocCardsGrid = _bsViewMode==='tarjetas' ? (() => {
+    const entries = Object.entries(grupos).sort((a,b)=>b[0].localeCompare(a[0]));
+    if(!entries.length) return `<div class="empty"><div class="empty-icon">🧱</div><p>No hay pedidos</p></div>`;
+    return `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;padding:4px 0">` +
+    entries.map(([oc, items]) => {
+      const r0 = items[0];
+      const recib = items.every(r=>_bsYes(r.RECIBIDO));
+      const comp  = items.every(r=>_bsYes(r.COMPRADO));
+      const rechaz= items.some(r=>_bsYes(r.RECHAZADO));
+      const estadoColor = recib?'#10b981':comp?'#3b82f6':rechaz?'#ef4444':'#f59e0b';
+      const estadoLabel = recib?'✅ Recibido':comp?'🛒 Comprado':rechaz?'❌ Rechazado':'⏳ Pendiente';
+      const autJD = _bsYes(r0['AUTORIZACION JUAN DIEGO']);
+      const opData = (DB.produccion||[]).find(op=>String(op.OP||'').trim()===String(r0['#OP']||'').trim());
+      const imgUrl = opData?.IMAGEN_B64||opData?.IMAGEN||'';
+      const disDot = opData?.DISEÑADOR ? `<span style="font-size:10px;padding:2px 7px;border-radius:10px;background:${DIS_COLORS[opData.DISEÑADOR]||'#64748b'}22;color:${DIS_COLORS[opData.DISEÑADOR]||'#64748b'};font-weight:700">${esc(opData.DISEÑADOR)}</span>` : '';
+      const idqrOP = opData ? String(opData.IDQR||opData.OP||'').replace(/\.0*$/,'').trim() : '';
+      return `<div ${idqrOP?`onclick="verDetalle('${safe(idqrOP)}')" `:''}style="background:var(--surface);border:1.5px solid var(--border);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;${idqrOP?'cursor:pointer;':''}"
+        ${idqrOP?`onmouseover="this.style.boxShadow='0 6px 20px rgba(124,58,237,.13)'" onmouseout="this.style.boxShadow=''"`:''}>
+        <div style="height:4px;background:${estadoColor}"></div>
+        <div style="padding:12px 12px 8px;flex:1">
+          <div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:8px">
+            ${imgUrl?`<img src="${imgUrl}" style="width:44px;height:44px;object-fit:cover;border-radius:8px;flex-shrink:0">`
+              :`<div style="width:44px;height:44px;border-radius:8px;background:var(--card2);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">🧱</div>`}
+            <div style="min-width:0;flex:1">
+              <div style="font-size:11px;font-weight:700;color:var(--accent);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">OP-${esc(r0['#OP']||'—')}${r0.ITEM?' · Ítem '+esc(r0.ITEM):''}</div>
+              <div style="font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r0['EMPRESA/CLIENTE']||'—')}</div>
+            </div>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px">
+            <span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;background:${estadoColor}22;color:${estadoColor}">${estadoLabel}</span>
+            ${autJD?'<span style="font-size:10px;padding:2px 7px;border-radius:10px;background:#d1fae5;color:#065f46">✔ JD</span>':''}
+            ${disDot}
+          </div>
+          <div style="font-size:11px;color:var(--muted)">${items.length} ítem(s) · 👤 ${esc(r0.COLABORADOR||'—')}</div>
+          <div style="font-size:11px;color:var(--muted)">📅 ${r0['FECHA DE PEDIDO']||'—'}</div>
+        </div>
+        ${!autJD?`<div style="padding:0 12px 10px" onclick="event.stopPropagation()"><button onclick="_bsAutorizar('${safe(oc)}')"
+          style="width:100%;font-size:11px;padding:6px;border-radius:9px;border:1px solid #8b5cf6;background:#f5f3ff;color:#7c3aed;cursor:pointer;font-weight:700">Autorizar</button></div>`:''}
+      </div>`;
+    }).join('') + '</div>';
+  })() : ocCards;
+
   setContent(`
     <div style="padding:12px 14px 0">
       <input type="text" placeholder="🔍 Buscar por OP, producto, cliente..." value="${esc(_bsSearch)}"
         oninput="_bsSearch=this.value;renderBienesServicios()"
         style="width:100%;padding:9px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface);color:var(--text);font-size:13px;box-sizing:border-box;margin-bottom:10px">
       <div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:10px;scrollbar-width:none">${chips}</div>
-      <div style="font-size:11px;color:var(--muted);padding-bottom:8px">${totalGrupos} orden(es) · ${filtradosRecientes.length} ítem(s)${_bsFiltro==='todos'?' (últimos 90 días)':''}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+          ${viewToggle}
+          ${disPills?`<div class="vt-group" style="gap:3px">${disPills}</div>`:''}
+        </div>
+        <span style="font-size:11px;color:var(--muted)">${totalGrupos} orden(es) · ${filtradosRecientes.length} ítem(s)${_bsFiltro==='todos'?' (90 días)':''}</span>
+      </div>
     </div>
-    <div style="padding:0 14px 80px">${ocCards}</div>
+    <div style="padding:0 14px 80px">${ocCardsGrid}</div>
   `);
 }
 
@@ -3615,6 +3758,8 @@ async function _bsMarcarRecibido(idcompras){
 // ══════════════════════════════════════════════════════════════════════
 let _icSearch = '';
 let _icFiltroAsesor = '';
+let _icFiltroDis = '';   // filtro por diseñador
+let _icViewMode = 'lista'; // lista | tarjetas
 
 async function renderItemsCotizados(){
   // Mostrar skeleton inmediato
@@ -3628,31 +3773,59 @@ async function renderItemsCotizados(){
   // ── Mapas O(1) — construidos UNA vez, no dentro de loops ──
   const norm = v => String(v??'').replace(/[^0-9]/g,'').replace(/^0+(?=\d)/,'');
 
-  // mapa cotNorm → {asesor, cliente}
+  // mapa cotNorm → {asesor, cliente, diseñador}
   const cotInfoMap = {};
+  const cotDisMap = {};  // cotNorm → diseñador
   produccion.forEach(op => {
     const cn = norm(op.COTIZACION||op.COT||'');
     if(cn && !cotInfoMap[cn]) cotInfoMap[cn] = {
       asesor: String(op.ASESOR||'').trim(),
       cliente: String(op.CLIENTE||'').trim()
     };
+    if(cn) cotDisMap[cn] = String(op.DISEÑADOR||'').trim();
   });
 
-  // mapa cotNorm → Set de asesores (para filtro)
+  // mapa cotNorm → asesor (para filtro)
   const asesorPorCot = {};
   produccion.forEach(op => {
     const cn = norm(op.COTIZACION||op.COT||'');
     if(cn) asesorPorCot[cn] = String(op.ASESOR||'').trim();
   });
 
-  const asesores = [...new Set(Object.values(asesorPorCot).filter(Boolean))].sort();
+  // ── Normalización de asesores ────────────────────────────────────────
+  // Agrupa variantes del mismo nombre (ej: "EDUARDO CABAL", "Eduardo Cabal" → "Eduardo Cabal")
+  // Clave de normalización: uppercase sin acentos de las partes del nombre, ordenadas
+  const _normNombre = s => s.toUpperCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/\s+/g,' ').trim();
+
+  // Construir mapa: clave_norm → nombre_canónico (el primero encontrado en mayúsculas tituladas)
+  const _asesorCanon = {}; // keyNorm → canonical display name
+  const _asesorVariants = {}; // keyNorm → Set de raw values
+  Object.values(asesorPorCot).filter(Boolean).forEach(raw => {
+    const key = _normNombre(raw);
+    if(!_asesorCanon[key]){
+      // Titularizar: "EDUARDO CABAL" → "Eduardo Cabal"
+      _asesorCanon[key] = raw.split(' ').map(w=>w.charAt(0).toUpperCase()+w.slice(1).toLowerCase()).join(' ');
+    }
+    if(!_asesorVariants[key]) _asesorVariants[key] = new Set();
+    _asesorVariants[key].add(raw);
+  });
+  const asesores = Object.keys(_asesorCanon).sort((a,b)=>_asesorCanon[a].localeCompare(_asesorCanon[b]));
+
+  // Filtrar elementos: comparar contra TODAS las variantes del asesor seleccionado
+  const _selectedAsesorVariants = _icFiltroAsesor
+    ? (_asesorVariants[_icFiltroAsesor] || new Set([_icFiltroAsesor]))
+    : null;
 
   // Filtrar elementos con mapas O(1)
   let filtrados = elementos.filter(e => {
+    const cn = norm(e.COTIZACION||'');
     if(_icFiltroAsesor){
-      const cn = norm(e.COTIZACION||'');
-      if((asesorPorCot[cn]||'') !== _icFiltroAsesor) return false;
+      const rawAsesor = asesorPorCot[cn]||'';
+      if(!_selectedAsesorVariants.has(rawAsesor)) return false;
     }
+    if(_icFiltroDis   && (cotDisMap[cn]||'')   !== _icFiltroDis)   return false;
     if(_icSearch){
       const q = _icSearch.toLowerCase();
       const campos = [e.COTIZACION,e.ITEM,e['MATERIAL 1'],e['MATERIAL 2'],e['MATERIAL 3'],e['SERVICIO EXTERNO 1'],e['SERVICIO EXTERNO 2']];
@@ -3669,13 +3842,51 @@ async function renderItemsCotizados(){
     grupos[cot].push(e);
   });
 
-  const asesorOptions = ['', ...asesores].map(a =>
-    `<option value="${esc(a)}" ${_icFiltroAsesor===a?'selected':''}>${a||'Todos los asesores'}</option>`
-  ).join('');
+  // pills asesor (normalizados)
+  const asesorPills = ['', ...asesores].map(keyNorm => {
+    const label = keyNorm ? _asesorCanon[keyNorm] : 'Todos';
+    const active = _icFiltroAsesor === keyNorm;
+    return `<button onclick="_icFiltroAsesor='${safe(keyNorm)}';renderItemsCotizados()"
+      style="padding:5px 11px;border-radius:20px;border:1.5px solid ${active?'var(--accent)':'var(--border)'};cursor:pointer;font-size:11px;font-weight:600;
+      background:${active?'var(--accent)':'transparent'};color:${active?'#fff':'var(--muted)'};white-space:nowrap;transition:all .15s">
+      ${esc(label)}
+    </button>`;
+  }).join('');
+
+  // pills diseñador (solo admin)
+  const disPillsIC = _esAdmin() ? (() => {
+    const countDis = d => d
+      ? elementos.filter(e=>(cotDisMap[norm(e.COTIZACION||'')] ||'')=== d).length
+      : elementos.length;
+    return [{ label:'Todos', key:'', color:'#64748b' },
+      ..._DIS_RAPIDOS.map(d=>({ label:d.split(' ')[0], key:d, color:DIS_COLORS[d]||'var(--purple)' }))
+    ].map(p => {
+      const active = _icFiltroDis === p.key;
+      const cnt = countDis(p.key);
+      const bg = active ? p.color : 'transparent';
+      const clr = active ? '#fff' : 'var(--muted)';
+      const brd = active ? p.color : 'var(--border)';
+      const badgeBg = active ? 'rgba(255,255,255,.25)' : (p.color==='#64748b'?'rgba(100,116,139,.13)':'color-mix(in srgb,'+p.color+' 15%,transparent)');
+      const badgeClr = active ? '#fff' : p.color;
+      return `<button class="vt-btn dis-pill" onclick="_icFiltroDis='${p.key}';renderItemsCotizados()"
+        style="background:${bg};border-color:${brd};color:${clr};gap:5px">
+        ${p.label}
+        <span style="background:${badgeBg};color:${badgeClr};font-size:10px;font-weight:800;padding:1px 6px;border-radius:99px;min-width:18px;text-align:center">${cnt}</span>
+      </button>`;
+    }).join('');
+  })() : '';
+
+  // toggle vista
+  const viewToggleIC = `<div class="vt-group">
+    <button class="vt-btn ${_icViewMode==='lista'?'active':''}" onclick="_icViewMode='lista';renderItemsCotizados()">☰ Lista</button>
+    <button class="vt-btn ${_icViewMode==='tarjetas'?'active':''}" onclick="_icViewMode='tarjetas';renderItemsCotizados()">⊞ Tarjetas</button>
+  </div>`;
 
   const cotCards = Object.entries(grupos).sort((a,b)=>b[0].localeCompare(a[0])).map(([cot, items]) => {
     const info = cotInfoMap[norm(cot)] || {};
-    const asesor = info.asesor || '—';
+    const asesorRaw = info.asesor || '—';
+    const asesorKey = _normNombre(asesorRaw);
+    const asesor = _asesorCanon[asesorKey] || asesorRaw;
     const cliente = info.cliente || '—';
 
     const itemCards = items.map(e => {
@@ -3724,18 +3935,48 @@ async function renderItemsCotizados(){
     </div>`;
   }).join('') || `<div class="empty"><div class="empty-icon">📋</div><p>No hay ítems cotizados</p></div>`;
 
+  // vista tarjetas: grid compacto por cotización
+  const cotCardsGrid = _icViewMode==='tarjetas' ? (() => {
+    const entries = Object.entries(grupos).sort((a,b)=>b[0].localeCompare(a[0]));
+    if(!entries.length) return `<div class="empty"><div class="empty-icon">📋</div><p>No hay ítems cotizados</p></div>`;
+    return `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;padding:4px 0">` +
+    entries.map(([cot, items]) => {
+      const info = cotInfoMap[norm(cot)] || {};
+      const asesorRaw = info.asesor || '—';
+      const asesorKey = _normNombre(asesorRaw);
+      const asesor = _asesorCanon[asesorKey] || asesorRaw;
+      const cliente = info.cliente || '—';
+      const dis = cotDisMap[norm(cot)] || '';
+      const disDot = dis ? `<span style="font-size:10px;padding:2px 7px;border-radius:10px;background:${DIS_COLORS[dis]||'#64748b'}22;color:${DIS_COLORS[dis]||'#64748b'};font-weight:700">${esc(dis)}</span>` : '';
+      const totalMats = items.reduce((n,e)=>{ let c=0; for(let i=1;i<=5;i++) if(String(e[`MATERIAL ${i}`]||'').trim()) c++; return n+c; },0);
+      const totalSvcs = items.reduce((n,e)=>{ let c=0; for(let i=1;i<=3;i++) if(String(e[`SERVICIO EXTERNO ${i}`]||'').trim()) c++; return n+c; },0);
+      return `<div style="background:var(--surface);border:1.5px solid var(--border);border-radius:14px;padding:12px 14px">
+        <div style="font-size:13px;font-weight:800;color:var(--accent);margin-bottom:4px">COT-${esc(cot)}</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">🏢 ${esc(cliente)}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px">
+          <span style="font-size:10px;padding:2px 7px;border-radius:10px;background:rgba(124,58,237,.1);color:var(--purple);font-weight:700">👤 ${esc(asesor)}</span>
+          ${disDot}
+        </div>
+        <div style="font-size:11px;color:var(--muted)">${items.length} ítem(s) · 🪨 ${totalMats} mat · 🛠 ${totalSvcs} svc</div>
+      </div>`;
+    }).join('') + '</div>';
+  })() : cotCards;
+
   setContent(`
     <div style="padding:12px 14px 0">
       <input type="text" placeholder="🔍 Buscar material, servicio, cotización..." value="${esc(_icSearch)}"
         oninput="_icSearch=this.value;renderItemsCotizados()"
         style="width:100%;padding:9px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface);color:var(--text);font-size:13px;box-sizing:border-box;margin-bottom:8px">
-      <select onchange="_icFiltroAsesor=this.value;renderItemsCotizados()"
-        style="width:100%;padding:8px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface);color:var(--text);font-size:13px;margin-bottom:8px">
-        ${asesorOptions}
-      </select>
-      <div style="font-size:11px;color:var(--muted);margin-bottom:8px">${filtrados.length} ítem(s) · ${Object.keys(grupos).length} cotización(es)</div>
+      <div style="display:flex;gap:5px;overflow-x:auto;padding-bottom:8px;scrollbar-width:none">${asesorPills}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin:8px 0">
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+          ${viewToggleIC}
+          ${disPillsIC?`<div class="vt-group" style="gap:3px">${disPillsIC}</div>`:''}
+        </div>
+        <span style="font-size:11px;color:var(--muted)">${filtrados.length} ítem(s) · ${Object.keys(grupos).length} cot.</span>
+      </div>
     </div>
-    <div style="padding:0 14px 80px">${cotCards}</div>
+    <div style="padding:0 14px 80px">${cotCardsGrid}</div>
   `);
 }
 
@@ -4228,7 +4469,7 @@ function qaFormatoQA(opId){
       qr: op.IDQR||'', comercial: op.ASESOR||'', cot: op.COT||'', opNum: op.OP||'',
       cliente: op.CLIENTE||'', descripcion: op.DESCRIPCION||'', disenador: op.DISEÑADOR||'',
       item: op.ITEM||'', cant: op.CANT||'', material: '', tratamiento: '',
-      fechaEntrega: op['FECHA PACTADA']||'', tipo: op.TIPO||'', rev: '',
+      fechaEntrega: (op['FECHA PACTADA']||'').slice(0,10), tipo: op.TIPO||'', rev: '',
       mq: mqAuto
     }, saved.header||{}),
     kc: saved.kc && saved.kc.length ? saved.kc : Array.from({length:QA_FMT_MAX_KC}, (_,i)=>({
@@ -6166,12 +6407,14 @@ function docCSS() {
 <!-- BARRA DE ACCIONES BULK -->
 <div id="bulk-bar">
   <span class="bulk-count" id="bulk-count">0</span>
-  <span style="font-size:11px;opacity:.7;margin-right:4px">seleccionado(s)</span>
-  <button id="bulk-btn-diseno" class="bulk-btn" style="background:#0d9488" onclick="_bulkAccion('disenoOK')">✅ Diseño OK</button>
-  <button id="bulk-btn-mp"     class="bulk-btn" style="background:#b45309" onclick="_bulkAccion('mpInsumos')">🧱 MP Insumos</button>
-  <button id="bulk-btn-pedir"  class="bulk-btn" style="background:#7c3aed" onclick="_bulkAccion('pedirMat')">📦 Pedir Material</button>
-  <button id="bulk-btn-retro"  class="bulk-btn" style="background:#dc2626" onclick="_bulkAccion('retroceder')">↩ Retroceder</button>
-  <button class="bulk-btn" style="background:#475569;margin-left:auto" onclick="_bulkLimpiar()">✕ Limpiar</button>
+  <span style="font-size:11px;color:rgba(255,255,255,.45);margin-right:4px">selec.</span>
+  <div class="bulk-sep"></div>
+  <button id="bulk-btn-diseno" class="bulk-btn" style="background:linear-gradient(135deg,#0d9488,#0f766e)" onclick="_bulkAccion('disenoOK')">✅ Diseño OK</button>
+  <button id="bulk-btn-mp"     class="bulk-btn" style="background:linear-gradient(135deg,#d97706,#b45309)" onclick="_bulkAccion('mpInsumos')">🧱 MP Insumos</button>
+  <button id="bulk-btn-pedir"  class="bulk-btn" style="background:linear-gradient(135deg,#7c3aed,#6d28d9)" onclick="_bulkAccion('pedirMat')">📦 Pedir Material</button>
+  <button id="bulk-btn-retro"  class="bulk-btn" style="background:linear-gradient(135deg,#dc2626,#b91c1c)" onclick="_bulkAccion('retroceder')">↩ Retroceder</button>
+  <div class="bulk-sep"></div>
+  <button class="bulk-btn bulk-btn-clear" onclick="_bulkLimpiar()" title="Limpiar selección">✕</button>
 </div>
 </body>
 </html>
