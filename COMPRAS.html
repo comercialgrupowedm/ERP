@@ -631,6 +631,20 @@ tr:hover td{background:#f8f9fb}
     </div>
     <div class="modal-body">
       <input type="hidden" id="mprov-id"/>
+      <input type="hidden" id="mprov-logourl"/>
+      <div class="fg" style="display:flex;align-items:center;gap:14px">
+        <div id="mprov-logo-preview-wrap" style="width:64px;height:64px;flex-shrink:0;border-radius:8px;border:1px solid var(--border);background:#f3f4f6;display:flex;align-items:center;justify-content:center;overflow:hidden">
+          <span id="mprov-logo-placeholder" style="font-size:24px">🏢</span>
+          <img id="mprov-logo-preview" style="display:none;width:100%;height:100%;object-fit:contain"/>
+        </div>
+        <div style="flex:1">
+          <label class="fl">Logo</label>
+          <input class="fi" id="mprov-logo-file" type="file" accept="image/*" onchange="onProvLogoFileChange(this)"/>
+          <div style="margin-top:6px;display:flex;gap:8px">
+            <button type="button" class="btn btn-ghost btn-xs" id="mprov-logo-quitar" style="display:none" onclick="quitarProvLogo()">🗑️ Quitar logo</button>
+          </div>
+        </div>
+      </div>
       <div class="fg2">
         <div>
           <label class="fl">Nombre / Razón social *</label>
@@ -1005,7 +1019,7 @@ function renderOCCard(oc, items){
 
   // Info central
   html += '<div class="oc-main">';
-  html += '<div class="oc-subtitle">'+esc(oc)+'</div>';
+  html += '<div class="oc-subtitle">'+esc(r0['#OP']||'—')+' - '+esc(r0.ITEM||'—')+' - '+esc(r0['EMPRESA/CLIENTE']||'—')+' - '+esc(r0.COTIZACION||'—')+'</div>';
   html += '<div class="oc-title">'+esc(descripcion||'Sin descripción')+'</div>';
 
   // Chips de info
@@ -1851,9 +1865,13 @@ function renderProveedores(){
     return;
   }
 
-  html += '<div class="tbl-wrap"><table><thead><tr><th>Nombre</th><th>NIT</th><th>Categoría</th><th>Email</th><th>Teléfono</th><th>Ciudad</th><th></th></tr></thead><tbody>';
+  html += '<div class="tbl-wrap"><table><thead><tr><th>Logo</th><th>Nombre</th><th>NIT</th><th>Categoría</th><th>Email</th><th>Teléfono</th><th>Ciudad</th><th></th></tr></thead><tbody>';
   provs.forEach(p=>{
+    const logoUrl = String(p.LOGO_URL||'').trim();
     html += '<tr>';
+    html += '<td>'+(logoUrl.startsWith('http')
+      ? '<img src="'+esc(logoUrl)+'" loading="lazy" style="width:36px;height:36px;object-fit:contain;border-radius:6px;border:1px solid var(--border);background:#fff" onerror="this.outerHTML=\'<div style=&quot;width:36px;height:36px;display:flex;align-items:center;justify-content:center;border-radius:6px;border:1px solid var(--border);background:#f3f4f6;font-size:16px&quot;>🏢</div>\'"/>'
+      : '<div style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;border-radius:6px;border:1px solid var(--border);background:#f3f4f6;font-size:16px">🏢</div>')+'</td>';
     html += '<td><b>'+esc(p.NOMBRE||'—')+'</b></td>';
     html += '<td>'+esc(p.NIT||'—')+'</td>';
     html += '<td>'+esc(p.CATEGORIA||p.CONTACTO||'—')+'</td>';
@@ -1869,11 +1887,62 @@ function renderProveedores(){
   content.innerHTML = html;
 }
 
+let _mprovLogoBase64 = null; // dataURL del logo nuevo pendiente de subir (null = sin cambio)
+let _mprovLogoRemoved = false; // true si el usuario quitó el logo existente
+
+function onProvLogoFileChange(input){
+  const file = input.files && input.files[0];
+  if(!file) return;
+  if(file.size > 4*1024*1024){ toast('La imagen debe pesar menos de 4MB','warn'); input.value=''; return; }
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    _mprovLogoBase64 = reader.result;
+    _mprovLogoRemoved = false;
+    const img = document.getElementById('mprov-logo-preview');
+    img.src = _mprovLogoBase64;
+    img.style.display = 'block';
+    document.getElementById('mprov-logo-placeholder').style.display = 'none';
+    document.getElementById('mprov-logo-quitar').style.display = 'inline-block';
+  };
+  reader.readAsDataURL(file);
+}
+
+function quitarProvLogo(){
+  _mprovLogoBase64 = null;
+  _mprovLogoRemoved = true;
+  document.getElementById('mprov-logo-file').value = '';
+  document.getElementById('mprov-logo-preview').style.display = 'none';
+  document.getElementById('mprov-logo-placeholder').style.display = 'flex';
+  document.getElementById('mprov-logo-quitar').style.display = 'none';
+  document.getElementById('mprov-logourl').value = '';
+}
+
+function _resetProvLogoUI(logoUrl){
+  _mprovLogoBase64 = null;
+  _mprovLogoRemoved = false;
+  document.getElementById('mprov-logo-file').value = '';
+  document.getElementById('mprov-logourl').value = logoUrl || '';
+  const img = document.getElementById('mprov-logo-preview');
+  const ph  = document.getElementById('mprov-logo-placeholder');
+  const btnQuitar = document.getElementById('mprov-logo-quitar');
+  if(logoUrl){
+    img.src = logoUrl;
+    img.style.display = 'block';
+    ph.style.display = 'none';
+    btnQuitar.style.display = 'inline-block';
+  } else {
+    img.style.display = 'none';
+    ph.style.display = 'flex';
+    btnQuitar.style.display = 'none';
+  }
+}
+
 function openProvModal(){
   document.getElementById('mprov-id').value='';
   document.getElementById('mprov-title').textContent='Nuevo Proveedor';
   ['mprov-nombre','mprov-nit','mprov-contacto','mprov-email','mprov-tel','mprov-ciudad','mprov-categoria','mprov-obs']
     .forEach(id=>document.getElementById(id).value='');
+  _resetProvLogoUI('');
   openModal('modal-prov');
 }
 
@@ -1890,6 +1959,7 @@ function editProv(id){
   document.getElementById('mprov-ciudad').value    = p.CIUDAD||'';
   document.getElementById('mprov-categoria').value = p.CATEGORIA||'';
   document.getElementById('mprov-obs').value       = p.OBSERVACIONES||'';
+  _resetProvLogoUI(p.LOGO_URL||'');
   openModal('modal-prov');
 }
 
@@ -1905,18 +1975,29 @@ async function guardarProveedor(){
     TELEFONO:     document.getElementById('mprov-tel').value.trim(),
     CIUDAD:       document.getElementById('mprov-ciudad').value.trim(),
     CATEGORIA:    document.getElementById('mprov-categoria').value.trim(),
-    OBSERVACIONES:document.getElementById('mprov-obs').value.trim()
+    OBSERVACIONES:document.getElementById('mprov-obs').value.trim(),
+    LOGO_URL:     document.getElementById('mprov-logourl').value.trim()
   };
+  if(_mprovLogoBase64) data.LOGO_BASE64 = _mprovLogoBase64;
+  if(_mprovLogoRemoved) data.LOGO_URL = '';
   try{
+    const btnGuardar = document.querySelector('#modal-prov .btn-primary');
+    if(_mprovLogoBase64 && btnGuardar){ btnGuardar.disabled = true; btnGuardar.textContent = '⏳ Subiendo logo...'; }
     const res = await POST('saveProveedorCompras', data);
+    if(btnGuardar){ btnGuardar.disabled = false; btnGuardar.textContent = '💾 Guardar'; }
     if(res.error){ toast(res.error,'error'); return; }
+    if(res.LOGO_URL) data.LOGO_URL = res.LOGO_URL; // el backend puede devolver la URL final tras subir a Drive
     if(data.ID){ const i=DB.proveedores.findIndex(x=>x.ID===data.ID); if(i>-1) DB.proveedores[i]={...data}; }
     else{ data.ID=res.ID||'tmp-'+Date.now(); DB.proveedores.push(data); }
     fillProvDatalist();
     closeModal('modal-prov');
     renderProveedores();
     toast('✅ Proveedor guardado');
-  } catch(e){ toast('Error: '+e.message,'error'); }
+  } catch(e){
+    const btnGuardar = document.querySelector('#modal-prov .btn-primary');
+    if(btnGuardar){ btnGuardar.disabled = false; btnGuardar.textContent = '💾 Guardar'; }
+    toast('Error: '+e.message,'error');
+  }
 }
 
 async function deleteProv(id){
