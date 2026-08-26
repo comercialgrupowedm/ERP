@@ -356,6 +356,8 @@ td.mono{font-family:var(--mono);font-size:11px}
 .vt-btn.active{background:var(--purple);border-color:var(--purple);color:#fff}
 .vt-btn:active{transform:scale(.94)}
 .vt-btn:hover:not(.active){background:var(--card2)}
+.dis-pill{transition:all .15s!important}
+.dis-pill:hover{opacity:.88;transform:translateY(-1px)}
 
 /* ═══ EMPTY ════════════════════════════════════════════ */
 .empty{text-align:center;padding:48px 20px;color:var(--muted)}
@@ -432,9 +434,7 @@ td.mono{font-family:var(--mono);font-size:11px}
 <div id="top-tabs">
   <div class="top-tab active" data-m="dashboard" onclick="nav('dashboard')">📊 Inicio</div>
   <div class="top-tab" data-m="pendiente" onclick="nav('pendiente')">🎨 Mis Items<span class="tt-badge" id="tt-pend" style="display:none">0</span></div>
-  <div class="top-tab" data-m="ingenieria" onclick="nav('ingenieria')">⚙️ Ingeniería</div>
-  <div class="top-tab" data-m="planos" onclick="nav('planos')">📄 Planos</div>
-  <div class="top-tab" data-m="produccion" onclick="nav('produccion')">🏭 Producción</div>
+
   <div class="top-tab admin-only" data-m="todos" onclick="nav('todos')" style="display:none">🗂️ Todas<span class="tt-badge" id="tt-todos" style="display:none">0</span></div>
   <div class="top-tab" data-m="bsmodulo" onclick="nav('bsmodulo')">🧱 Pedidos<span class="tt-badge" id="tt-bs" style="display:none">0</span></div>
   <div class="top-tab" data-m="itemscot" onclick="nav('itemscot')">📋 Ítems Cot.</div>
@@ -638,6 +638,7 @@ let _searchTimer = null;
 let _disSearch = '';
 let _disFiltEst = '';
 let _viewMode = {};
+let _disFiltroDis = ''; // Filtro rápido por diseñador (solo admin)
 
 // Estados que EXCLUYEN una OP del módulo de Diseño (fórmula AppSheet)
 // AND(OR(ISBLANK([INGENIERIA Y PLANEACIÓN]),[INGENIERIA Y PLANEACIÓN]=FALSE),
@@ -702,7 +703,7 @@ async function iniciarApp(){
     // Sincronizar siempre al entrar: ignora TODA la caché y trae datos frescos
     ['produccion','cotizaciones','bienesServicios','materiales','servicios'].forEach(k=>localStorage.removeItem(CACHE_PFX+k));
     setSplash(30,'Cargando órdenes de producción...');
-    await loadData('produccion','getControlProduccion');
+    await loadData('produccion','getControlProduccion','&modo=todo');
     setSplash(60,'Cargando cotizaciones...');
     await loadData('cotizaciones','getCotizaciones');
     // Cargar BS + ELEMENTOS en paralelo (ambos filtrados por OPs activas)
@@ -762,10 +763,10 @@ async function iniciarApp(){
   }
 }
 
-async function loadData(key, action){
+async function loadData(key, action, params=''){
   const cached = cacheGet(key);
   if(cached){ DB[key]=cached; return; }
-  const r = await fetch(API+'?action='+action);
+  const r = await fetch(API+'?action='+action+params);
   if(!r.ok) throw new Error('HTTP '+r.status);
   const data = await r.json();
   DB[key] = data.data||data||[];
@@ -791,7 +792,11 @@ function opsActivas(){
   const ops = DB.produccion||[];
   // Excluir solo los 3 estados finales
   const activas = ops.filter(op=>!ESTADOS_EXCLUIDOS.includes(String(op.ESTADO||'').toUpperCase()));
-  if(_esAdmin()) return activas;
+  if(_esAdmin()){
+    // Si hay filtro rápido de diseñador activo, aplicarlo
+    if(_disFiltroDis) return activas.filter(op=>(op.DISEÑADOR||'')=== _disFiltroDis);
+    return activas;
+  }
   // Diseñador: solo las que tiene asignadas
   const me = _miDiseñador().toLowerCase();
   return activas.filter(op=>(op.DISEÑADOR||'').toLowerCase()===me);
@@ -811,7 +816,10 @@ function misPendientes(){
 
 // ── Filtros del dashboard (fórmulas AppSheet exactas) ─────────────────
 function filtrarPorSesion(list){
-  if(_esAdmin()) return list;
+  if(_esAdmin()){
+    if(_disFiltroDis) return list.filter(op=>(op.DISEÑADOR||'')===_disFiltroDis);
+    return list;
+  }
   const me=_miDiseñador().toLowerCase();
   return list.filter(op=>(op.DISEÑADOR||'').toLowerCase()===me);
 }
@@ -927,7 +935,7 @@ function refreshCurrent(){
   ['produccion','cotizaciones','bienesServicios','materiales','servicios'].forEach(k=>localStorage.removeItem(CACHE_PFX+k));
   btn.classList.add('spinning');
   syncStart('Actualizando datos…','Producción y cotizaciones');
-  loadData('produccion','getControlProduccion')
+  loadData('produccion','getControlProduccion','&modo=todo')
     .then(()=>{ syncProgress(35,'Cotizaciones…'); return loadData('cotizaciones','getCotizaciones'); })
     .then(()=>{ syncProgress(60,'Materiales y servicios…');
       return Promise.all([
@@ -1021,14 +1029,101 @@ function toggleView(m,v){
   nav(m); 
 }
 // ── Selector de vista unificado (mismo estilo que módulo COMPRAS) ──
+const _DIS_RAPIDOS = ['A. MEZA','M. GOMEZ','F. GIRALDO'];
+
+// Devuelve la lista base SIN filtro de diseñador, según el módulo/filtro activo
+// Cada caso usa la misma condición que el render correspondiente, pero sin _disFiltroDis
+function _baseListParaMod(m){
+  const todas = (DB.produccion||[]).filter(op=>!ESTADOS_EXCLUIDOS.includes(String(op.ESTADO||'').toUpperCase()));
+  switch(m){
+    // "pendiente" usa opsPendienteDiseño → esPendienteDiseñoF
+    case 'pendiente':
+      return (DB.produccion||[]).filter(esPendienteDiseñoF);
+    // ingenieria y planos usan opsActivas (todas activas)
+    case 'ingenieria':
+    case 'planos':
+    case 'todos':
+      return todas;
+    // produccion usa esEnProduccion — mismo que opsMisActivas visualmente
+    case 'produccion':
+      return (DB.produccion||[]).filter(esEnProduccion);
+    // all = toda la produccion sin filtro de estado
+    case 'all':
+      return DB.produccion||[];
+    // bsmodulo e itemscot no tienen DISEÑADOR → conteo 0 (pills ocultos)
+    case 'bsmodulo':
+    case 'itemscot':
+      return [];
+    default:
+      // FILTROS_DASH: f-pendiente-diseno, f-mis-activas, f-pendiente-mp, f-con-plano, f-sin-plano
+      if(FILTROS_DASH[m]){
+        // Cada uno tiene su propio filtro de condición, lo recreamos sin _disFiltroDis
+        switch(m){
+          case 'f-pendiente-diseno': return (DB.produccion||[]).filter(esPendienteDiseñoF);
+          case 'f-mis-activas':      return (DB.produccion||[]).filter(esMisActivasF);
+          case 'f-pendiente-mp':     return (DB.produccion||[]).filter(esPendienteMPF);
+          case 'f-con-plano':        return todas.filter(op=>op.PLANO_URL||op.PLANO_NOMBRE);
+          case 'f-sin-plano':        return todas.filter(op=>!(op.PLANO_URL||op.PLANO_NOMBRE));
+          default:                   return todas;
+        }
+      }
+      return todas;
+  }
+}
+
+// Conteo por diseñador para el módulo activo, sin alterar _disFiltroDis
+function _countDis(dis, m){
+  const base = _baseListParaMod(m);
+  if(!dis) return base.length;
+  return base.filter(op=>(op.DISEÑADOR||'')===dis).length;
+}
+
+// Módulos donde los pills de diseñador no aplican
+const _MODS_SIN_DIS = new Set(['bsmodulo','itemscot']);
+
 function vistaToggleHTML(m){
   const v=getView(m);
-  return `<div class="vt-group">
-    <button class="vt-btn ${v==='project'?'active':''}" onclick="toggleView('${m}','project')" title="Proyecto">🗂 Proyecto</button>
-    <button class="vt-btn ${v==='cards'?'active':''}" onclick="toggleView('${m}','cards')" title="Tarjetas">☰ Tarjetas</button>
-    <button class="vt-btn ${v==='table'?'active':''}" onclick="toggleView('${m}','table')" title="Tabla">⊞ Tabla</button>
+  const disBtn = (_esAdmin() && !_MODS_SIN_DIS.has(m)) ? (() => {
+    const todos = _countDis('', m);
+    const pills = [
+      { label:'Todos', key:'', count: todos, color: '#64748b' },
+      ..._DIS_RAPIDOS.map(d=>({ label: d.split(' ')[0], key: d, count: _countDis(d, m), color: DIS_COLORS[d]||'var(--purple)' }))
+    ].map(p => {
+      const active = _disFiltroDis === p.key;
+      const bg     = active ? p.color : 'transparent';
+      const clr    = active ? '#fff'  : 'var(--muted)';
+      const brd    = active ? p.color : 'var(--border)';
+      const badgeBg= active ? 'rgba(255,255,255,0.25)' : (p.color==='#64748b'?'rgba(100,116,139,.13)':'color-mix(in srgb,'+p.color+' 15%,transparent)');
+      const badgeClr= active ? '#fff' : p.color;
+      return `<button class="vt-btn dis-pill" onclick="_disSetDis('${p.key}',event)"
+        style="background:${bg};border-color:${brd};color:${clr};gap:5px">
+        ${p.label}
+        <span style="background:${badgeBg};color:${badgeClr};font-size:10px;font-weight:800;
+          padding:1px 6px;border-radius:99px;line-height:1.4;min-width:18px;text-align:center">
+          ${p.count}
+        </span>
+      </button>`;
+    }).join('');
+    return `<div class="vt-group" style="gap:3px">${pills}</div>`;
+  })() : '';
+
+  return `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+    <div class="vt-group">
+      <button class="vt-btn ${v==='project'?'active':''}" onclick="toggleView('${m}','project')" title="Proyecto">🗂 Proyecto</button>
+      <button class="vt-btn ${v==='cards'?'active':''}" onclick="toggleView('${m}','cards')" title="Tarjetas">☰ Tarjetas</button>
+      <button class="vt-btn ${v==='table'?'active':''}" onclick="toggleView('${m}','table')" title="Tabla">⊞ Tabla</button>
+    </div>
+    ${disBtn}
   </div>`;
 }
+
+function _disSetDis(nombre, event){
+  event && event.stopPropagation();
+  _disFiltroDis = nombre;
+  nav(MOD);
+}
+
+// _disToggleFilterMenu eliminado: reemplazado por pills directos
 function _debounceSearch(val){ clearTimeout(_searchTimer);_searchTimer=setTimeout(()=>{_disSearch=val;nav(MOD);},320); }
 
 function updateBadges(){
@@ -1280,7 +1375,7 @@ function renderMisItems(){
   ${!lista.length?`<div class="empty"><div class="empty-icon">${base.length?'🔍':'✅'}</div>
     <p>${base.length?'Sin resultados':'¡No tienes OPs activas asignadas!'}</p></div>`:
     v==='table'?renderTabla(lista):v==='project'?renderProyecto(lista):
-    `<div class="card-list">${lista.map(op=>renderOpCard(op)).join('')}</div>`}
+    `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;padding:4px 0">${lista.map(op=>renderOpCard(op)).join('')}</div>`}
   `);
 }
 
@@ -1377,29 +1472,44 @@ function renderOpCard(op){
   const mp=_mpStatus(op);
   const mpAlerta = mp.estado==='urgente'||mp.estado==='alerta';
   const _idqr = String(op.IDQR||op.OP||'').replace(/\.0*$/,'').trim();
-  return `<div class="list-card" onclick="verDetalle('${safe(_idqr)}')"
-    style="${urg?'border-color:var(--danger);':mpAlerta?'border-left:3px solid '+mp.color+';':''}">
-    <div class="lc-top">
-      ${_thumbHtml(op,60)}
-      <div style="flex:1;min-width:0">
-        <div class="lc-id">OP-${esc(op.OP||'—')} · Item ${esc(op.ITEM||'—')}</div>
-        <div class="lc-title">${esc(op.DESCRIPCION||'—')}</div>
-        <div class="lc-sub">${esc(op.CLIENTE||'—')}</div>
-      </div>
-      <div style="flex-shrink:0;text-align:right">
-        ${badgeEstado(op.ESTADO)}
-        ${d!==null?`<br><span class="badge ${d<0?'rojo':d<3?'naranja':'gris'}" style="margin-top:4px">${d<0?'Vencido':d+'d'}</span>`:''}
-      </div>
+  const imgUrl = op.IMAGEN_B64||op.IMAGEN||'';
+  const borderColor = urg?'var(--danger)':mpAlerta?mp.color:'var(--border)';
+  const borderStyle = urg||mpAlerta?`border-color:${borderColor};`:'';
+  return `<div onclick="verDetalle('${safe(_idqr)}')" style="background:var(--card);border:1.5px solid ${borderColor};border-radius:14px;
+    overflow:hidden;cursor:pointer;transition:box-shadow .15s,transform .12s;box-shadow:0 2px 8px rgba(30,41,59,.07);
+    display:flex;flex-direction:column;-webkit-tap-highlight-color:transparent;"
+    onmouseover="this.style.boxShadow='0 6px 20px rgba(124,58,237,.13)'" onmouseout="this.style.boxShadow='0 2px 8px rgba(30,41,59,.07)'">
+    <!-- Imagen -->
+    <div style="position:relative;width:100%;aspect-ratio:16/9;background:var(--card2);overflow:hidden;flex-shrink:0">
+      ${imgUrl
+        ?`<img src="${imgUrl}" style="width:100%;height:100%;object-fit:cover" loading="lazy">`
+        :`<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:36px;color:var(--border)">⚙️</div>`}
+      <!-- Badge estado superior derecho -->
+      <div style="position:absolute;top:7px;right:7px">${badgeEstado(op.ESTADO)}</div>
+      <!-- Badge días superior izquierdo -->
+      ${d!==null?`<div style="position:absolute;top:7px;left:7px"><span class="badge ${d<0?'rojo':d<3?'naranja':'gris'}">${d<0?'Vencido':d+'d'}</span></div>`:''}
     </div>
-    <div class="lc-meta">
-      ${ingenOK?'<span class="badge verde">✅ Ing. OK</span>':'<span class="badge naranja">⏳ Ing. pendiente</span>'}
-      ${(mp.estado==='urgente'||mp.estado==='alerta')?
-        `<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;background:${mp.bg};color:${mp.color};border:1px solid ${mp.color}">${mp.label}</span>`:
-        `<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;background:${mp.bg};color:${mp.color}">${mp.label}</span>`}
-      ${op.PLANO_URL||op.PLANO_NOMBRE?'<span class="badge azul">📄 Con plano</span>':''}
-      ${op['HORAS TOTAL']?`<span style="font-size:10px;color:var(--muted)">⏱ ${esc(String(op['HORAS TOTAL']))}h</span>`:''}
-      ${_esAdmin()&&op.DISEÑADOR?`<span class="badge morado">✏️ ${esc(op.DISEÑADOR)}</span>`:''}
-      ${_esAdmin()&&!op.DISEÑADOR?'<span class="badge rojo">⚠️ Sin diseñador</span>':''}
+    <!-- Contenido -->
+    <div style="padding:10px 12px;flex:1;display:flex;flex-direction:column;gap:6px">
+      <div style="font-family:var(--mono);font-size:11px;color:var(--accent);font-weight:700">OP-${esc(op.OP||'—')} · Ítem ${esc(op.ITEM||'—')}</div>
+      <div style="font-size:13px;font-weight:700;line-height:1.3;color:var(--text);overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${esc(op.DESCRIPCION||'—')}</div>
+      <div style="font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+        🏢 ${esc(op.CLIENTE||'—')}
+      </div>
+      <!-- Badges estado MP e Ing -->
+      <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:2px">
+        ${ingenOK?'<span class="badge verde">✅ Ing. OK</span>':'<span class="badge naranja">⏳ Ing. pend.</span>'}
+        <span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;background:${mp.bg};color:${mp.color}${mpAlerta?';border:1px solid '+mp.color:''}">${mp.label}</span>
+        ${op.PLANO_URL||op.PLANO_NOMBRE?'<span class="badge azul">📄 Plano</span>':''}
+        ${_esAdmin()&&op.DISEÑADOR?`<span class="badge morado">✏️ ${esc(op.DISEÑADOR)}</span>`:''}
+        ${_esAdmin()&&!op.DISEÑADOR?'<span class="badge rojo">⚠️ Sin dis.</span>':''}
+      </div>
+      <!-- Botones acción -->
+      <div style="display:flex;gap:5px;margin-top:4px;flex-wrap:wrap" onclick="event.stopPropagation()">
+        <button onclick="qaOrdenCompra&&qaOrdenCompra('${safe(_idqr)}')" style="flex:1;min-width:0;font-size:10px;padding:5px 6px;border-radius:8px;border:1.5px solid var(--accent);background:var(--surface);color:var(--accent);cursor:pointer;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">📋 OC</button>
+        <button onclick="qaVerPedidos&&qaVerPedidos('${safe(_idqr)}')" style="flex:1;min-width:0;font-size:10px;padding:5px 6px;border-radius:8px;border:1.5px solid #0891b2;background:var(--surface);color:#0891b2;cursor:pointer;font-weight:700;white-space:nowrap">🛒</button>
+        <button onclick="qaVerHojaRuta&&qaVerHojaRuta('${safe(_idqr)}')" style="flex:1;min-width:0;font-size:10px;padding:5px 6px;border-radius:8px;border:1.5px solid #059669;background:var(--surface);color:#059669;cursor:pointer;font-weight:700;white-space:nowrap">🗺️ JD</button>
+      </div>
     </div>
   </div>`;
 }
@@ -1703,7 +1813,7 @@ function renderFiltroDash(m){
   ${!lista.length?`<div class="empty"><div class="empty-icon">${base.length?'🔍':'✅'}</div>
     <p>${base.length?'Sin resultados':'No hay OPs en este filtro'}</p></div>`:
   v==='table'?renderTabla(lista):v==='project'?renderProyecto(lista):
-  `<div class="card-list">${lista.map(op=>renderOpCard(op)).join('')}</div>`}
+  `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;padding:4px 0">${lista.map(op=>renderOpCard(op)).join('')}</div>`}
   `);
 }
 
@@ -1740,7 +1850,7 @@ function renderEnProduccion(){
   ${!lista.length?`<div class="empty"><div class="empty-icon">${base.length?'🔍':'🏭'}</div>
     <p>${base.length?'Sin resultados':'No hay OPs en producción'}</p></div>`:
   v==='table'?renderTabla(lista):v==='project'?renderProyecto(lista):
-  `<div class="card-list">${lista.map(op=>renderOpCard(op)).join('')}</div>`}
+  `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;padding:4px 0">${lista.map(op=>renderOpCard(op)).join('')}</div>`}
   `);
 }
 
@@ -1753,7 +1863,7 @@ let _curDisFilter='';
 // ══════════════════════════════════════════════════════════════════════
 let _allPeriod = '1m'; // 1m | 3m | 6m | 1a | all
 let _allSearch = '';
-let _allEst=''; let _allTipo=''; let _allPrioridad=''; let _allAsesor=''; let _allSemana=''; let _allDis='';
+let _allEst=''; let _allTipo=''; let _allPrioridad=''; let _allAsesor=''; let _allSemana='';
 let _allChip=''; // filtro rápido por chip de estado
 const PERIODOS_ALL = [
   {k:'1m', label:'1 mes',  dias:30},
@@ -1797,12 +1907,11 @@ function renderAll(){
   if(_allPrioridad) lista=lista.filter(op=>(op.PRIORIDAD||'')===_allPrioridad);
   if(_allAsesor)    lista=lista.filter(op=>(op.ASESOR||'')===_allAsesor);
   if(_allSemana)    lista=lista.filter(op=>String(op.SEMANA||'')===_allSemana);
-  if(_allDis)       lista=lista.filter(op=>(op.DISEÑADOR||'Sin asignar')===_allDis);
 
   const pool = k => [...new Set(base.map(op=>op[k]||'').filter(Boolean))].sort();
   const estadosPool=pool('ESTADO'), tiposPool=pool('TIPO'), prioridadPool=pool('PRIORIDAD'),
-        asesorPool=pool('ASESOR'), semanaPool=pool('SEMANA'), disPool=pool('DISEÑADOR');
-  const activeFilters=[_allSearch,_allEst,_allTipo,_allPrioridad,_allAsesor,_allSemana,_allDis,_allChip].filter(Boolean).length;
+        asesorPool=pool('ASESOR'), semanaPool=pool('SEMANA');
+  const activeFilters=[_allSearch,_allEst,_allTipo,_allPrioridad,_allAsesor,_allSemana,_allChip].filter(Boolean).length;
   const v=getView('all');
 
   const chips=[
@@ -1848,9 +1957,7 @@ function renderAll(){
         ${asesorPool.map(e=>`<option ${_allAsesor===e?'selected':''}>${esc(e)}</option>`).join('')}</select>
       <select onchange="_allSemana=this.value;renderAll()"><option value="">Semana</option>
         ${semanaPool.map(e=>`<option ${_allSemana===e?'selected':''}>${esc(e)}</option>`).join('')}</select>
-      <select onchange="_allDis=this.value;renderAll()"><option value="">Diseñador</option>
-        ${disPool.map(e=>`<option ${_allDis===e?'selected':''}>${esc(e)}</option>`).join('')}</select>
-      <button class="filter-reset" onclick="_allSearch='';_allEst='';_allTipo='';_allPrioridad='';_allAsesor='';_allSemana='';_allDis='';_allChip='';renderAll()">✕ Limpiar</button>
+      <button class="filter-reset" onclick="_allSearch='';_allEst='';_allTipo='';_allPrioridad='';_allAsesor='';_allSemana='';_allChip='';renderAll()">✕ Limpiar</button>
     </div>
   </div>
 
@@ -1867,7 +1974,7 @@ function renderAll(){
 
   ${!lista.length?`<div class="empty"><div class="empty-icon">🔍</div><p>Sin resultados en este periodo/filtro</p></div>`:
   v==='table'?renderTablaAll(lista):v==='project'?renderProyecto(lista):
-  `<div class="card-list">${lista.map(op=>renderOpCard(op)).join('')}</div>`}
+  `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;padding:4px 0">${lista.map(op=>renderOpCard(op)).join('')}</div>`}
   `);
 }
 
@@ -1875,7 +1982,7 @@ function renderTablaAll(items){
   return `<div class="tbl-wrap"><div class="tbl-scroll"><table>
     <thead><tr>
       <th>OP</th><th>COT</th><th>Estado</th><th>Tipo</th><th>Prioridad</th><th>Cliente</th>
-      <th>Descripción</th><th>Asesor</th><th>Diseñador</th><th>Avance</th><th>Días Ent.</th>
+      <th>Descripción</th><th>Asesor</th><th>Avance</th><th>Días Ent.</th>
       <th>F. Inicio</th><th>F. Pactada</th><th>Valor</th><th>Hrs Total</th><th>Semana</th>
     </tr></thead>
     <tbody>
@@ -1893,7 +2000,6 @@ function renderTablaAll(items){
           <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(op.CLIENTE||'—')}</td>
           <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(op.DESCRIPCION||'—')}</td>
           <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(op.ASESOR||'—')}</td>
-          <td>${esc(op.DISEÑADOR||'Sin asignar')}</td>
           <td style="min-width:70px">
             <div style="height:5px;border-radius:3px;background:rgba(0,0,0,.08);overflow:hidden">
               <div style="height:100%;width:${pct}%;background:${pct>=100?'#10b981':pct>=50?'#3b82f6':'#f59e0b'}"></div>
@@ -1978,7 +2084,7 @@ function renderTodos(){
     </div>
   </div>
   ${!lista.length?`<div class="empty"><div class="empty-icon">🔍</div><p>Sin resultados</p></div>`:
-  `<div class="card-list">${lista.map(op=>renderOpCard(op)).join('')}</div>`}
+  `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;padding:4px 0">${lista.map(op=>renderOpCard(op)).join('')}</div>`}
   `);
 }
 
