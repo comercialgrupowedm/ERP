@@ -78,6 +78,39 @@ body{display:flex;flex-direction:column;font-family:var(--sans);font-size:14px;
   box-shadow: none;
 }
 
+/* ═══ QUICK ACCESS BAR (barra superior de navegación) ══════ */
+#qa-bar{
+  display:flex;align-items:flex-start;gap:14px;flex-shrink:0;
+  background:var(--surface);border-bottom:1px solid var(--border);
+  padding:12px 14px 10px;overflow-x:auto;scrollbar-width:none;
+  -webkit-overflow-scrolling:touch;z-index:190;
+}
+#qa-bar::-webkit-scrollbar{display:none}
+.qbar-item{
+  display:flex;flex-direction:column;align-items:center;gap:6px;
+  flex-shrink:0;width:64px;cursor:pointer;user-select:none;position:relative;
+  -webkit-tap-highlight-color:transparent;
+}
+.qbar-icon{
+  width:42px;height:42px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;font-size:19px;
+  box-shadow:0 2px 6px rgba(15,23,42,.15);
+  transition:transform .12s ease,filter .12s ease;flex-shrink:0;
+}
+.qbar-item:hover .qbar-icon{transform:translateY(-2px)}
+.qbar-item:active .qbar-icon{transform:translateY(0);filter:brightness(.95)}
+.qbar-label{
+  font-size:10.5px;font-weight:700;text-align:center;color:var(--muted);
+  line-height:1.15;white-space:normal;max-width:64px;
+}
+.qbar-item.active .qbar-label{color:var(--accent)}
+.qbar-item.active .qbar-icon{box-shadow:0 0 0 2.5px var(--accent),0 2px 6px rgba(15,23,42,.15)}
+.qbar-badge{
+  position:absolute;top:-2px;right:6px;background:var(--danger);color:#fff;
+  font-size:9.5px;font-weight:800;padding:1px 5px;border-radius:99px;
+  min-width:16px;text-align:center;border:2px solid var(--surface);
+}
+
 /* ═══ OVERLAY ════════════════════════════= */
 #sidebar-overlay{
   position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:299;
@@ -145,6 +178,7 @@ body{display:flex;flex-direction:column;font-family:var(--sans);font-size:14px;
 
 /* ═══ BOTTOM NAV (mobile) ════════════════= */
 #bottom-nav{
+  display:none !important;
   height:auto;
   background:rgba(255,255,255,0.96);
   backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
@@ -1319,6 +1353,35 @@ kbd{
   <div id="refresh-btn" onclick="refreshCurrent()" title="Actualizar">↻</div>
 </div>
 
+<!-- BARRA DE ACCESO RÁPIDO -->
+<div id="qa-bar">
+  <div class="qbar-item active" data-qa="dashboard" onclick="qaGo('dashboard')">
+    <div class="qbar-icon" style="background:#2563eb">📊</div><div class="qbar-label">Inicio</div>
+  </div>
+  <div class="qbar-item" data-qa="mis-cot" onclick="qaGo('cotizaciones')">
+    <div class="qbar-icon" style="background:#0d9c94">📋</div><div class="qbar-label">Mis Cotizaciones</div>
+    <span class="qbar-badge" id="qa-b-cot" style="display:none">0</span>
+  </div>
+  <div class="qbar-item" data-qa="cot-espera" onclick="qaGo('cotizaciones',{ESTADO:'EN ESPERA'})">
+    <div class="qbar-icon" style="background:#d97706">⏳</div><div class="qbar-label">En Espera</div>
+  </div>
+  <div class="qbar-item" data-qa="items" onclick="qaGo('items')">
+    <div class="qbar-icon" style="background:#0284c7">🔩</div><div class="qbar-label">Todos Ítems</div>
+  </div>
+  <div class="qbar-item" data-qa="clientes" onclick="qaGo('clientes')">
+    <div class="qbar-icon" style="background:#7c3aed">🏢</div><div class="qbar-label">Clientes</div>
+  </div>
+  <div class="qbar-item" data-qa="materiales" onclick="qaGo('materiales')">
+    <div class="qbar-icon" style="background:#059669">🧱</div><div class="qbar-label">Materiales</div>
+  </div>
+  <div class="qbar-item" data-qa="servicios" onclick="qaGo('servicios')">
+    <div class="qbar-icon" style="background:#475569">🛠️</div><div class="qbar-label">Servicios</div>
+  </div>
+  <div class="qbar-item" data-qa="procesos" onclick="qaGo('procesos')">
+    <div class="qbar-icon" style="background:#64748b">⚙️</div><div class="qbar-label">Procesos</div>
+  </div>
+</div>
+
 <div id="sidebar-overlay" onclick="closeSidebar()"></div>
 <nav id="sidebar">
   <div class="sb-logo">
@@ -2096,11 +2159,11 @@ function updateBadges(){
   const nc = _misCots.length;
   const no = DB.produccion?.length||0;
 
-  ['b-cot','bb-cot'].forEach(id=>{ const el=document.getElementById(id); if(el){el.textContent=nc;el.style.display=nc?'':'none';} });
+  ['b-cot','bb-cot','qa-b-cot'].forEach(id=>{ const el=document.getElementById(id); if(el){el.textContent=nc;el.style.display=nc?'':'none';} });
   ['b-op','bb-op'].forEach(id=>{ const el=document.getElementById(id); if(el){el.textContent=no;el.style.display=no?'':'none';} });
 
   const alertasDis=(DB.items||[]).filter(it=>it.DISEÑADOR&&it.MP_INSUMOS!=='Y'&&it.ESTADO_PROD==='EN PROCESO').length;
-  ['b-dis','bb-dis'].forEach(id=>{ const el=document.getElementById(id); if(el){el.textContent=alertasDis;el.style.display=alertasDis?'':'none';} });
+  ['b-dis','bb-dis','qa-b-dis'].forEach(id=>{ const el=document.getElementById(id); if(el){el.textContent=alertasDis;el.style.display=alertasDis?'':'none';} });
 
   const abCot=document.getElementById('ab-cot');
   const abOp=document.getElementById('ab-op');
@@ -2114,6 +2177,23 @@ function navigate(m){
   // Función helper para navegar desde el app-grid del dashboard
   const navEl=document.querySelector(`.nav-item[data-m="${m}"]`);
   if(navEl) navEl.click();
+}
+
+// ── BARRA DE ACCESO RÁPIDO ───────────────────────────────────────
+// qaGo(modulo, filtrosPreestablecidos?) → navega y opcionalmente aplica filtros
+function qaGo(mod, presetFilters){
+  // marcar chip activo
+  document.querySelectorAll('.qbar-item[data-qa]').forEach(n=>n.classList.remove('active'));
+  const key = presetFilters
+    ? (presetFilters.__soloDiseno__ ? 'items-diseno' : presetFilters.ESTADO_PROD ? 'items-mp' : presetFilters.ESTADO==='EN ESPERA' ? 'cot-espera' : mod)
+    : (mod==='cotizaciones' ? 'mis-cot' : mod);
+  const chip = document.querySelector(`.qbar-item[data-qa="${key}"]`);
+  if(chip) chip.classList.add('active');
+
+  // limpiar filtros previos del módulo y aplicar los nuevos (si hay)
+  _F[mod] = presetFilters ? {...presetFilters} : {};
+
+  nav(mod);
 }
 
 // ── FILTER / SORT / VIEW ─────────────────────────────────────────
@@ -2181,6 +2261,9 @@ function filterData(mod, data) {
       } else if (key === '__hasta__') {
         const d = new Date(row['FECHA EMISION COT.'] || row['FECHA INICIO'] || row['FECHA'] || 0);
         if (isNaN(d) || d > new Date(val + 'T23:59:59')) return false;
+      } else if (key === '__soloDiseno__') {
+        // manejado como pre-filtro específico en items(); se ignora aquí
+        continue;
       } else {
         const rv = String(row[key] || '').toLowerCase();
         if (!rv.includes(val.toLowerCase())) return false;
@@ -2770,6 +2853,14 @@ function nav(m){
   document.getElementById('page-title').textContent = TITLES[m]||m;
   document.querySelectorAll('.nav-item[data-m]').forEach(n=>n.classList.toggle('active',n.dataset.m===m));
   document.querySelectorAll('.bn-item[data-m]').forEach(n=>n.classList.toggle('active',n.dataset.m===m));
+  // Sincroniza la barra de acceso rápido: si no venimos de un chip con filtro
+  // preestablecido, resalta el chip genérico del módulo
+  if(!document.querySelector(`.qbar-item.active[data-qa]`) || !['items-diseno','items-mp','cot-espera'].includes(document.querySelector('.qbar-item.active')?.dataset.qa)){
+    document.querySelectorAll('.qbar-item[data-qa]').forEach(n=>n.classList.remove('active'));
+    const qkey = m==='cotizaciones' ? 'mis-cot' : m==='items' ? 'items' : m;
+    const qchip = document.querySelector(`.qbar-item[data-qa="${qkey}"]`);
+    if(qchip) qchip.classList.add('active');
+  }
   const fab=document.getElementById('fab');
   if(fab) fab.style.display = FAB_ACTIONS[m] ? 'flex' : 'none';
   closeSidebar();
@@ -5572,7 +5663,14 @@ async function detailOP(id){
 //   MÓDULO ITEMS
 // ═══════════════════════════════════════════════════════════════
 async function items(){
-  loading();
+  // ── Cache-first, igual que el Dashboard: si hay datos (memoria o localStorage)
+  //    se pintan al instante, sin spinner, y se refrescan en segundo plano.
+  let _usandoCache = false;
+  if(!DB.items || !DB.items.length){
+    const cached = cacheGet('items');
+    if(cached && cached.length){ DB.items = cached; _usandoCache = true; }
+  }
+  if(!DB.items || !DB.items.length) loading(); // solo si no hay NADA que mostrar
   try{
     if(!DB.items || !DB.items.length) DB.items = await GET('getItems', '', {rango:RANGO_STATE.elementos||'1m'});
     if(!DB.cotizaciones) await load('cotizaciones','getCotizaciones');
@@ -5586,6 +5684,10 @@ async function items(){
         .filter(c=>(c.ASESOR||'').toLowerCase()===_asesorActual().toLowerCase())
         .map(c=>String(c.COTIZACION)));
       _allItems = _allItems.filter(it=>_misCots.has(String(it.COTIZACION||it.ID_PEDIDO||'')));
+    }
+    // Acceso rápido: "Pendiente Diseño" (mismo criterio del badge de alertas)
+    if((_F['items']||{}).__soloDiseno__==='Y'){
+      _allItems = _allItems.filter(it=>it.DISEÑADOR && it.MP_INSUMOS!=='Y' && it.ESTADO_PROD==='EN PROCESO');
     }
     const all = _allItems.sort((a,b)=>Number(b.COTIZACION||0)-Number(a.COTIZACION||0));
     const data = filterData('items', all);
@@ -5696,6 +5798,18 @@ async function items(){
       </div>`);
     }
     updateFilterCount('items', sorted.length, all.length);
+
+    // Si se pintó desde caché, refrescar en segundo plano (sin spinner)
+    // y volver a renderizar solo si el usuario sigue en este módulo.
+    if(_usandoCache){
+      GET('getItems', '', {rango:RANGO_STATE.elementos||'1m'}).then(fresh=>{
+        if(fresh && fresh.length){
+          DB.items = fresh;
+          cacheSet('items', fresh);
+          if(MOD === 'items') items();
+        }
+      }).catch(()=>{});
+    }
   }catch(e){setContent(`<div class="empty"><div class="empty-icon">⚠️</div><p>${e.message}</p></div>`);}
 }
 // ═══════════════════════════════════════════════════════════════
