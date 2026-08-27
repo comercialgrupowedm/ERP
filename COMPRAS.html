@@ -2115,7 +2115,7 @@ async function generarOCPDF(guardar){
     return [
       String(i+1),
       String(cant),
-      (it.PRODUCTO||it.DESCRIPCION||'').substring(0,60),
+      String(it.PRODUCTO||it.DESCRIPCION||'').substring(0,60),
       fmt(und),
       fmt(totalIt)
     ];
@@ -2792,7 +2792,7 @@ function renderOCsView(){
     html += '<div class="oc-id">'+esc(oc['ORDEN DE COMPRA']||'—')+'  <span style="color:var(--muted);font-weight:400;font-size:10px">#'+esc(String(oc.CONTADOR_ID||''))+'</span></div>';
     html += '<div class="oc-op" style="font-size:13px">🏭 '+esc(oc.PROVEEDOR||'—')+'</div>';
     html += '<div class="oc-meta">OP: '+esc(oc.OP||'—')+'  ·  '+esc(fmtDate(oc.FECHA))+'  ·  NIT: '+esc(oc['NIT O RUT']||'—')+'</div>';
-    html += '<div class="oc-meta" style="margin-top:3px">'+esc((oc['DESCRIPCIÓN DE ORDEN DE COMPRA']||'').substring(0,80))+'</div>';
+    html += '<div class="oc-meta" style="margin-top:3px">'+esc(String(oc['DESCRIPCIÓN DE ORDEN DE COMPRA']||'').substring(0,80))+'</div>';
     html += '</div>';
     html += '<div class="oc-status">';
     html += '<span class="badge '+badgeCls+'">'+estado+'</span>';
@@ -2883,7 +2883,7 @@ function renderOCProyectoCard(oc, i){
   html += '<div class="proy-chips">';
   html += '<span class="oc-chip" style="background:'+badgeBg+';color:'+badgeColor+'">'+estado+'</span>';
   if(oc['FORMA DE PAGO']) html += '<span class="oc-chip c-fecha">💳 '+esc(oc['FORMA DE PAGO'])+'</span>';
-  if(oc['DESCRIPCIÓN DE ORDEN DE COMPRA']) html += '<span class="oc-chip c-prov">'+esc(String(oc['DESCRIPCIÓN DE ORDEN DE COMPRA']).substring(0,22))+'</span>';
+  if(oc['DESCRIPCIÓN DE ORDEN DE COMPRA']) html += '<span class="oc-chip c-prov">'+esc(String(oc['DESCRIPCIÓN DE ORDEN DE COMPRA']||'').substring(0,22))+'</span>';
   html += '</div>';
 
   html += '<div class="proy-actions">';
@@ -3024,7 +3024,7 @@ async function reimprirOC(i){
     if(elems.length){
       _mocItems = elems.map(it=>({
         ...it,
-        PRODUCTO: it['DESCRIPCION ITEM'] || it['DESCRIPCION DEL PROYECTO'] || it.PRODUCTO || '',
+        PRODUCTO: String(it['DESCRIPCION ITEM'] || it['DESCRIPCION DEL PROYECTO'] || it.PRODUCTO || ''),
         'ORDEN DE COMPRA': oc['ORDEN DE COMPRA'],
         '#OP': it.OP||oc.OP||'',
         _costo_edit: parseFloat(it['COSTO TOTAL']||0)
@@ -3041,7 +3041,7 @@ async function reimprirOC(i){
 
   // 3. Fallback final: ítem sintético desde la OC
   if(!_mocItems.length){
-    _mocItems = [{ 'ORDEN DE COMPRA': oc['ORDEN DE COMPRA'], PRODUCTO: oc['DESCRIPCIÓN DE ORDEN DE COMPRA']||'', '#OP': oc.OP||'', ITEM:'', _costo_edit: parseFloat(oc['COSTO SIN IVA']||0) }];
+    _mocItems = [{ 'ORDEN DE COMPRA': oc['ORDEN DE COMPRA'], PRODUCTO: String(oc['DESCRIPCIÓN DE ORDEN DE COMPRA']||''), '#OP': String(oc.OP||''), ITEM:'', _costo_edit: parseFloat(oc['COSTO SIN IVA']||0) }];
   }
 
   // 4. Nombre del proveedor: EMPRESA tiene el nombre; PROVEEDOR puede ser ID numérico
