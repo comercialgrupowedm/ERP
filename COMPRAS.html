@@ -3012,22 +3012,51 @@ async function anularOC(idOC){
   } catch(e){ toast('Error: '+e.message,'error'); }
 }
 
-function reimprirOC(i){
-  // Reconstruir los _mocItems desde DB.ocs para reimprimir
+async function reimprirOC(i){
   const oc = DB.ocs[i];
   if(!oc){ toast('OC no encontrada','warn'); return; }
-  const bsItems = DB.bs.filter(r=>String(r['ORDEN DE COMPRA']||'').trim()===String(oc['ORDEN DE COMPRA']||'').trim());
-  _mocItems = bsItems.map(it=>({...it, _costo_edit: parseFloat(it['COSTO SIN IVA']||0)}));
+
+  // 1. Intentar cargar ítems desde ELEMENTOS_OC (descripción completa guardada)
+  let itemsCargados = false;
+  try{
+    const res = await GET('getElementosOC', {idOC: oc.ID_ORDENCOMPRA || oc['ORDEN DE COMPRA']});
+    const elems = res?.data ?? res ?? [];
+    if(elems.length){
+      _mocItems = elems.map(it=>({
+        ...it,
+        PRODUCTO: it['DESCRIPCION ITEM'] || it['DESCRIPCION DEL PROYECTO'] || it.PRODUCTO || '',
+        'ORDEN DE COMPRA': oc['ORDEN DE COMPRA'],
+        '#OP': it.OP||oc.OP||'',
+        _costo_edit: parseFloat(it['COSTO TOTAL']||0)
+      }));
+      itemsCargados = true;
+    }
+  } catch(e){}
+
+  // 2. Fallback: ítems de BS
+  if(!itemsCargados){
+    const bsItems = DB.bs.filter(r=>String(r['ORDEN DE COMPRA']||'').trim()===String(oc['ORDEN DE COMPRA']||'').trim());
+    _mocItems = bsItems.map(it=>({...it, _costo_edit: parseFloat(it['COSTO SIN IVA']||0)}));
+  }
+
+  // 3. Fallback final: ítem sintético desde la OC
   if(!_mocItems.length){
-    // Si no hay BS, crear item sintético desde la OC
     _mocItems = [{ 'ORDEN DE COMPRA': oc['ORDEN DE COMPRA'], PRODUCTO: oc['DESCRIPCIÓN DE ORDEN DE COMPRA']||'', '#OP': oc.OP||'', ITEM:'', _costo_edit: parseFloat(oc['COSTO SIN IVA']||0) }];
   }
-  document.getElementById('moc-proveedor').value  = oc.PROVEEDOR||'';
+
+  // 4. Nombre del proveedor: EMPRESA tiene el nombre; PROVEEDOR puede ser ID numérico
+  const _provNombre = (oc.PROVEEDOR && isNaN(String(oc.PROVEEDOR).trim()) ? oc.PROVEEDOR : '')
+                   || oc.EMPRESA
+                   || oc.PROVEEDOR
+                   || '';
+
+  document.getElementById('moc-proveedor').value  = _provNombre;
   document.getElementById('moc-nit').value        = oc['NIT O RUT']||'';
   document.getElementById('moc-email').value      = oc['E-MAIL']||'';
   document.getElementById('moc-tel').value        = oc.TELEFONO||'';
   document.getElementById('moc-ciudad').value     = oc.CIUDAD||'';
-  document.getElementById('moc-direccion').value  = oc['DIRECCIÓN']||'';
+  document.getElementById('moc-direccion').value  = oc['DIRECCIÓN']||oc.DIRECCION||'';
+  document.getElementById('moc-encargado').value  = oc.CONTACTO||oc['ENCARGADO']||'';
   document.getElementById('moc-iva').value        = 19;
   document.getElementById('moc-forma-pago').value = oc['FORMA DE PAGO']||'';
   document.getElementById('moc-solicito').value   = oc['SOLICITÓ']||'';
@@ -3035,7 +3064,6 @@ function reimprirOC(i){
   document.getElementById('moc-obs').value        = oc.OBSERVACIONES||'';
   renderMocItemsList();
   calcOCTotales();
-  // Generar PDF directamente sin abrir modal
   generarOCPDF(false);
 }
 
