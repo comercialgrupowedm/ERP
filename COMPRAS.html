@@ -3027,9 +3027,18 @@ async function reimprirOC(i){
         PRODUCTO: String(it['DESCRIPCION ITEM'] || it['DESCRIPCION DEL PROYECTO'] || it.PRODUCTO || ''),
         'ORDEN DE COMPRA': oc['ORDEN DE COMPRA'],
         '#OP': it.OP||oc.OP||'',
-        _costo_edit: parseFloat(it['COSTO TOTAL']||0)
+        _costo_edit: parseFloat(it['COSTO TOTAL']||it['COSTO SIN IVA']||it.COSTO||it['VALOR TOTAL']||it['VALOR UND']||it.PRECIO||0)
       }));
       itemsCargados = true;
+      // Si todos los ítems tienen costo $0 pero la OC tiene costo total, repartirlo
+      const sumaElems = _mocItems.reduce((s,it)=>s+(it._costo_edit||0),0);
+      if(sumaElems===0){
+        const costoOC = parseFloat(oc['COSTO SIN IVA']||oc['COSTO TOTAL']||0);
+        if(costoOC>0){
+          const porItem = costoOC / _mocItems.length;
+          _mocItems.forEach(it=>{ it._costo_edit = porItem; });
+        }
+      }
     }
   } catch(e){}
 
