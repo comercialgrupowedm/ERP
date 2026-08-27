@@ -3288,6 +3288,7 @@ async function saveItem(exist, cotId){
       DB.items.push({...data, ID_ITEM: newId});
     }
     if(cotId) await recalcularTotalesCot(cotId);
+    if(cotId) await renumerarEnsambleCot(cotId);
     if(cotId) detailCot(cotId);
     else items();
     setTimeout(async () => {
@@ -3297,25 +3298,107 @@ async function saveItem(exist, cotId){
   }catch(e){ toast(e.message, 'error'); }
 }
 
-// ── ON TIPO COT ───────────────────────────────────────────────────
-// Actualiza el bloque de descripción cuando cambia el tipo en formCot
-// Toggle modo padre en el wizard de ítem
+// ═══════════════════════════════════════════════════════════════
+// RENUMERACIÓN AUTOMÁTICA DE ÍTEMS + ENSAMBLES
+// Esquema: los ítems normales de una cotización llevan número plano
+// consecutivo (1,2,3…). Un ítem marcado ES_PADRE='SI' es un ENSAMBLE:
+// se le asigna una etiqueta "NE" (1E, 2E…) que NO consume número plano,
+// y sus componentes (hijos, ITEM_PADRE = esa etiqueta) sí consumen la
+// numeración plana consecutiva. Resultado esperado, ej.:
+//   1E, 1, 2, 3, 2E, 4, 5, 6
+// (1E = ensamble; 1,2,3 = sus componentes; 2E = otro ensamble; 4,5,6 = los suyos)
+// Cada componente conserva sus propios materiales/procesos/precio — nunca
+// se mezclan con los del ensamble ni con los de otros ítems.
+// ═══════════════════════════════════════════════════════════════
+async function renumerarEnsambleCot(cotId){
+  if(!cotId || !DB.items) return;
+  const its = DB.items.filter(x=>String(x.COTIZACION)===String(cotId)||String(x.ID_PEDIDO)===String(cotId));
+  if(!its.length) return;
+
+  // Raíces = ítems sin ITEM_PADRE, en su orden actual (por ORDEN si existe, si no por ITEM_NUM/ITEM numérico)
+  const raiceOrden = (it)=> Number(it.ORDEN ?? parseFloat(String(it.ITEM_NUM||it.ITEM||'0').replace(/[^\d.]/g,''))) || 0;
+  const raices = its.filter(it=>!it.ITEM_PADRE).sort((a,b)=>raiceOrden(a)-raiceOrden(b));
+
+  let itemSeq = 0, ensSeq = 0, ordenGlobal = 0;
+  const cambios = []; // {ID_ITEM, ITEM, 'COT-ITEM', ITEM_PADRE, ORDEN}
+
+  for(const raiz of raices){
+    const esEnsamble = String(raiz.ES_PADRE||'').toUpperCase()==='SI';
+    if(esEnsamble){
+      ensSeq++;
+      const numPadre = ensSeq+'E';
+      if(String(raiz.ITEM_NUM||raiz.ITEM||'')!==numPadre || raiz.ORDEN!==ordenGlobal){
+        cambios.push({ID_ITEM:raiz.ID_ITEM, ITEM:numPadre, 'COT-ITEM':(cotId||'')+'-'+numPadre, ITEM_PADRE:'', ORDEN:ordenGlobal});
+      }
+      raiz.ITEM_NUM = numPadre; raiz.ITEM = numPadre; raiz.ORDEN = ordenGlobal;
+      ordenGlobal++;
+
+      // Hijos de este ensamble: buscan por ITEM_PADRE apuntando al ID_ITEM o al ITEM_NUM viejo/nuevo del padre
+      const hijos = its.filter(it=>
+        String(it.ITEM_PADRE)===String(raiz.ID_ITEM) ||
+        String(it.ITEM_PADRE)===String(numPadre) ||
+        (it._itemPadreOriginal && String(it._itemPadreOriginal)===String(raiz.ITEM_NUM))
+      ).sort((a,b)=>raiceOrden(a)-raiceOrden(b));
+
+      for(const hijo of hijos){
+        itemSeq++;
+        const numHijo = String(itemSeq);
+        if(String(hijo.ITEM_NUM||hijo.ITEM||'')!==numHijo || hijo.ITEM_PADRE!==numPadre || hijo.ORDEN!==ordenGlobal){
+          cambios.push({ID_ITEM:hijo.ID_ITEM, ITEM:numHijo, 'COT-ITEM':(cotId||'')+'-'+numHijo, ITEM_PADRE:numPadre, ORDEN:ordenGlobal});
+        }
+        hijo.ITEM_NUM = numHijo; hijo.ITEM = numHijo; hijo.ITEM_PADRE = numPadre; hijo.ORDEN = ordenGlobal;
+        ordenGlobal++;
+      }
+    } else {
+      itemSeq++;
+      const numPlano = String(itemSeq);
+      if(String(raiz.ITEM_NUM||raiz.ITEM||'')!==numPlano || raiz.ORDEN!==ordenGlobal){
+        cambios.push({ID_ITEM:raiz.ID_ITEM, ITEM:numPlano, 'COT-ITEM':(cotId||'')+'-'+numPlano, ITEM_PADRE:'', ORDEN:ordenGlobal});
+      }
+      raiz.ITEM_NUM = numPlano; raiz.ITEM = numPlano; raiz.ORDEN = ordenGlobal;
+      ordenGlobal++;
+    }
+  }
+
+  // Persistir solo los ítems cuyo número/orden realmente cambió
+  for(const cambio of cambios){
+    POST_BG('updateItem', cambio);
+  }
+}
+
 function onSelPadre(numPadre){
   const i2 = document.getElementById('i2');
   if(!numPadre){
     if(i2){ i2.value=''; i2.removeAttribute('readonly'); }
+    toggleTabsComponente(false);
     return;
   }
-  // Calcular el siguiente número de sub-ítem para cualquier nivel
-  // 1 → 1.1, 1.1 → 1.1.1, 2 → 2.1, etc.
+  // Número tentativo del componente: sigue la numeración plana consecutiva
+  // de la cotización; el número definitivo lo fija renumerarEnsambleCot()
+  // al guardar (esquema 1E,1,2,3,2E,4,5,6).
   const cotId = window._detailCotId || '';
-  const hermanos = (DB.items||[]).filter(x=>{
-    const p = parseItemNum(String(x.ITEM_NUM||x.ITEM||''));
-    return p.padre === String(numPadre) &&
-      (String(x.COTIZACION)===String(cotId)||String(x.ID_PEDIDO)===String(cotId));
+  const its = (DB.items||[]).filter(x=>String(x.COTIZACION)===String(cotId)||String(x.ID_PEDIDO)===String(cotId));
+  const maxNum = Math.max(...its.map(it=>parseInt(String(it.ITEM_NUM||it.ITEM||'0'),10)||0),0);
+  if(i2){ i2.value = String(maxNum+1); i2.setAttribute('readonly','readonly'); }
+  toggleTabsComponente(true);
+}
+
+// Un componente de ensamble (hijo) es una pieza simple para producción:
+// no necesita Materiales/Servicios/Precios propios en el wizard — solo
+// Datos (número, descripción) y Procesos (ruta de maquinado). Precios/costos
+// del conjunto quedan en el ítem padre (el ensamble comercial).
+function toggleTabsComponente(esComponente){
+  ['wiz-tab-materiales','wiz-tab-servicios','wiz-tab-precios'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(el) el.style.display = esComponente ? 'none' : '';
   });
-  const siguiente = `${numPadre}.${hermanos.length+1}`;
-  if(i2){ i2.value = siguiente; i2.setAttribute('readonly','readonly'); }
+  // Si estaba parado en una de esas pestañas al marcar como componente, regresar a Datos
+  if(esComponente){
+    const activo = document.querySelector('#wiz-item-tabs .wiz-tab.active');
+    if(activo && ['wiz-tab-materiales','wiz-tab-servicios','wiz-tab-precios'].includes(activo.id)){
+      wizItemTab(0);
+    }
+  }
 }
 
 function toggleEsPadre(){
@@ -3338,8 +3421,8 @@ function toggleEsPadre(){
   }
   if(lbl)  lbl.style.borderColor = nuevo ? 'var(--accent)' : 'var(--border)';
   if(txt)  txt.textContent = nuevo
-    ? '✅ Activado — puedes agregar sub-ítems'
-    : 'Activa para agregar sub-ítems (1.1, 1.2…)';
+    ? '✅ Activado — al guardar se etiqueta como ensamble (ej: 1E) y sus componentes toman numeración propia (1, 2, 3…)'
+    : 'Activa para convertirlo en ensamble y agregarle componentes';
 
   // Si activa y el número tiene punto, quitarlo
   if(nuevo){
@@ -5077,10 +5160,13 @@ async function modalCrearOP(cotId, soloItemId){
     toast('La cotización no tiene items. Agrégalos primero.','error'); return;
   }
 
-  // Si venimos desde el detalle de un ítem puntual, restringir SOLO a ese ítem
-  // (no se debe crear OP para el resto de ítems de la cotización).
+  // Si venimos desde el detalle de un ítem puntual, restringir a ese ítem
+  // PERO incluir automáticamente sus ensambles (hijos con ITEM_PADRE = número
+  // de este ítem) — el ensamble se manda junto al padre a Producción, cada uno
+  // con sus propios materiales/procesos, sin mezclarlos con los del padre.
   if(soloItemId){
-    its = its.filter(it=>String(it.ID_ITEM)===String(soloItemId));
+    const _todosCot = its; // antes de filtrar, para poder buscar hijos
+    its = expandirConEnsambles(_todosCot, [soloItemId]);
     if(!its.length){ toast('Ítem no encontrado en esta cotización','error'); return; }
   }
 
@@ -5118,8 +5204,9 @@ async function modalCrearOP(cotId, soloItemId){
   _opModalLeadDias = leadTimeDias(c['LEAD TIME COT']) || leadTimeDias(c['LEAD TIME']) || 0;
   const fpCalc = addDias(hoy, _opModalLeadDias);
 
+  const _nEnsambles = soloItemId ? (itemsAUsar.length - 1) : 0;
   const avisoTexto = soloItemId
-    ? `Se creará la fila de Producción solo para el <strong>Ítem ${itemsAUsar[0]?.ITEM||''}</strong> de esta cotización, con el Nº OP-<strong>${newOP}</strong>. Los demás ítems de la cotización no se tocan.`
+    ? `Se creará la fila de Producción para el <strong>Ítem ${itemsAUsar.find(x=>String(x.ID_ITEM)===String(soloItemId))?.ITEM||''}</strong>${_nEnsambles>0?` + <strong>${_nEnsambles} ensamble(s)</strong> asociado(s) (cada uno con sus propios materiales/procesos)`:''}, con el Nº OP-<strong>${newOP}</strong>. Los demás ítems de la cotización no se tocan.`
     : opExistenteNum
       ? `Esta cotización ya tiene la <strong>OP-${newOP}</strong>. Selecciona abajo cuáles de los ítems pendientes quieres agregar (los que ya estén en Producción no se duplican).`
       : `Selecciona abajo los ítems que quieres crear en Control Producción — todos con el mismo Nº OP-<strong>${newOP}</strong>`;
@@ -6406,14 +6493,15 @@ const svcOpts = (DB.servicios || []).map(s => {
     return `<option value="${p.ID_PROCESO}" data-costo="${costo}">${nm} ($${costo.toLocaleString('es-CO')}/hr)</option>`;
   }).join('');
 
+  const _esComponenteInicial = !!(it.ITEM_PADRE);
   openModal(isNew?'Nuevo Item — COT-'+(it.COTIZACION||''):'Editar Item '+it.ITEM,`
     <!-- WIZARD TABS ITEM -->
     <div class="wiz-tabs" id="wiz-item-tabs">
       <div class="wiz-tab active" onclick="wizItemTab(0)">📦 Datos</div>
-      <div class="wiz-tab" onclick="wizItemTab(1)">🧱 Materiales</div>
-      <div class="wiz-tab" onclick="wizItemTab(2)">🛠 Servicios</div>
+      <div class="wiz-tab" id="wiz-tab-materiales" onclick="wizItemTab(1)" style="${_esComponenteInicial?'display:none':''}">🧱 Materiales</div>
+      <div class="wiz-tab" id="wiz-tab-servicios" onclick="wizItemTab(2)" style="${_esComponenteInicial?'display:none':''}">🛠 Servicios</div>
       <div class="wiz-tab" onclick="wizItemTab(3)">⚙️ Procesos</div>
-      <div class="wiz-tab" onclick="wizItemTab(4)">💰 Precios</div>
+      <div class="wiz-tab" id="wiz-tab-precios" onclick="wizItemTab(4)" style="${_esComponenteInicial?'display:none':''}">💰 Precios</div>
       <div class="wiz-tab" onclick="wizItemTab(5)">📎 Archivos</div>
     </div>
 
@@ -6460,7 +6548,7 @@ const svcOpts = (DB.servicios || []).map(s => {
             <div>
               <div style="font-size:13px;font-weight:700;color:var(--text)">🔗 Ítem padre (ensamble)</div>
               <div style="font-size:11px;color:var(--muted)" id="txt-es-padre">
-                ${it.ES_PADRE==='SI'||it.ITEM_TIPO==='PADRE'?'✅ Activado — puedes agregar sub-ítems':'Activa para agregar sub-ítems (1.1, 1.2…)'}
+                ${it.ES_PADRE==='SI'||it.ITEM_TIPO==='PADRE'?'✅ Activado — al guardar se etiqueta como ensamble y sus componentes toman numeración propia':'Activa para convertirlo en ensamble y agregarle componentes'}
               </div>
             </div>
           </div>
@@ -6686,6 +6774,14 @@ const svcOpts = (DB.servicios || []).map(s => {
   document.getElementById('modal-body').dataset.cotTipo = _cotTipo;
 
   setTimeout(()=>{
+    // Inicializar listas de Operaciones y el mostrar/ocultar de horas para
+    // cada proceso ya cargado (ítems existentes o filas por defecto)
+    document.querySelectorAll('#prc-rows .prc-row').forEach((row)=>{
+      const idx = Number(row.id.replace('prc-row-',''));
+      renderPrcOps(idx);
+      const nombre = document.getElementById('prc'+idx)?.value||'';
+      togglePrcHorasWrap(idx, nombre);
+    });
     // Si el item ya tenía precio unitario guardado, marcarlo como manual
     // para que recalcItem() no lo sobreescriba con el cálculo desde costos
     const _ipunit = document.getElementById('ipunit');
@@ -7801,7 +7897,7 @@ async function ejecutarCrearOP(cotId, soloItemId){
   if(!numOP){ toast('Número de OP requerido','error'); return; }
 
   let its=(DB.items||[]).filter(x=>String(x.COTIZACION)===String(cotId)||String(x.ID_PEDIDO)===String(cotId));
-  if(soloItemId) its = its.filter(it=>String(it.ID_ITEM)===String(soloItemId));
+  if(soloItemId) its = expandirConEnsambles(its, [soloItemId]);
 
   // Mismo criterio que modalCrearOP: cruzar COT+ITEM contra Control Producción,
   // no fiarse solo del campo OP_ID del item.
@@ -7855,6 +7951,7 @@ async function ejecutarCrearOP(cotId, soloItemId){
     DB.produccion = DB.produccion||[];
     DB.produccion.push({
       OP: numOP, COT: cotId, ITEM: it.ITEM||it.ITEM_NUM||1,
+      ES_ENSAMBLE_DE: it.ITEM_PADRE || parseItemNum(it.ITEM_NUM||it.ITEM).padre || '',
       CLIENTE: c.Empresa||c.EMPRESA||'',
       DESCRIPCION: it['DESCRIPCION ITEM']||it.DESCRIPCION||'',
       ESTADO: 'PENDIENTE MP', IDQR: '',
@@ -7921,6 +8018,10 @@ async function ejecutarCrearOP(cotId, soloItemId){
         ASESOR:              c.ASESOR||'',
         DISEÑADOR:           diseñador,
         ITEM:                it.ITEM||it.ITEM_NUM||1,
+        // Si este ítem es un ensamble (tiene ITEM_PADRE), se deja constancia
+        // de a qué ítem pertenece — permite agrupar visualmente en Producción
+        // sin mezclar sus materiales/procesos con los del padre.
+        ES_ENSAMBLE_DE:      it.ITEM_PADRE || parseItemNum(it.ITEM_NUM||it.ITEM).padre || '',
         CANT:                it.UNIDADES||it.CANT||1,
         'PRECIO SIN IVA':    it['PRECIO SIN IVA']||it['PRECIO UNITARIO']||0,
         'HORAS TOTAL':       it['HORAS TOTAL']||0,
@@ -10016,7 +10117,7 @@ function buildPrcRow(idx, it, prcOpts){
           </div>
         </div>
       </div>
-      <div class="form-grid">
+      <div class="form-grid" id="prc${idx}-horas-wrap" style="${_prcSinHoras(pr.nombre)?'display:none':''}">
         <div class="field"><label>Tiempo (horas)</label>
           <div class="spin-row">
             <button type="button" class="spin-btn" onclick="spinField('prc${idx}t',-.25)">−</button>
@@ -10050,14 +10151,120 @@ function buildPrcRow(idx, it, prcOpts){
             ${pr.modoManual==='total'?'Costo total ya incluye todas las unidades':'Costo por unidad — se multiplica × cant. del ítem'}
           </div>
         </div>
-
-        <div class="field span2"><label>Días Serv. Externo asociado</label>
-          <input id="prc${idx}diasse" value="${pr.diasSe||''}"></div>
-        <div class="field span2"><label>Descripción / Notas del proceso</label>
-          <input id="prc${idx}descotros" value="${pr.descOtros||''}"></div>
       </div>
     </div>
+    <div class="field span2" style="margin-top:2px">
+      <label>Operaciones del proceso ${n}</label>
+      <input type="hidden" id="prc${idx}descotros" value="${(pr.descOtros||'').replace(/"/g,'&quot;')}">
+      <div id="prc${idx}-ops-list" style="display:flex;flex-direction:column;gap:6px;margin-top:4px"></div>
+      <button type="button" class="btn btn-ghost btn-sm" style="margin-top:8px;font-size:12px" onclick="addPrcOp(${idx})">＋ Agregar operación</button>
+    </div>
   </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// OPERACIONES POR PROCESO — lista editable dentro de "Proceso N"
+// Reemplaza el campo libre de notas por una lista de operaciones
+// (ej: "Desbaste", "Acabado"…) que se pueden agregar, quitar y
+// reordenar (flechas ↑↓ o arrastrando). Se guarda serializada con
+// '\n' en el input oculto prc{idx}descotros para no tocar el backend.
+// ═══════════════════════════════════════════════════════════════
+window._prcOps = window._prcOps || {};
+
+function _prcOpsInit(idx){
+  if(window._prcOps[idx]) return window._prcOps[idx];
+  const hid = document.getElementById('prc'+idx+'descotros');
+  const raw = hid?.value || '';
+  const ops = raw.split('\n').map(s=>s.trim()).filter(Boolean);
+  window._prcOps[idx] = ops.length ? ops : [];
+  return window._prcOps[idx];
+}
+
+function renderPrcOps(idx){
+  const ops = _prcOpsInit(idx);
+  const cont = document.getElementById('prc'+idx+'-ops-list');
+  if(!cont) return;
+  cont.innerHTML = ops.map((op,i)=>`
+    <div class="prc-op-row" draggable="true" data-i="${i}"
+      ondragstart="dragStartPrcOp(event,${idx},${i})"
+      ondragover="event.preventDefault()"
+      ondrop="dropPrcOp(event,${idx},${i})"
+      style="display:flex;align-items:center;gap:6px;background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:6px 8px">
+      <span style="cursor:grab;color:var(--muted);flex-shrink:0" title="Arrastrar para reordenar">⠿</span>
+      <input value="${(op||'').replace(/"/g,'&quot;')}" placeholder="Operación ${i+1}"
+        oninput="setPrcOp(${idx},${i},this.value)" style="flex:1;border:none;background:transparent;font-size:12px">
+      <button type="button" title="Subir" onclick="movePrcOp(${idx},${i},-1)" style="background:none;border:none;cursor:pointer;font-size:12px;padding:2px" ${i===0?'disabled style="opacity:.3"':''}>↑</button>
+      <button type="button" title="Bajar" onclick="movePrcOp(${idx},${i},1)" style="background:none;border:none;cursor:pointer;font-size:12px;padding:2px" ${i===ops.length-1?'disabled style="opacity:.3"':''}>↓</button>
+      <button type="button" title="Quitar" onclick="removePrcOp(${idx},${i})" style="background:none;border:none;cursor:pointer;font-size:12px;padding:2px;color:var(--danger)">✕</button>
+    </div>`).join('') || `<div style="font-size:11px;color:var(--muted);font-style:italic">Sin operaciones — usa "＋ Agregar operación"</div>`;
+  _prcOpsSync(idx);
+}
+
+function _prcOpsSync(idx){
+  const hid = document.getElementById('prc'+idx+'descotros');
+  if(hid) hid.value = (window._prcOps[idx]||[]).join('\n');
+}
+
+function addPrcOp(idx){
+  const ops=_prcOpsInit(idx);
+  ops.push('');
+  renderPrcOps(idx);
+}
+
+function setPrcOp(idx,i,val){
+  const ops=_prcOpsInit(idx);
+  ops[i]=val;
+  _prcOpsSync(idx);
+}
+
+function removePrcOp(idx,i){
+  const ops=_prcOpsInit(idx);
+  ops.splice(i,1);
+  renderPrcOps(idx);
+}
+
+function movePrcOp(idx,i,dir){
+  const ops=_prcOpsInit(idx);
+  const j=i+dir;
+  if(j<0||j>=ops.length) return;
+  [ops[i],ops[j]]=[ops[j],ops[i]];
+  renderPrcOps(idx);
+}
+
+let _prcOpDragFrom=null;
+function dragStartPrcOp(ev,idx,i){
+  _prcOpDragFrom=i;
+  ev.dataTransfer.effectAllowed='move';
+}
+function dropPrcOp(ev,idx,i){
+  ev.preventDefault();
+  if(_prcOpDragFrom===null || _prcOpDragFrom===i) return;
+  const ops=_prcOpsInit(idx);
+  const [moved]=ops.splice(_prcOpDragFrom,1);
+  ops.splice(i,0,moved);
+  _prcOpDragFrom=null;
+  renderPrcOps(idx);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Ocultar Tiempo/Costo cuando el proceso elegido es "sin horas"
+// (proyectos/ingeniería/OTROS) o un servicio externo (SE / CUADRANTE
+// EXTERNO). Para el resto de máquinas sí se piden horas normalmente.
+// ═══════════════════════════════════════════════════════════════
+function _prcSinHoras(nombre){
+  const nm = String(nombre||'').toUpperCase();
+  if(!nm) return false;
+  const prc = (DB.procesos||[]).find(p=>(p.PROCESO||p.NOMBRE_MAQUINA||'').toUpperCase()===nm);
+  const cuadrante = String(prc?.CUADRANTE||prc?.['ILUSTRACIÓN CUADRANTE']||'').toUpperCase();
+  const esProyectoOIngenieria = nm.includes('PROYECT') || nm.includes('OTROS') || nm.includes('INGENIER');
+  const esServicioExterno = cuadrante==='EXTERNO' || nm.startsWith('SE ') || nm.includes(' SE ');
+  return esProyectoOIngenieria || esServicioExterno;
+}
+
+function togglePrcHorasWrap(idx, nombre){
+  const wrap = document.getElementById('prc'+idx+'-horas-wrap');
+  if(!wrap) return;
+  wrap.style.display = _prcSinHoras(nombre) ? 'none' : '';
 }
 
 function addMatRow(){
@@ -10081,6 +10288,8 @@ function addPrcRow(){
     return `<option value="${p.ID_PROCESO}" data-costo="${costo}">${nm} ($${costo.toLocaleString('es-CO')}/hr)</option>`;
   }).join('');
   document.getElementById('prc-rows').insertAdjacentHTML('beforeend',buildPrcRow(idx,{},prcOpts));
+  renderPrcOps(idx);
+  togglePrcHorasWrap(idx, '');
 }
 
 function calcCostMat(idx, forzar=false){
@@ -10141,6 +10350,7 @@ function onSelectPrc(idx){
     if(esHilo) calcHorasHilo(idx);
   }
   calcCostPrc(idx);
+  togglePrcHorasWrap(idx, opt.dataset.nombre||sel.value||'');
 }
 
 function calcHorasHilo(idx){
@@ -10668,8 +10878,34 @@ function parseItemNum(itemNum){
   };
 }
 
-// Ordenar ítems con jerarquía correcta: 1, 1.1, 1.2, 2, 2.1...
+// Dado un conjunto de items de una cotización y un listado de ID_ITEM base,
+// devuelve esos items + todos sus ensambles/componentes (ITEM_PADRE === su
+// etiqueta "NE" o su ID_ITEM). Se usa al crear una OP desde un ítem puntual:
+// el ensamble debe viajar junto al padre, cada uno con sus propios
+// materiales/procesos (no se fusionan).
+function expandirConEnsambles(todosLosItems, idsBase){
+  const idsBaseStr = idsBase.map(String);
+  const base = (todosLosItems||[]).filter(it=>idsBaseStr.includes(String(it.ID_ITEM)));
+  const refsPadre = base.map(it=>[String(it.ITEM_NUM||it.ITEM||''), String(it.ID_ITEM)]).flat();
+  const hijos = (todosLosItems||[]).filter(it=>{
+    if(idsBaseStr.includes(String(it.ID_ITEM))) return false;
+    const padreRef = String(it.ITEM_PADRE || '');
+    return padreRef && refsPadre.includes(padreRef);
+  });
+  const combinados = [...base, ...hijos];
+  return combinados.some(it=>it.ORDEN!==undefined)
+    ? combinados.sort((a,b)=>(Number(a.ORDEN)||0)-(Number(b.ORDEN)||0))
+    : sortItemsJerarquia(combinados);
+}
+
+// Ordenar ítems con jerarquía correcta.
+// Si los ítems ya tienen ORDEN (asignado por renumerarEnsambleCot), se respeta
+// ese orden tal cual — es la fuente de verdad para el esquema 1E,1,2,3,2E,4,5,6.
+// Si no, se cae al orden numérico plano/decimal anterior (compatibilidad).
 function sortItemsJerarquia(items){
+  if(items.some(it=>it.ORDEN!==undefined && it.ORDEN!==null && it.ORDEN!=='')){
+    return [...items].sort((a,b)=>(Number(a.ORDEN)||0)-(Number(b.ORDEN)||0));
+  }
   return [...items].sort((a,b)=>{
     const na = String(a.ITEM_NUM||a.ITEM||0);
     const nb = String(b.ITEM_NUM||b.ITEM||0);
@@ -10744,38 +10980,39 @@ function renderItemCardJerarquia(it, opts={}){
   </div>`;
 }
 
-// Modal para agregar un sub-ítem bajo un padre
+// Modal para agregar un sub-ítem (componente de ensamble) bajo un padre
 function modalAgregarSubItem(itemPadreId, numPadre){
   const cotId = window._detailCotId; // guardado al abrir detailCot
   if(!cotId){ toast('Sin cotización activa','error'); return; }
 
-  // Si numPadre es 'nuevo' → crear ítem raíz con siguiente número
+  // Si numPadre es 'nuevo' → crear ítem raíz con siguiente número plano
   if(numPadre === 'nuevo'){
-    const itsRaiz = (DB.items||[]).filter(it=>{
-      const p = parseItemNum(it.ITEM_NUM||it.ITEM);
-      return !p.padre && (String(it.COTIZACION)===String(cotId));
-    });
-    const maxRaiz = Math.max(...itsRaiz.map(it=>parseItemNum(it.ITEM_NUM||it.ITEM).seq),0);
-    formItem({ COTIZACION:cotId, ITEM_NUM:String(maxRaiz+1), ITEM:maxRaiz+1 });
+    const its = (DB.items||[]).filter(it=>String(it.COTIZACION)===String(cotId)||String(it.ID_PEDIDO)===String(cotId));
+    const maxNum = Math.max(...its.map(it=>parseInt(String(it.ITEM_NUM||it.ITEM||'0'),10)||0),0);
+    formItem({ COTIZACION:cotId, ITEM_NUM:String(maxNum+1), ITEM:maxNum+1 });
     return;
   }
 
-  const itsHermanos = (DB.items||[]).filter(it=>{
-    const p = parseItemNum(it.ITEM_NUM||it.ITEM);
-    return p.padre === String(numPadre) &&
-      (String(it.COTIZACION)===String(cotId)||String(it.ID_PEDIDO)===String(cotId));
-  });
-  const siguienteSeq = itsHermanos.length + 1;
-  const nuevoNum     = `${numPadre}.${siguienteSeq}`;
-
-  // Abrir formItem con el número pre-asignado
+  // Asegurar que el padre quede marcado como ensamble (ES_PADRE='SI').
+  // Si aún no tiene la etiqueta "NE", se le asignará al llamar renumerarEnsambleCot
+  // justo después de guardar este componente.
   const padre = (DB.items||[]).find(x=>x.ID_ITEM===itemPadreId);
+  if(padre && String(padre.ES_PADRE||'').toUpperCase()!=='SI'){
+    padre.ES_PADRE='SI';
+    POST_BG('updateItem', {ID_ITEM:padre.ID_ITEM, ES_PADRE:'SI'});
+  }
+
+  // Número tentativo del componente: seguirá la numeración plana consecutiva;
+  // el número definitivo lo fija renumerarEnsambleCot() tras guardar.
+  const its = (DB.items||[]).filter(it=>String(it.COTIZACION)===String(cotId)||String(it.ID_PEDIDO)===String(cotId));
+  const maxNum = Math.max(...its.map(it=>parseInt(String(it.ITEM_NUM||it.ITEM||'0'),10)||0),0);
+
   formItem({
     COTIZACION:   cotId,
     ID_PEDIDO:    padre?.ID_PEDIDO||'',
-    ITEM_NUM:     nuevoNum,
-    ITEM:         nuevoNum,
-    ITEM_PADRE:   numPadre,
+    ITEM_NUM:     String(maxNum+1),
+    ITEM:         String(maxNum+1),
+    ITEM_PADRE:   padre ? (padre.ITEM_NUM||padre.ITEM||padre.ID_ITEM) : numPadre,
     EMPRESA:      padre?.EMPRESA||'',
   });
 }
@@ -13491,18 +13728,60 @@ function qaHojaRuta(opId) {
   let saved = {};
   try { saved = JSON.parse(op.HOJA_RUTA_JSON||'{}'); } catch{}
 
+  // Ítem vinculado a esta OP — de aquí se autocompletan Materiales y las
+  // Operaciones ya cargadas en cada Proceso del ítem (wizard de ítems).
+  const itVinc = (DB.items||[]).find(x=>
+    String(x.COTIZACION)===String(op.COT) && String(x.ITEM)===String(op.ITEM));
+
   // Rutas MQ como procesos base
   const rutasMQ = [1,2,3,4,5,6,7,8,9,10]
     .map(n=>(op['RUTA MQ'+n]||op['RUTA_MQ'+n]||'').trim()).filter(Boolean);
 
   const procBase = saved.procesos && saved.procesos.length > 0
     ? saved.procesos
-    : rutasMQ.map(r=>({ maquina:r, cota:'', tEst:'', inst:'' }));
+    : rutasMQ.map((r,i)=>{
+        const n = i+1;
+        // Operaciones ya cargadas en el Proceso N del ítem (builder de "＋ Agregar operación")
+        const ops = itVinc
+          ? String(itVinc['DESCRIPCION_OTROS_P'+n] ?? itVinc['DESCRIPCION OTROS P'+n] ?? '').trim()
+          : '';
+        // Horas presupuestadas de ese mismo proceso, ya cargadas en el ítem
+        const horasTotal = itVinc ? Number(itVinc['TIEMPO PRO '+n+' (horas)']||0) : 0;
+        return {
+          maquina: r,
+          cota:    '',
+          tEst:    horasTotal ? horasTotal.toFixed(2)+'h' : '',
+          inst:    ops,
+        };
+      });
   if(procBase.length === 0) procBase.push({maquina:'',cota:'',tEst:'',inst:''});
   procBase.push({maquina:'',cota:'',tEst:'',inst:''});
 
   // Secciones
   const savedSecs = saved.secciones || HR_SECS_DEFAULT.map(s=>({...s}));
+
+  // Materiales: si aún no hay nada guardado a mano en el documento, se
+  // autocompletan desde los materiales cargados en el ítem (Material,
+  // Dimensiones, Cantidad); Estado/Responsable quedan como punto de partida
+  // editable por el ingeniero.
+  const contenidoBase = {...(saved.contenido||{})};
+  const yaTieneMateriales = Object.keys(contenidoBase).some(k=>k.startsWith('mat'));
+  if(itVinc && !yaTieneMateriales){
+    for(let k=1;k<=5;k++){
+      const m = _matN(itVinc,k);
+      if(!m.nombre) continue;
+      const i = k-1;
+      const dimTxt = m.esEspecial
+        ? (m.descEsp || '—')
+        : (m.geo==='Platina'
+            ? `${m.dim1||0}×${m.anc||0}×${m.lar||0}mm`
+            : `Ø${m.dim1||0} x ${m.lar||0}mm`);
+      contenidoBase['mat'+i+'_material'] = m.esEspecial ? 'ESPECIAL' : m.nombre;
+      contenidoBase['mat'+i+'_dim']      = dimTxt;
+      contenidoBase['mat'+i+'_cant']     = String(m.cant || op.CANT || op.CANTIDAD || '');
+      contenidoBase['mat'+i+'_estado']   = 'Pendiente';
+    }
+  }
 
   window._HR = {
     opId, op,
@@ -13510,7 +13789,7 @@ function qaHojaRuta(opId) {
     secciones: savedSecs,
     custom: saved.custom || [],
     obs: saved.obs || '',
-    contenido: saved.contenido || {},
+    contenido: contenidoBase,
     activeTab: 0
   };
 
@@ -13660,7 +13939,8 @@ function _hrPanelHTML() {
     text-transform:uppercase;letter-spacing:.7px;
   }
   .hr-proc-field select,
-  .hr-proc-field input {
+  .hr-proc-field input,
+  .hr-proc-field textarea {
     border:1.5px solid var(--border);border-radius:8px;
     padding:8px 10px;font-size:13px;color:var(--text);
     background:var(--surface);outline:none;width:100%;
@@ -13779,9 +14059,10 @@ function _hrTabProcesos() {
       <!-- Instrucción (fila completa) -->
       <div class="hr-proc-row">
         <div class="hr-proc-field">
-          <label>Instrucción especial</label>
-          <input value="${p.inst||''}" placeholder="Notas para el operario…"
-            oninput="window._HR.procesos[${i}].inst=this.value;_hrUpdatePreview()">
+          <label>Instrucción especial ${p.inst?'· autocompletada desde el ítem':''}</label>
+          <textarea rows="3" placeholder="Notas para el operario…"
+            oninput="window._HR.procesos[${i}].inst=this.value;_hrUpdatePreview()"
+            style="resize:vertical;font-family:inherit">${(p.inst||'').replace(/</g,'&lt;')}</textarea>
         </div>
       </div>
     </div>`).join('');
@@ -14000,7 +14281,7 @@ function _hrBuildPDFHtml(op, hrData) {
     <tr>
       <td style="text-align:center;font-weight:700;color:#1a3a6b;border:1px solid #ccc;padding:4px 5px">${i+1}</td>
       <td style="border:1px solid #ccc;padding:4px 5px;font-weight:700;background:#f0f4fa">${p.maquina||'—'}</td>
-      <td style="border:1px solid #ccc;padding:4px 5px">${p.inst||''}</td>
+      <td style="border:1px solid #ccc;padding:4px 5px">${(p.inst||'').replace(/</g,'&lt;').replace(/\n/g,'<br>')}</td>
       <td style="border:1px solid #ccc;padding:4px 5px;text-align:center;color:#1a3a6b;font-weight:700">${p.cota||''}</td>
       <td style="border:1px solid #ccc;padding:4px 5px;text-align:center">${p.tEst||''}</td>
       ${cell('proc'+i+'_medida','text-align:center')}
@@ -14110,7 +14391,11 @@ function _hrBuildPDFHtml(op, hrData) {
   <!-- SECCIONES DINÁMICAS según orden y estado -->
   ${secciones.filter(s=>s.active!==false).map(s => {
     if(s.id==='foto' || s.id==='plano') return ''; // se manejan juntas
-    if(s.id==='materiales') return `
+    if(s.id==='materiales'){
+      // Filas dinámicas: al menos 2, o las que ya tengan datos cargados (hasta 5)
+      let nFilas = 2;
+      for(let i=4;i>=0;i--){ if(contenido['mat'+i+'_material']){ nFilas = i+1; break; } }
+      return `
       <div style="background:#1a3a6b;color:#fff;font-weight:700;font-size:8px;padding:3px 8px;margin-bottom:4px">MATERIALES</div>
       <table style="margin-bottom:6px;font-size:8px">
         <tr style="background:#dde6f0">
@@ -14120,8 +14405,9 @@ function _hrBuildPDFHtml(op, hrData) {
           <th style="border:1px solid #ccc;padding:3px 6px;width:15%">Estado</th>
           <th style="border:1px solid #ccc;padding:3px 6px;width:15%">Responsable</th>
         </tr>
-        ${[0,1].map(i=>`<tr>${cell('mat'+i+'_material')}${cell('mat'+i+'_dim')}${cell('mat'+i+'_cant','text-align:center')}${cell('mat'+i+'_estado')}${cell('mat'+i+'_resp')}</tr>`).join('')}
+        ${Array.from({length:nFilas},(_,i)=>`<tr>${cell('mat'+i+'_material')}${cell('mat'+i+'_dim')}${cell('mat'+i+'_cant','text-align:center')}${cell('mat'+i+'_estado')}${cell('mat'+i+'_resp')}</tr>`).join('')}
       </table>`;
+    }
     if(s.id==='procesos') return `
       <div style="background:#1a3a6b;color:#fff;font-weight:700;font-size:8px;padding:3px 8px;margin-bottom:4px">SECUENCIA DE PROCESOS Y CONTROL DE MEDIDAS</div>
       <table style="margin-bottom:6px;font-size:8px">
@@ -15097,6 +15383,7 @@ function onBuscarPrc(idx){
   if(hiloDiv) hiloDiv.style.display=esHilo?'':'none';
   if(esHilo) calcHorasHilo(idx);
   calcCostPrc(idx);
+  togglePrcHorasWrap(idx, nm);
 }
 
 function clearPrcRow(idx){
