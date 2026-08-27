@@ -278,6 +278,30 @@ body{display:flex;flex-direction:column;font-family:var(--sans);font-size:14px;b
 .filter-pill-txt{min-width:150px;flex:1}
 .filter-count{font-size:11px;color:var(--muted);margin-left:auto;white-space:nowrap}
 
+/* ── CHIPS DE MÁQUINA (Ruta de Producción) ── */
+.ruta-chips{display:flex;gap:8px;overflow-x:auto;padding:10px 12px;background:var(--surface);
+  border-bottom:1px solid var(--border);position:sticky;top:0;z-index:10;
+  box-shadow:0 2px 8px rgba(30,41,59,.05);-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+.ruta-chips::-webkit-scrollbar{display:none}
+.ruta-chip{flex-shrink:0;display:flex;align-items:center;gap:6px;background:var(--card2);
+  border:1.5px solid transparent;color:var(--muted);border-radius:20px;padding:7px 14px;
+  font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap;transition:all .15s;}
+.ruta-chip:active{transform:scale(.96)}
+.ruta-chip.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.ruta-chip-count{background:rgba(0,0,0,.12);border-radius:10px;padding:1px 7px;font-size:11px;font-weight:800}
+.ruta-chip.active .ruta-chip-count{background:rgba(255,255,255,.25)}
+
+/* ── MODAL COLABORADOR (multi-selección con búsqueda) ── */
+.colab-search{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:10px;
+  background:var(--bg);color:var(--text);font-size:14px;outline:none;margin-bottom:10px;}
+.colab-search:focus{border-color:var(--accent)}
+.colab-lista{max-height:280px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;}
+.colab-item{display:flex;align-items:center;gap:10px;padding:10px 12px;font-size:13.5px;cursor:pointer;
+  border-bottom:1px solid var(--border);user-select:none;}
+.colab-item:last-child{border-bottom:none}
+.colab-item:hover{background:var(--card2)}
+.colab-item input[type=checkbox]{width:18px;height:18px;flex-shrink:0;accent-color:var(--accent);cursor:pointer;}
+
 /* ── VIEW TOGGLE ── */
 .view-toggle{display:flex;gap:4px;align-items:center}
 .vt-btn{width:32px;height:32px;border-radius:8px;border:1.5px solid var(--border);background:transparent;
@@ -705,8 +729,10 @@ async function _initApp(){
 
     _splashPct(90,'🗂️ Preparando datos…');
 
-    // Cargar operarios asignados desde localStorage (se persisten localmente)
+    // Cargar operarios asignados: primero local (respuesta instantánea),
+    // luego se fusiona con lo guardado en el Sheet (columna RUTA_OPERARIOS)
     _loadOperariosLocal();
+    _cargarRutaOperariosDesdeDB();
 
     _splashDone();
     nav('dashboard');
@@ -806,14 +832,21 @@ function semaforo(op){
   return `<span class="semaforo sem-verde" title="${dias}d restantes"></span>`;
 }
 
-function calcProcActual(op){
+// Devuelve el número de paso de ruta (1-10) actualmente activo (primer paso con
+// máquina asignada y avance <100%), o null si no hay pasos de ruta pendientes.
+function calcProcActualStep(op){
   const mqs=['RUTA MQ1','RUTA MQ2','RUTA MQ3','RUTA MQ4','RUTA MQ5','RUTA MQ6','RUTA MQ7','RUTA MQ8','RUTA MQ9','RUTA MQ10'];
   const pcts=['PROCESO 1 R','PROCESO 2 R','PROCESO 3 R','PROCESO 4 R','PROCESO 5 R','PROCESO 6 R','PROCESO 7 R','PROCESO 8 R','PROCESO 9 R','PROCESO 10 R'];
   for(let i=0;i<10;i++){
     const ruta=op[mqs[i]];
     const pctR=Number(op[pcts[i]]||0);
-    if(ruta && pctR<1) return ruta;
+    if(ruta && pctR<1) return i+1;
   }
+  return null;
+}
+function calcProcActual(op){
+  const n=calcProcActualStep(op);
+  if(n) return op['RUTA MQ'+n];
   return op['Proceso actual']||op['PROCESO ACTUAL']||'—';
 }
 
@@ -831,6 +864,7 @@ async function _forceRefresh(){
   try{
     DB.produccion = await GET('getControlProduccion',{rango:'1m'});
     cSet('produccion', DB.produccion);
+    _cargarRutaOperariosDesdeDB();
     try{ DB.cotizaciones = await GET('getCotizaciones',{rango:'1m'}); cSet('cotizaciones', DB.cotizaciones); }catch(e){}
     try{ DB.procesos = await GET('getProcesos'); cSet('procesos', DB.procesos); }catch(e){}
     toast('✅ Datos actualizados');
@@ -841,8 +875,20 @@ async function _forceRefresh(){
 }
 
 // ══ OPERARIOS LOCAL ═════════════════════════════════════════════
-// Se persisten en localStorage ya que no hay hoja dedicada en el Sheet
-let _ASIGNACIONES = {}; // { IDQR: [operario1, operario2, ...] }
+// La asignación es POR PASO DE RUTA (RUTA MQn), no general por OP:
+// una misma OP puede tener operarios distintos en cada máquina de su ruta,
+// y cada operario dentro de ese paso puede tener su propia nota.
+// Se guarda en localStorage (para respuesta instantánea) Y se sincroniza
+// con el Sheet en dos columnas de la hoja de producción:
+//  - RUTA_OPERARIOS: qué operarios están en cada paso de ruta.
+//  - NOTA_OPERARIOS: la nota de cada operario en cada paso.
+// para que sea visible desde cualquier dispositivo.
+// Formato local: { "IDQR::N": { operarios:[nombre1,nombre2,...], notas:{nombre1:'texto',...} } }
+// Columna RUTA_OPERARIOS (texto JSON por fila):
+//   {"1":{"operarios":["Nombre1","Nombre2"]},"2":{...}}
+// Columna NOTA_OPERARIOS (texto JSON por fila):
+//   {"1":{"Nombre1":"nota de Nombre1","Nombre2":"nota de Nombre2"},"2":{...}}
+let _ASIGNACIONES = {};
 
 function _loadOperariosLocal(){
   try{ _ASIGNACIONES = JSON.parse(localStorage.getItem('plan_asignaciones')||'{}'); }catch(e){ _ASIGNACIONES={}; }
@@ -850,19 +896,110 @@ function _loadOperariosLocal(){
 function _saveOperariosLocal(){
   try{ localStorage.setItem('plan_asignaciones', JSON.stringify(_ASIGNACIONES)); }catch(e){}
 }
-function _getOperarios(idqr){
-  return _ASIGNACIONES[String(idqr)]||[];
+// Lee RUTA_OPERARIOS/NOTA_OPERARIOS de cada OP cargada del Sheet y las fusiona
+// en _ASIGNACIONES (el Sheet manda: sobreescribe lo que haya en local para
+// esa OP/paso, así queda igual en todos los dispositivos).
+function _parseRutaOperariosFromOp(op){
+  const raw=op['RUTA_OPERARIOS'];
+  if(!raw) return;
+  let obj;
+  try{ obj=JSON.parse(raw); }catch(e){ return; }
+  const idqr=String(op.IDQR||op.OP);
+  Object.keys(obj).forEach(n=>{
+    const e=obj[n]||{};
+    const key=_asigKey(idqr,n);
+    const prev=_ASIGNACIONES[key]||{};
+    _ASIGNACIONES[key]={ operarios:e.operarios||[], notas:prev.notas||{} };
+  });
 }
-function _addOperario(idqr, nombre){
-  const k=String(idqr);
-  if(!_ASIGNACIONES[k]) _ASIGNACIONES[k]=[];
-  if(!_ASIGNACIONES[k].includes(nombre)) _ASIGNACIONES[k].push(nombre);
+function _parseNotaOperariosFromOp(op){
+  const raw=op['NOTA_OPERARIOS'];
+  if(!raw) return;
+  let obj;
+  try{ obj=JSON.parse(raw); }catch(e){ return; }
+  const idqr=String(op.IDQR||op.OP);
+  Object.keys(obj).forEach(n=>{
+    const key=_asigKey(idqr,n);
+    const prev=_ASIGNACIONES[key]||{operarios:[],notas:{}};
+    prev.notas=obj[n]||{};
+    _ASIGNACIONES[key]=prev;
+  });
+}
+function _cargarRutaOperariosDesdeDB(){
+  (DB.produccion||[]).forEach(op=>{ _parseRutaOperariosFromOp(op); _parseNotaOperariosFromOp(op); });
   _saveOperariosLocal();
 }
-function _removeOperario(idqr, nombre){
-  const k=String(idqr);
-  _ASIGNACIONES[k]=(_ASIGNACIONES[k]||[]).filter(x=>x!==nombre);
+// Arma el JSON de RUTA_OPERARIOS (operarios por paso) y NOTA_OPERARIOS
+// (nota de cada operario por paso) de una OP y los envía al backend
+// (updateOP) para guardarlos en el Sheet.
+function _rutaOperariosObj(idqr){
+  const obj={};
+  for(let n=1;n<=10;n++){
+    const e=_asigEntry(idqr,n);
+    if(e.operarios.length) obj[n]={operarios:e.operarios};
+  }
+  return obj;
+}
+function _notaOperariosObj(idqr){
+  const obj={};
+  for(let n=1;n<=10;n++){
+    const e=_asigEntry(idqr,n);
+    const notas={};
+    Object.keys(e.notas||{}).forEach(nom=>{
+      if(e.operarios.includes(nom) && e.notas[nom]) notas[nom]=e.notas[nom];
+    });
+    if(Object.keys(notas).length) obj[n]=notas;
+  }
+  return obj;
+}
+function _syncRutaOperarios(idqr){
+  const rutaObj=_rutaOperariosObj(idqr);
+  const notaObj=_notaOperariosObj(idqr);
+  const rutaJson=Object.keys(rutaObj).length ? JSON.stringify(rutaObj) : '';
+  const notaJson=Object.keys(notaObj).length ? JSON.stringify(notaObj) : '';
+  POST_BG('updateOP', {IDQR:idqr, RUTA_OPERARIOS:rutaJson, NOTA_OPERARIOS:notaJson});
+  const op=_findOP(idqr);
+  if(op){ op.RUTA_OPERARIOS=rutaJson; op.NOTA_OPERARIOS=notaJson; }
+}
+function _asigKey(idqr, n){ return String(idqr)+'::'+String(n||1); }
+function _asigEntry(idqr, n){
+  const key=_asigKey(idqr,n);
+  const v=_ASIGNACIONES[key];
+  if(v){
+    if(Array.isArray(v)) return {operarios:v.slice(), notas:{}};
+    return {operarios:v.operarios||[], notas:v.notas||{}};
+  }
+  // Migración: datos guardados con el formato viejo (general por OP, sin paso de
+  // ruta, o con una sola nota compartida) se recuperan como el estado inicial del paso 1.
+  if(Number(n||1)===1){
+    const old=_ASIGNACIONES[String(idqr)];
+    if(old){
+      if(Array.isArray(old)) return {operarios:old.slice(),notas:{}};
+      const notas={};
+      if(old.nota && old.operarios && old.operarios[0]) notas[old.operarios[0]]=old.nota;
+      return {operarios:old.operarios||[], notas};
+    }
+  }
+  return {operarios:[],notas:{}};
+}
+function _getOperarios(idqr, n){ return _asigEntry(idqr,n).operarios; }
+function _getNotasOperarios(idqr, n){ return _asigEntry(idqr,n).notas||{}; }
+function _getNotaOperario(idqr, n, nombre){ return (_asigEntry(idqr,n).notas||{})[nombre]||''; }
+function _setAsig(idqr, n, operarios, notas){
+  _ASIGNACIONES[_asigKey(idqr,n)]={ operarios:(operarios||[]).slice(), notas:notas||{} };
   _saveOperariosLocal();
+  _syncRutaOperarios(idqr);
+}
+function _addOperario(idqr, n, nombre){
+  const e=_asigEntry(idqr,n);
+  if(!e.operarios.includes(nombre)) e.operarios.push(nombre);
+  _setAsig(idqr, n, e.operarios, e.notas);
+}
+function _removeOperario(idqr, n, nombre){
+  const e=_asigEntry(idqr,n);
+  const notas={...(e.notas||{})};
+  delete notas[nombre];
+  _setAsig(idqr, n, e.operarios.filter(x=>x!==nombre), notas);
 }
 
 // ══ ETAPAS QA ═══════════════════════════════════════════════════
@@ -1165,7 +1302,7 @@ function _opsCards(data){
   return `<div class="card-list">${data.map(op=>{
     const pct=qaPct(op['%AVANCE']);
     const procActual=calcProcActual(op);
-    const ops2=_getOperarios(op.IDQR||op.OP);
+    const ops2=_getOperarios(op.IDQR||op.OP, calcProcActualStep(op)||1);
     return `<div class="list-card" onclick="detailOP('${op.IDQR||op.OP}')">
       <div class="lc-top">
         <div style="display:flex;gap:10px;align-items:flex-start">
@@ -1203,7 +1340,7 @@ function _opsTabla(data){
     <tbody>${data.map(op=>{
       const pct=qaPct(op['%AVANCE']);
       const procActual=calcProcActual(op);
-      const ops2=_getOperarios(op.IDQR||op.OP);
+      const ops2=_getOperarios(op.IDQR||op.OP, calcProcActualStep(op)||1);
       return `<tr onclick="detailOP('${op.IDQR||op.OP}')">
         <td class="td-num">${semaforo(op)} OP-${op.OP}<span style="color:var(--muted);font-size:10px"> ·${op.ITEM||'—'}</span></td>
         <td style="padding:4px 8px">${_thumbHtml(op.IDQR,op.IMAGEN_B64,32)}</td>
@@ -1267,7 +1404,7 @@ function kanban(){
       <div class="kanban-cards">
         ${cols[maq].map(op=>{
           const pct=qaPct(op['%AVANCE']);
-          const ops2=_getOperarios(op.IDQR||op.OP);
+          const ops2=_getOperarios(op.IDQR||op.OP, calcProcActualStep(op)||1);
           return `<div class="k-card" onclick="detailOP('${op.IDQR||op.OP}')">
             <div style="display:flex;justify-content:space-between;align-items:flex-start">
               <div class="k-op">${semaforo(op)} OP-${op.OP} · Ítem ${op.ITEM||'—'}</div>
@@ -1294,6 +1431,8 @@ function kanban(){
 //     y acciones rápidas por OP (Avance, Producción, Calidad,
 //     Servicio Externo, Ruta, Cambiar Estado)
 // ══════════════════════════════════════════════════════════════
+let _rutaFiltroMaquina=''; // '' = todas
+
 function rutaProduccion(){
   const ops=(DB.produccion||[]).filter(_filtroEnProduccion);
 
@@ -1306,6 +1445,10 @@ function rutaProduccion(){
   Object.values(cols).forEach(arr=>arr.sort((a,b)=>Number(a['DÍAS ENTREGA']||999)-Number(b['DÍAS ENTREGA']||999)));
   const maquinas=Object.keys(cols).sort((a,b)=>cols[b].length-cols[a].length);
 
+  // Si la máquina filtrada ya no tiene OPs, resetear el filtro
+  if(_rutaFiltroMaquina && !cols[_rutaFiltroMaquina]) _rutaFiltroMaquina='';
+  const maquinasFiltradas=_rutaFiltroMaquina ? [_rutaFiltroMaquina] : maquinas;
+
   setContent(`
   <div class="mod-banner" style="background:linear-gradient(135deg,#334155,#64748b)">
     <div class="mod-banner-icon">📍</div>
@@ -1315,7 +1458,18 @@ function rutaProduccion(){
     </div>
   </div>
 
-  ${!maquinas.length ? empty('No hay OPs en producción') : maquinas.map(maq=>{
+  <!-- Filtro por máquina (chips) -->
+  <div class="ruta-chips">
+    <button class="ruta-chip ${!_rutaFiltroMaquina?'active':''}" onclick="_rutaFiltrarMaquina('')">
+      Todas <span class="ruta-chip-count">${ops.length}</span>
+    </button>
+    ${maquinas.map(m=>`
+    <button class="ruta-chip ${_rutaFiltroMaquina===m?'active':''}" onclick='_rutaFiltrarMaquina(${JSON.stringify(m)})'>
+      ${m} <span class="ruta-chip-count">${cols[m].length}</span>
+    </button>`).join('')}
+  </div>
+
+  ${!maquinasFiltradas.length ? empty('No hay OPs en producción') : maquinasFiltradas.map(maq=>{
     const arr=cols[maq];
     const avgPct=Math.round(arr.reduce((s,o)=>s+qaPct(o['%AVANCE']),0)/arr.length);
     return `
@@ -1357,81 +1511,131 @@ function rutaProduccion(){
   }).join('')}
   `);
 }
+function _rutaFiltrarMaquina(m){ _rutaFiltroMaquina=m; rutaProduccion(); }
 
 
 // ══════════════════════════════════════════════════════════════
 // Catálogo de operarios (se puede editar desde el modal de configuración)
-let _OPERARIOS_CAT = JSON.parse(localStorage.getItem('plan_operarios_cat')||'["A. MEZA","F. GIRALDO","M. GOMEZ","J. GARCIA","C. POSADA","N. APELLIDO"]');
+// Catálogo de colaboradores (se puede editar desde el modal de configuración)
+const _OPERARIOS_DEFAULT = [
+  "Alexander Ordoñez Jimenez","Carlos Alberto Botina Campo",
+  "Cristian Anderson Posada Pérez","Duvier Trujillo Caicedo",
+  "Harvey Perdomo Londoño","Hernan Alberto Mejia Quiceno","Hernando Valencia Florez",
+  "James Enrique Pama Cortes","Javier Simijaca Garzón","Jorge Enrique Castro Salgado",
+  "Jorge Hernan García Bedoya","José Albeiro Martínez Gómez",
+  "Juan Manuel Marin Cuetia",
+  "Linson Trujillo Muñoz","Luis Fernando Urriago Ruiz","Luis Lorenso Tovar Perez",
+  "Marlon Leandro Cerón","Michel Orlando Gomez Anacona",
+  "Miguel Hernán Herrera Casanova","Roger Palechor Palechor","Sebastian Barcias Zanudio",
+  "Sebastián Peña","Yony Alexis Delgado","Proveedor Externo",
+  "Juan Daniel Ramirez","Carlos Lasso","Julian Albeiro Benites",
+  "Jose Ricardo Saldañia","Francisco Javier Giraldo Cuero","Jeremy's Barros Catalán",
+  "Jhojan Victoria Morales","Jhonny Stiven Castillo Rodriguez","Wilmer Suarez"
+];
+const _OPERARIOS_DUMMY_OLD = ["A. MEZA","F. GIRALDO","M. GOMEZ","J. GARCIA","C. POSADA","N. APELLIDO"];
+let _OPERARIOS_CAT = (()=>{
+  try{
+    const stored=JSON.parse(localStorage.getItem('plan_operarios_cat')||'null');
+    if(!stored || !stored.length) return _OPERARIOS_DEFAULT.slice();
+    // Migración automática: si lo guardado es el catálogo placeholder viejo, usar el real
+    if(stored.length===_OPERARIOS_DUMMY_OLD.length && stored.every((v,i)=>v===_OPERARIOS_DUMMY_OLD[i])) return _OPERARIOS_DEFAULT.slice();
+    return stored;
+  }catch(e){ return _OPERARIOS_DEFAULT.slice(); }
+})();
+
+let _asigFiltroMaquina=''; // '' = todas
 
 function asignacionOperarios(){
   const ops=(DB.produccion||[]).filter(o=>o.ESTADO==='EN PROCESO')
     .sort((a,b)=>Number(a['DÍAS ENTREGA']||999)-Number(b['DÍAS ENTREGA']||999));
+
+  const cols={};
+  ops.forEach(op=>{
+    const m=calcProcActual(op)||'Sin asignar';
+    if(!cols[m]) cols[m]=[];
+    cols[m].push(op);
+  });
+  const maquinas=Object.keys(cols).sort((a,b)=>cols[b].length-cols[a].length);
+  if(_asigFiltroMaquina && !cols[_asigFiltroMaquina]) _asigFiltroMaquina='';
+  const maquinasFiltradas=_asigFiltroMaquina ? [_asigFiltroMaquina] : maquinas;
 
   setContent(`
   <div class="mod-banner" style="background:linear-gradient(135deg,#92400e,#d97706)">
     <div class="mod-banner-icon">👷</div>
     <div class="mod-banner-text">
       <div class="mod-banner-title">Asignación de Operarios</div>
-      <div class="mod-banner-sub">${ops.length} OPs en proceso</div>
+      <div class="mod-banner-sub">${ops.length} OPs en proceso · por máquina / cuadrante</div>
     </div>
     <div class="mod-banner-right">
       <button class="btn btn-ghost btn-sm" onclick="_editarCatOperarios()" style="color:#fff;border-color:rgba(255,255,255,.4)">⚙️ Operarios</button>
     </div>
   </div>
 
-  <div class="card-list" id="asig-list">
-    ${ops.map(op=>{
-      const idqr=String(op.IDQR||op.OP);
-      const asig=_getOperarios(idqr);
-      const procActual=calcProcActual(op);
-      return `<div class="list-card">
-        <div class="lc-top">
-          <div style="display:flex;gap:10px;align-items:flex-start;flex:1">
-            ${_thumbHtml(op.IDQR,op.IMAGEN_B64,40)}
-            <div>
-              <div class="lc-id">${semaforo(op)} OP-${op.OP} · Ítem ${op.ITEM||'—'}</div>
-              <div class="lc-title">${op.CLIENTE||'—'}</div>
-              <div class="lc-sub">${(op.DESCRIPCION||'').substring(0,50)}</div>
-            </div>
-          </div>
-          <div style="text-align:right;flex-shrink:0">${diasTag(op['DÍAS ENTREGA'])}</div>
-        </div>
-        <div style="margin:6px 0 4px;display:flex;align-items:center;gap:6px">
-          <span class="k-machine">${procActual}</span>
-          <span style="font-size:11px;color:var(--muted)">${qaPct(op['%AVANCE'])}%</span>
-        </div>
-        <!-- Chips operarios asignados -->
-        <div id="asig-chips-${idqr}" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;min-height:24px">
-          ${asig.map(n=>`
-          <div class="op-asig-chip">
-            👷 ${n}
-            ${_puedeEditar()?`<button class="chip-del" onclick="event.stopPropagation();_quitarOperario('${idqr}','${n}')">×</button>`:''}
-          </div>`).join('')}
-          ${!asig.length?`<span style="font-size:11px;color:var(--muted);font-style:italic">Sin operario asignado</span>`:''}
-        </div>
-        ${_puedeEditar()?`
-        <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
-          <select style="font-size:12px;padding:6px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);outline:none"
-            onchange="if(this.value){_asignarOperario('${idqr}',this.value);this.value=''}">
-            <option value="">+ Asignar operario…</option>
-            ${_OPERARIOS_CAT.map(n=>`<option value="${n}">${n}</option>`).join('')}
-          </select>
-        </div>`:''}
-      </div>`;
-    }).join('')}
+  <!-- Filtro por máquina / cuadrante -->
+  <div class="ruta-chips">
+    <button class="ruta-chip ${!_asigFiltroMaquina?'active':''}" onclick="_asigFiltrarMaquina('')">
+      Todas <span class="ruta-chip-count">${ops.length}</span>
+    </button>
+    ${maquinas.map(m=>`
+    <button class="ruta-chip ${_asigFiltroMaquina===m?'active':''}" onclick='_asigFiltrarMaquina(${JSON.stringify(m)})'>
+      ${m} <span class="ruta-chip-count">${cols[m].length}</span>
+    </button>`).join('')}
   </div>
+
+  ${!maquinasFiltradas.length ? empty('No hay OPs en proceso') : maquinasFiltradas.map(maq=>{
+    const arr=cols[maq];
+    return `
+    <div class="dp-section" style="margin-bottom:14px">
+      <h4 style="margin:0 0 10px">🔧 ${maq} <span style="font-size:11px;color:var(--muted);font-weight:400">· ${arr.length} OP${arr.length!==1?'s':''}</span></h4>
+      <div class="card-list">
+        ${arr.map(op=>{
+          const idqr=String(op.IDQR||op.OP);
+          const step=calcProcActualStep(op)||1;
+          const asig=_getOperarios(idqr,step);
+          const notas=_getNotasOperarios(idqr,step);
+          return `<div class="list-card">
+            <div class="lc-top" style="cursor:pointer" onclick="detailOP('${idqr}')">
+              <div style="display:flex;gap:10px;align-items:flex-start;flex:1">
+                ${_thumbHtml(op.IDQR,op.IMAGEN_B64,40)}
+                <div>
+                  <div class="lc-id">${semaforo(op)} OP-${op.OP} · Ítem ${op.ITEM||'—'}</div>
+                  <div class="lc-title">${op.CLIENTE||'—'}</div>
+                  <div class="lc-sub">${(op.DESCRIPCION||'').substring(0,50)}</div>
+                </div>
+              </div>
+              <div style="text-align:right;flex-shrink:0">${diasTag(op['DÍAS ENTREGA'])}</div>
+            </div>
+            <div style="margin:6px 0 4px">
+              <span style="font-size:11px;color:var(--muted)">${qaPct(op['%AVANCE'])}% avance · <span style="color:var(--accent2);font-weight:700">RUTA MQ${step}</span></span>
+            </div>
+            <!-- Chips operarios asignados (para este paso de ruta), con su nota -->
+            <div id="asig-chips-${idqr}" style="display:flex;flex-direction:column;gap:5px;margin-top:8px;min-height:24px">
+              ${asig.map(n=>`
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                <div class="op-asig-chip">
+                  👷 ${n}
+                  ${_puedeEditar()?`<button class="chip-del" onclick="event.stopPropagation();_quitarOperario('${idqr}',${step},'${n.replace(/'/g,"\\'")}');asignacionOperarios()">×</button>`:''}
+                </div>
+                ${notas[n]?`<span style="font-size:11px;color:var(--text);font-style:italic">📝 ${notas[n]}</span>`:''}
+              </div>`).join('')}
+              ${!asig.length?`<span style="font-size:11px;color:var(--muted);font-style:italic">Sin operario asignado en este paso</span>`:''}
+            </div>
+            ${_puedeEditar()?`
+            <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
+              <button class="btn btn-ghost btn-sm" style="width:100%" onclick="_modalColaborador('${idqr}',${step})">👥 Gestionar colaboradores (MQ${step})</button>
+            </div>`:''}
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  }).join('')}
   `);
   _initLazyThumbs();
 }
+function _asigFiltrarMaquina(m){ _asigFiltroMaquina=m; asignacionOperarios(); }
 
-function _asignarOperario(idqr, nombre){
-  _addOperario(idqr, nombre);
-  toast(`✅ ${nombre} asignado a OP-${idqr.replace(/\.0+$/,'')}`);
-  asignacionOperarios();
-}
-function _quitarOperario(idqr, nombre){
-  _removeOperario(idqr, nombre);
-  asignacionOperarios();
+function _quitarOperario(idqr, n, nombre){
+  _removeOperario(idqr, n, nombre);
 }
 
 function _editarCatOperarios(){
@@ -1876,7 +2080,7 @@ function detailOP(opId){
   const procActual=calcProcActual(op);
   const cot=(DB.cotizaciones||[]).find(c=>String(c.COTIZACION)===String(op.COT)||String(c.ID_PEDIDO)===String(op.COT));
   const idqr=String(op.IDQR||op.OP);
-  const asig=_getOperarios(idqr);
+  const currentStep=calcProcActualStep(op)||1;
   const enExt=_enServicioExterno(op);
 
   // Rutas
@@ -1942,7 +2146,7 @@ function detailOP(opId){
         <div class="qa-icon" style="background:#d97706">⏱️</div>
         <div class="qa-label">Horas</div>
       </button>
-      <button class="qa-item" onclick="closeDetail();setTimeout(()=>_modalAsignar('${idqr}'),200)">
+      <button class="qa-item" onclick="_modalColaborador('${idqr}',${currentStep})">
         <div class="qa-icon" style="background:#0d9488">👷</div>
         <div class="qa-label">Operario</div>
       </button>
@@ -1990,22 +2194,59 @@ function detailOP(opId){
       ${dr('Año',op.AÑO||'—')}
     </div>
 
-    <!-- Rutas MQ -->
+    <!-- Rutas MQ + operarios asignados por paso de ruta -->
     ${rutas.length ? `
     <div class="dp-section">
-      <h4>🔧 Rutas de maquinado (${rutas.length})</h4>
-      ${rutas.map(r=>`
-      <div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border)">
-        <span style="background:var(--accent2);color:#fff;border-radius:6px;padding:2px 8px;font-size:10px;font-weight:700;flex-shrink:0">MQ${r.n}</span>
-        <span style="flex:1;font-size:12px;font-weight:600">${r.ruta}</span>
-        <div style="width:80px">
-          <div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden">
-            <div style="width:${r.pctR}%;height:100%;background:${r.pctR>=100?'var(--green)':r.pctR>0?'var(--accent)':'var(--border)'}"></div>
+      <h4>🔧 Rutas de maquinado y operarios (${rutas.length})</h4>
+      ${rutas.map(r=>{
+        const asigR=_getOperarios(idqr,r.n);
+        const notasR=_getNotasOperarios(idqr,r.n);
+        return `
+      <div style="padding:9px 0;border-bottom:1px solid var(--border)">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="background:var(--accent2);color:#fff;border-radius:6px;padding:2px 8px;font-size:10px;font-weight:700;flex-shrink:0">MQ${r.n}</span>
+          <span style="flex:1;font-size:12px;font-weight:600">${r.ruta}</span>
+          <div style="width:80px">
+            <div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden">
+              <div style="width:${r.pctR}%;height:100%;background:${r.pctR>=100?'var(--green)':r.pctR>0?'var(--accent)':'var(--border)'}"></div>
+            </div>
+            <div style="font-size:10px;color:var(--muted);text-align:right;margin-top:1px">${r.pctR}%</div>
           </div>
-          <div style="font-size:10px;color:var(--muted);text-align:right;margin-top:1px">${r.pctR}%</div>
         </div>
-      </div>`).join('')}
-    </div>` : ''}
+        <div style="display:flex;flex-direction:column;gap:5px;margin-top:7px">
+          ${asigR.length ? asigR.map(n=>`
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+            <div class="op-asig-chip">👷 ${n}
+              ${_puedeEditar()?`<button class="chip-del" onclick="_quitarOperario('${idqr}',${r.n},'${n.replace(/'/g,"\\'")}');detailOP('${idqr}')">×</button>`:''}
+            </div>
+            ${notasR[n]?`<span style="font-size:11px;color:var(--text);font-style:italic">📝 ${notasR[n]}</span>`:''}
+          </div>`).join('') : `<span style="font-size:11px;color:var(--muted);font-style:italic">Sin operarios asignados en este paso</span>`}
+        </div>
+        ${_puedeEditar()?`
+        <div style="margin-top:8px">
+          <button class="btn btn-ghost btn-sm" style="width:100%" onclick="_modalColaborador('${idqr}',${r.n})">👥 Gestionar operarios de MQ${r.n}</button>
+        </div>`:''}
+      </div>`;
+      }).join('')}
+    </div>` : `
+    <div class="dp-section">
+      <h4>👷 Operarios asignados</h4>
+      <div style="display:flex;flex-direction:column;gap:5px">
+        ${_getOperarios(idqr,1).length ? _getOperarios(idqr,1).map(n=>{
+          const notasBase=_getNotasOperarios(idqr,1);
+          return `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+          <div class="op-asig-chip">👷 ${n}
+            ${_puedeEditar()?`<button class="chip-del" onclick="_quitarOperario('${idqr}',1,'${n.replace(/'/g,"\\'")}');detailOP('${idqr}')">×</button>`:''}
+          </div>
+          ${notasBase[n]?`<span style="font-size:11px;color:var(--text);font-style:italic">📝 ${notasBase[n]}</span>`:''}
+        </div>`;
+        }).join('') : `<span style="font-size:12px;color:var(--muted);font-style:italic">Sin operarios asignados</span>`}
+      </div>
+      ${_puedeEditar()?`
+      <div style="margin-top:10px">
+        <button class="btn btn-ghost btn-sm" style="width:100%" onclick="_modalColaborador('${idqr}',1)">👥 Gestionar colaboradores</button>
+      </div>`:''}
+    </div>`}
 
     <!-- Horas reales -->
     <div class="dp-section">
@@ -2014,25 +2255,6 @@ function detailOP(opId){
       ${dr('Torno',op['TORNO R']||'—')} ${dr('Centro Mecan.',op['CENTRO DE MECANIZADO R']||'—')}
       ${dr('Rectificadora',op['RECTIFICADORA PLANA R']||'—')} ${dr('EDM',op['EDM R']||'—')}
       ${dr('Hilo',op['EROSIONADORA DE HILO R']||'—')} ${dr('Total Hrs',op['TOTAL HRS R']||'—')}
-    </div>
-
-    <!-- Operarios asignados -->
-    <div class="dp-section">
-      <h4>👷 Operarios asignados</h4>
-      <div style="display:flex;flex-wrap:wrap;gap:6px">
-        ${asig.length ? asig.map(n=>`
-        <div class="op-asig-chip">👷 ${n}
-          ${_puedeEditar()?`<button class="chip-del" onclick="_quitarOperario('${idqr}','${n}');detailOP('${idqr}')">×</button>`:''}
-        </div>`).join('') : `<span style="font-size:12px;color:var(--muted);font-style:italic">Sin operarios asignados</span>`}
-      </div>
-      ${_puedeEditar()?`
-      <div style="margin-top:10px">
-        <select style="font-size:12px;padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);outline:none;width:100%"
-          onchange="if(this.value){_addOperario('${idqr}',this.value);detailOP('${idqr}');this.value=''}">
-          <option value="">+ Asignar operario…</option>
-          ${_OPERARIOS_CAT.map(n=>`<option value="${n}">${n}</option>`).join('')}
-        </select>
-      </div>`:''}
     </div>
 
     ${cot?`<div class="dp-section">
@@ -2045,33 +2267,80 @@ function detailOP(opId){
   );
 }
 
-// Modal asignar operario (acceso rápido desde detalle)
-function _modalAsignar(idqr){
-  openModal('👷 Asignar Operario',`
-    <div class="form-grid">
-      <div class="field span2"><label>Seleccionar operario</label>
-        <select id="modal-op-select">
-          <option value="">— elige —</option>
-          ${_OPERARIOS_CAT.map(n=>`<option value="${n}">${n}</option>`).join('')}
-        </select>
-      </div>
-      <div class="field span2"><label>O escribe un nombre</label>
-        <input id="modal-op-manual" placeholder="Ej: J. RODRIGUEZ">
-      </div>
-    </div>`,
+// ══ MODAL COLABORADOR: multi-selección con búsqueda + nota por operario ══
+// (permite varios operarios por paso de ruta, cada uno con su propia nota,
+//  ej. "cuadrante 2", "turno tarde", etc.)
+function _modalColaborador(idqr, n){
+  n=n||1;
+  window._colabIdqr=idqr;
+  window._colabN=n;
+  window._colabSel=new Set(_getOperarios(idqr,n));
+  window._colabNotas={..._getNotasOperarios(idqr,n)};
+  const op=_findOP(idqr);
+  const maquinaRuta=op?op['RUTA MQ'+n]:'';
+  openModal('COLABORADOR'+(maquinaRuta?' — MQ'+n+' · '+maquinaRuta:' — MQ'+n),`
+    <input type="text" id="colab-buscar" class="colab-search" placeholder="Buscar" oninput="_colabRenderLista()">
+    <div id="colab-lista" class="colab-lista"></div>
+    <div id="colab-notas" style="margin-top:12px"></div>`,
     `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
-     <button class="btn btn-primary" onclick="_doAsignarModal('${idqr}')">✓ Asignar</button>`
+     <button class="btn btn-primary" onclick="_guardarColaborador()">✓ Hecho</button>`
   );
+  _colabRenderLista();
+  _colabRenderNotas();
 }
-function _doAsignarModal(idqr){
-  const sel=document.getElementById('modal-op-select')?.value;
-  const man=(document.getElementById('modal-op-manual')?.value||'').trim();
-  const nombre=man||sel;
-  if(!nombre){ toast('Elige o escribe un nombre','error'); return; }
-  _addOperario(idqr,nombre);
-  toast('✅ '+nombre+' asignado');
+function _colabRenderLista(){
+  const q=(document.getElementById('colab-buscar')?.value||'').trim().toLowerCase();
+  const cont=document.getElementById('colab-lista');
+  if(!cont) return;
+  const lista=_OPERARIOS_CAT.filter(n=>n.toLowerCase().includes(q));
+  cont.innerHTML = lista.length ? lista.map(n=>{
+    const checked=window._colabSel.has(n);
+    const safe=n.replace(/'/g,"\\'");
+    return `<label class="colab-item">
+      <input type="checkbox" ${checked?'checked':''} onchange="_colabToggle('${safe}',this.checked)">
+      <span>${n}</span>
+    </label>`;
+  }).join('') : `<div style="padding:18px;text-align:center;color:var(--muted);font-size:13px">Sin resultados</div>`;
+}
+function _colabToggle(nombre, checked){
+  if(checked) window._colabSel.add(nombre); else window._colabSel.delete(nombre);
+  _colabRenderNotas();
+}
+// Muestra un campo de nota individual por cada operario ya seleccionado.
+function _colabRenderNotas(){
+  const cont=document.getElementById('colab-notas');
+  if(!cont) return;
+  const sel=[...(window._colabSel||[])];
+  if(!sel.length){ cont.innerHTML=''; return; }
+  cont.innerHTML = `<label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-weight:700;display:block;margin-bottom:8px">Nota por operario (opcional)</label>` +
+    sel.map(n=>{
+      const safe=n.replace(/'/g,"\\'");
+      const val=((window._colabNotas||{})[n]||'').replace(/"/g,'&quot;');
+      return `<div class="field" style="margin-bottom:8px">
+        <label style="text-transform:none;font-weight:600;font-size:11.5px;color:var(--text)">👷 ${n}</label>
+        <input type="text" value="${val}" placeholder="Ej: turno tarde, cuadrante 2…" oninput="_colabNotaInput('${safe}',this.value)">
+      </div>`;
+    }).join('');
+}
+function _colabNotaInput(nombre, valor){
+  if(!window._colabNotas) window._colabNotas={};
+  window._colabNotas[nombre]=valor;
+}
+function _guardarColaborador(){
+  const idqr=window._colabIdqr;
+  const n=window._colabN||1;
+  const operarios=[...(window._colabSel||[])];
+  const notas={};
+  operarios.forEach(nom=>{
+    const v=((window._colabNotas||{})[nom]||'').trim();
+    if(v) notas[nom]=v;
+  });
+  _setAsig(idqr, n, operarios, notas);
+  toast('✅ Colaboradores actualizados (MQ'+n+')');
   closeModal();
-  detailOP(idqr);
+  // Refrescar la vista que corresponda
+  if(MOD==='operarios') asignacionOperarios();
+  else detailOP(idqr);
 }
 
 // ══ HELPERS ═════════════════════════════════════════════════════
