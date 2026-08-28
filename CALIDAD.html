@@ -144,39 +144,69 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
 .detail-body{flex:1;overflow-y:auto;padding:16px;padding-bottom:80px}
 
 /* ── QUICK ACTIONS ── */
-.qa-actions{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}
-.qa-btn{display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;
-  background:var(--card2);border:1px solid var(--border);border-radius:10px;
-  padding:12px 14px;min-width:72px;transition:background .15s}
-.qa-btn:active{background:#e2e8f0}
-.qa-btn-icon{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;
-  justify-content:center;font-size:18px;background:var(--primary);color:#fff}
-.qa-btn-label{font-size:10px;font-weight:600;color:var(--muted);text-align:center;line-height:1.2}
+.qa-actions{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px}
+.qa-btn{display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer;
+  background:var(--card2);border:1px solid var(--border);border-radius:12px;
+  padding:12px 16px;min-width:76px;transition:transform .15s,box-shadow .15s,background .15s}
+.qa-btn:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,0,0,.09)}
+.qa-btn:active{transform:translateY(0) scale(.96)}
+.qa-btn-icon{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center;font-size:19px;background:var(--primary);color:#fff;
+  box-shadow:0 3px 8px rgba(0,0,0,.15);transition:transform .15s}
+.qa-btn:hover .qa-btn-icon{transform:scale(1.08)}
+.qa-btn-label{font-size:10px;font-weight:700;color:var(--muted);text-align:center;line-height:1.2}
+.qa-btn-edit .qa-btn-icon{background:linear-gradient(145deg,var(--accent),#1d4ed8)}
+.qa-btn-danger .qa-btn-icon{background:linear-gradient(145deg,#ef4444,var(--danger))}
+.qa-btn-danger:hover{background:#fef2f2;border-color:#fecaca}
+.qa-btn-success .qa-btn-icon{background:linear-gradient(145deg,#22c55e,var(--success))}
+.qa-btn-success:hover{background:#f0fdf4;border-color:#bbf7d0}
+.qa-btn-pdf .qa-btn-icon{background:linear-gradient(145deg,#0891b2,#0e7490)}
 
 /* ── FIELDS ── */
-.field-group{margin-bottom:16px}
-.field-label{font-size:10px;font-weight:700;color:var(--muted);
+.field-group{margin-bottom:0;background:var(--card2);border:1px solid var(--border);
+  border-radius:10px;padding:10px 12px;transition:transform .15s,box-shadow .15s,border-color .15s}
+.field-group:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,.06);border-color:#cbd5e1}
+.field-label{font-size:9.5px;font-weight:700;color:var(--muted);
   letter-spacing:.5px;text-transform:uppercase;margin-bottom:4px}
-.field-value{font-size:14px;color:var(--text);font-weight:500}
-.fields-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}
+.field-value{font-size:14px;color:var(--text);font-weight:600}
+.fields-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+
+/* ── ALERT BANNER (papelera / avisos en detalle) ── */
+.alert-banner{display:flex;align-items:center;gap:10px;padding:12px 14px;margin-bottom:16px;
+  border-radius:10px;border-left:4px solid var(--danger);background:#fef2f2;
+  animation:alertIn .25s ease-out}
+.alert-banner-icon{font-size:20px;flex-shrink:0}
+.alert-banner-text{font-size:13px;font-weight:700;color:#b91c1c;line-height:1.35}
+.alert-banner-sub{font-size:11.5px;font-weight:500;color:#b91c1c;opacity:.75;margin-top:2px}
+@keyframes alertIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+
+/* ── STATUS PILL (estado de solicitud) ── */
+.status-pill{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;
+  border-radius:20px;font-size:11px;font-weight:700}
+.status-pill::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor}
+.status-registrado{background:#dbeafe;color:#1d4ed8}
+.status-enviado{background:#fef3c7;color:#92400e}
+.status-completado,.status-ok{background:#dcfce7;color:#166534}
+.status-eliminada{background:#fee2e2;color:#991b1b}
 
 /* ── FORM ── */
 .form-section{margin-bottom:20px}
 .form-section-title{font-size:12px;font-weight:700;color:var(--primary);
   text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px;
   padding-bottom:6px;border-bottom:2px solid var(--primary)}
-.form-field{margin-bottom:12px}
+.form-field{margin-bottom:14px}
 .form-label{font-size:11px;font-weight:600;color:var(--muted);
-  display:block;margin-bottom:4px}
-.form-input{width:100%;border:1px solid var(--border);border-radius:8px;
+  display:block;margin-bottom:5px}
+.form-input{width:100%;border:1.5px solid var(--border);border-radius:9px;
   padding:10px 12px;font-size:14px;color:var(--text);background:#fff;
-  outline:none;transition:border-color .15s}
-.form-input:focus{border-color:var(--accent)}
-.form-select{width:100%;border:1px solid var(--border);border-radius:8px;
+  outline:none;transition:border-color .15s,box-shadow .15s}
+.form-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,99,235,.12)}
+.form-select{width:100%;border:1.5px solid var(--border);border-radius:9px;
   padding:10px 12px;font-size:14px;color:var(--text);background:#fff;
-  outline:none;appearance:none;
+  outline:none;appearance:none;transition:border-color .15s,box-shadow .15s;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2364748b' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
   background-repeat:no-repeat;background-position:right 12px center}
+.form-select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,99,235,.12)}
 textarea.form-input{resize:vertical;min-height:80px}
 
 /* ── COMBO BUSCABLE (servicio / proveedor) ── */
@@ -271,16 +301,20 @@ textarea.form-input{resize:vertical;min-height:80px}
 #fab.hidden{display:none}
 
 /* ── MODAL ── */
-.modal-ov{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:300;
-  display:none;align-items:flex-end}
+.modal-ov{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:300;
+  display:none;align-items:flex-end;backdrop-filter:blur(1px)}
 .modal-ov.open{display:flex}
 .modal-box{background:#fff;border-radius:20px 20px 0 0;width:100%;
-  max-height:90vh;overflow-y:auto;padding:20px 16px 32px}
-.modal-title{font-size:16px;font-weight:700;color:var(--primary);margin-bottom:16px}
+  max-height:90vh;overflow-y:auto;padding:20px 16px 32px;
+  box-shadow:0 -10px 34px rgba(0,0,0,.22);
+  animation:modalUp .22s cubic-bezier(.4,0,.2,1)}
+@keyframes modalUp{from{opacity:0;transform:translateY(28px)}to{opacity:1;transform:translateY(0)}}
+.modal-title{font-size:16px;font-weight:700;color:var(--primary);margin-bottom:18px;
+  display:flex;align-items:center;gap:10px;padding-bottom:12px;border-bottom:1px solid var(--border)}
 .modal-actions{display:flex;gap:10px;margin-top:16px}
 .btn{padding:12px 20px;border-radius:10px;font-size:14px;font-weight:700;
-  border:none;cursor:pointer;flex:1;transition:opacity .15s}
-.btn:active{opacity:.8}
+  border:none;cursor:pointer;flex:1;transition:opacity .15s,transform .1s}
+.btn:active{opacity:.8;transform:scale(.98)}
 .btn-primary{background:var(--accent);color:#fff}
 .btn-success{background:var(--success);color:#fff}
 .btn-danger{background:var(--danger);color:#fff}
@@ -743,8 +777,8 @@ function nav(m){
 }
 function setContent(html){ document.getElementById('content').innerHTML=html; }
 function fabAction(){
-  if(MOD==='solicitudes') abrirModalSolicitud();
-  else if(MOD==='conformidad') abrirModalConformidad();
+  if(MOD==='solicitudes') _abrirEditorPDFSolicitud(null, null);
+  else if(MOD==='conformidad') abrirEditorConformidad(null);
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -814,6 +848,7 @@ async function _initApp(){
     // (se usa para poblar el combo del modal — sin segunda llamada al GAS)
     DB.servicios = _extraerCatalogoServicios(DB.solicitudes);
     DB.bienesCatalogo = _extraerCatalogoBienes(DB.solicitudes);
+    DB.materialesCatalogo = _extraerCatalogoMateriales(DB.solicitudes);
     setSplash(95,'Cargando proveedores de Grupo WEDM…');
     // Proveedores reales del ERP principal (Grupo WEDM), con fallback al
     // catálogo local si esa acción aún no existe en el GAS principal
@@ -897,6 +932,37 @@ function _extraerCatalogoBienes(solicitudes){
       const v=String(b.DESCRIPCION||'').trim();
       if(v) set.add(v);
     });
+  });
+  return [...set].sort();
+}
+
+// ══════════════════════════════════════════════════════════════
+// CATÁLOGO DE MATERIALES — valores únicos de MATERIAL ya usados en
+// ítems (BIENES) de solicitudes previas, para precargar el desplegable
+// de "Material" en el editor tipo PDF (con opción de escribir uno nuevo).
+// ══════════════════════════════════════════════════════════════
+function _extraerCatalogoMateriales(solicitudes){
+  const set=new Set();
+  (solicitudes||[]).forEach(s=>{
+    const arr = s.BIENES||s['Related BIENESs']||s.bienes||[];
+    (Array.isArray(arr)?arr:[]).forEach(b=>{
+      const v=String(b.MATERIAL||'').trim();
+      if(v) set.add(v);
+    });
+  });
+  return [...set].sort();
+}
+
+// ══════════════════════════════════════════════════════════════
+// CATÁLOGO DE COTIZACIONES — valores únicos de COTIZACION tomados de
+// las órdenes de producción (DB.produccion), para el desplegable de
+// "Cotización" del editor tipo PDF.
+// ══════════════════════════════════════════════════════════════
+function _extraerCatalogoCotizaciones(produccion){
+  const set=new Set();
+  (produccion||[]).forEach(o=>{
+    const v=String(o.COTIZACION||o.COT||'').trim();
+    if(v) set.add(v);
   });
   return [...set].sort();
 }
@@ -1640,15 +1706,25 @@ async function _accionLiberacion(idqr){
 // La clave única que usamos en el HTML es _solKey(s):
 function _solKey(s){ return s.ID_SOLICITUD||s.ID||''; }
 
+// Papelera de solicitudes: las eliminadas se marcan con ESTADO='ELIMINADA'
+// (guardando el estado previo en ESTADO_ANTERIOR) en vez de borrarse de verdad,
+// así se pueden recuperar. _verPapeleraSol controla qué subconjunto se lista.
+let _verPapeleraSol = false;
+function _toggleVerPapeleraSol(){ _verPapeleraSol=!_verPapeleraSol; renderSolicitudes(); }
+
 function renderSolicitudes(){
-  const sols=DB.solicitudes||[];
+  const todas=DB.solicitudes||[];
+  const nPapelera=todas.filter(s=>s.ESTADO==='ELIMINADA').length;
+  const sols=todas.filter(s=>_verPapeleraSol ? s.ESTADO==='ELIMINADA' : s.ESTADO!=='ELIMINADA');
   let html=`
     <div class="search-bar"><span>🔍</span><input type="text" placeholder="Buscar OP, servicio, colaborador…" oninput="_filterRows(this.value,'sol-row')"></div>
-    <div class="section-divider">${sols.length} solicitudes externas</div>
-    ${_vistaToggleHtml()}`;
+    <div class="section-divider">${sols.length} ${_verPapeleraSol?'en papelera':'solicitudes externas'}
+      <button class="vt-btn${_verPapeleraSol?' active':''}" style="margin-left:auto;border-radius:20px;padding:6px 12px;background:${_verPapeleraSol?'var(--danger)':'var(--card2)'};color:${_verPapeleraSol?'#fff':'var(--muted)'};border:1px solid ${_verPapeleraSol?'var(--danger)':'var(--border)'};transition:all .15s" onclick="_toggleVerPapeleraSol()">🗑️ Papelera${nPapelera?' ('+nPapelera+')':''}</button>
+    </div>
+    ${_verPapeleraSol?'':_vistaToggleHtml()}`;
   if(!sols.length){
-    html+=`<div class="empty"><div class="empty-icon">📋</div><div class="empty-text">Sin solicitudes externas registradas</div></div>`;
-  } else if(VISTA==='proyecto'){
+    html+=`<div class="empty"><div class="empty-icon">📋</div><div class="empty-text">${_verPapeleraSol?'Papelera vacía':'Sin solicitudes externas registradas'}</div></div>`;
+  } else if(VISTA==='proyecto' && !_verPapeleraSol){
     html+='<div class="proyecto-grid">';
     sols.forEach(s=>{
       const key=_solKey(s);
@@ -1669,13 +1745,13 @@ function renderSolicitudes(){
       const key=_solKey(s);
       const fuente=s._fuente==='appsheet'?'🔵':'🟢';
       html+=`<div class="op-row sol-row" onclick="detailSolicitud('${esc(key)}')">
-        <div class="op-badge" style="background:var(--info)">📋</div>
+        <div class="op-badge" style="background:${_verPapeleraSol?'var(--muted)':'var(--info)'}">${_verPapeleraSol?'🗑️':'📋'}</div>
         <div class="op-info">
           <div class="op-title">${esc(s.SERVICIO||s['TIPO DE SERVICIO']||s['TIPO']||s.TIPO_SERVICIO||'Sin servicio')}</div>
           <div class="op-sub">OP-${esc(String(s.OP||'—'))} · Item ${esc(String(s.ITEM||'—'))} · ${esc(s.COLABORADOR||s.SOLICITANTE||'—')}</div>
-          <div class="op-sub">${fmtDate(s.FECHA||s.FECHA_SOLICITUD)} · <b>${esc(s.ESTADO||'REGISTRADO')}</b> ${fuente}</div>
+          <div class="op-sub">${fmtDate(s.FECHA||s.FECHA_SOLICITUD)} · <b>${_verPapeleraSol?'Eliminada':esc(s.ESTADO||'REGISTRADO')}</b> ${fuente}</div>
         </div>
-        <div style="font-size:20px">›</div>
+        ${_verPapeleraSol ? `<button class="btn btn-ghost" style="padding:6px 10px;font-size:11px" onclick="event.stopPropagation();_recuperarSolicitud('${esc(key)}')">♻️ Recuperar</button>` : '<div style="font-size:20px">›</div>'}
       </div>`;
     });
   }
@@ -1805,7 +1881,7 @@ function _addItemRow(data=null){
     <div class="fields-grid">
       <div class="form-field">
         <label class="form-label">Material</label>
-        <input class="form-input" type="text" id="item-${n}-mat" value="${esc(String(d.MATERIAL||''))}">
+        ${comboField('item-'+n+'-mat', DB.materialesCatalogo||[], {value:String(d.MATERIAL||''), placeholder:'Buscar material o escribir uno nuevo…'})}
       </div>
       <div class="form-field">
         <label class="form-label">Dureza</label>
@@ -1859,6 +1935,8 @@ async function _guardarSolicitud(){
     OP: opVal||'',
     IDQR: op?.IDQR||opVal||'',
     ITEM: op?.ITEM||'',
+    REF_OP: op?.ID||'',
+    COTIZACION: op?.COT||'',
     CLIENTE: op?.EMPRESA||op?.CLIENTE||'',
     SERVICIO: servicio,
     PROVEEDOR: proveedor,
@@ -1917,14 +1995,35 @@ function detailSolicitud(id){
   const fecha      = s.FECHA_SOLICITUD||s.FECHA||'';
   const esFuente   = s._fuente==='appsheet'?'🔵 AppSheet':'🟢 Calidad';
   const bienes     = Array.isArray(s.BIENES)?s.BIENES:(Array.isArray(s['Related BIENESs'])?s['Related BIENESs']:[]);
+  const eliminada  = s.ESTADO==='ELIMINADA';
+
+  // Clase de color para el badge de estado (pill)
+  const estadoTxt = s.ESTADO||'REGISTRADO';
+  const estadoCls = eliminada?'status-eliminada'
+    : /completad|liberad|ok/i.test(estadoTxt)?'status-completado'
+    : /enviad/i.test(estadoTxt)?'status-enviado'
+    : 'status-registrado';
 
   let html=`
+    ${eliminada?`<div class="alert-banner">
+      <div class="alert-banner-icon">🗑️</div>
+      <div>
+        <div class="alert-banner-text">Esta solicitud está en la papelera</div>
+        <div class="alert-banner-sub">Estado anterior: ${esc(s.ESTADO_ANTERIOR||'—')} · usa "Recuperar" para restaurarla</div>
+      </div>
+    </div>`:''}
     <div class="qa-actions">
-      <div class="qa-btn" onclick="_imprimirSolicitudActual()">
+      <div class="qa-btn qa-btn-pdf" onclick="_imprimirSolicitudActual()">
         <div class="qa-btn-icon">📄</div><div class="qa-btn-label">PDF</div>
       </div>
-      ${s._fuente==='calidad' ? `<div class="qa-btn" onclick="_editarSolicitudActual()">
+      ${!eliminada ? `<div class="qa-btn qa-btn-edit" onclick="_editarSolicitudActual()">
         <div class="qa-btn-icon">✏️</div><div class="qa-btn-label">Editar</div>
+      </div>
+      <div class="qa-btn qa-btn-danger" onclick="_eliminarSolicitudActual()">
+        <div class="qa-btn-icon">🗑️</div><div class="qa-btn-label">Eliminar</div>
+      </div>` : ''}
+      ${eliminada ? `<div class="qa-btn qa-btn-success" onclick="_recuperarSolicitud('${esc(_solKey(s))}')">
+        <div class="qa-btn-icon">♻️</div><div class="qa-btn-label">Recuperar</div>
       </div>` : ''}
     </div>
     <div class="fields-grid">
@@ -1933,7 +2032,7 @@ function detailSolicitud(id){
       <div class="field-group"><div class="field-label">Cotización</div><div class="field-value">${esc(String(s.COTIZACION||'—'))}</div></div>
       <div class="field-group"><div class="field-label">Fecha</div><div class="field-value">${fmtDate(fecha)}</div></div>
       <div class="field-group"><div class="field-label">Servicio</div><div class="field-value">${esc(servicio)}</div></div>
-      <div class="field-group"><div class="field-label">Estado</div><div class="field-value">${esc(s.ESTADO||'REGISTRADO')}</div></div>
+      <div class="field-group"><div class="field-label">Estado</div><div class="field-value"><span class="status-pill ${estadoCls}">${esc(estadoTxt)}</span></div></div>
       <div class="field-group"><div class="field-label">Colaborador</div><div class="field-value">${esc(colaborador)}</div></div>
       <div class="field-group"><div class="field-label">Fuente</div><div class="field-value">${esFuente}</div></div>
       ${s.FECHA_ENVIO?`<div class="field-group"><div class="field-label">F. Envío</div><div class="field-value">${fmtDate(s.FECHA_ENVIO)}</div></div>`:''}
@@ -1942,30 +2041,32 @@ function detailSolicitud(id){
       ${s.DUREZA?`<div class="field-group"><div class="field-label">Dureza / Trat.</div><div class="field-value">${esc(s.DUREZA)}</div></div>`:''}
       ${s.DIAS?`<div class="field-group"><div class="field-label">Días estimados</div><div class="field-value">${esc(String(s.DIAS))}</div></div>`:''}
     </div>
-    <div class="field-group"><div class="field-label">Descripción / Observaciones</div><div class="field-value">${esc(descripcion)}</div></div>
-    ${s.PDF_SERV?`<div class="field-group"><div class="field-label">PDF Servicio</div><div class="field-value" style="font-size:11px;color:var(--accent)">${esc(s.PDF_SERV)}</div></div>`:''}
+    <div class="field-group" style="margin-bottom:10px"><div class="field-label">Descripción / Observaciones</div><div class="field-value">${esc(descripcion)}</div></div>
+    ${s.PDF_SERV?`<div class="field-group" style="margin-bottom:10px"><div class="field-label">PDF Servicio</div><div class="field-value" style="font-size:11px;color:var(--accent)">${esc(s.PDF_SERV)}</div></div>`:''}
     ${bienes.length?`
     <div class="form-section-title" style="margin-top:14px">Ítems (Bienes) del servicio</div>
-    <table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:6px">
-      <thead><tr style="background:var(--panel2,#f2f2f2)">
-        <th style="text-align:left;padding:6px;border-bottom:1px solid #ddd">Cant.</th>
-        <th style="text-align:left;padding:6px;border-bottom:1px solid #ddd">Descripción</th>
-        <th style="text-align:left;padding:6px;border-bottom:1px solid #ddd">Tipo servicio</th>
-        <th style="text-align:left;padding:6px;border-bottom:1px solid #ddd">Material</th>
-        <th style="text-align:left;padding:6px;border-bottom:1px solid #ddd">Dureza</th>
-        <th style="text-align:left;padding:6px;border-bottom:1px solid #ddd">Precio</th>
+    <div style="border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-top:6px">
+    <table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead><tr style="background:var(--card2)">
+        <th style="text-align:left;padding:8px 10px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--border)">Cant.</th>
+        <th style="text-align:left;padding:8px 10px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--border)">Descripción</th>
+        <th style="text-align:left;padding:8px 10px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--border)">Tipo servicio</th>
+        <th style="text-align:left;padding:8px 10px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--border)">Material</th>
+        <th style="text-align:left;padding:8px 10px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--border)">Dureza</th>
+        <th style="text-align:left;padding:8px 10px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--border)">Precio</th>
       </tr></thead>
       <tbody>
-        ${bienes.map(b=>`<tr>
-          <td style="padding:6px;border-bottom:1px solid #eee">${esc(String(b.CANTIDAD||''))}</td>
-          <td style="padding:6px;border-bottom:1px solid #eee">${esc(String(b.DESCRIPCION||''))}</td>
-          <td style="padding:6px;border-bottom:1px solid #eee">${esc(String(b['TIPO DE SERVICIO']||''))}</td>
-          <td style="padding:6px;border-bottom:1px solid #eee">${esc(String(b.MATERIAL||''))}</td>
-          <td style="padding:6px;border-bottom:1px solid #eee">${esc(String(b.DUREZA||''))}</td>
-          <td style="padding:6px;border-bottom:1px solid #eee">${esc(String(b.PRECIO||''))}</td>
+        ${bienes.map((b,i)=>`<tr style="background:${i%2?'var(--card2)':'#fff'}">
+          <td style="padding:8px 10px;border-bottom:1px solid var(--border)">${esc(String(b.CANTIDAD||''))}</td>
+          <td style="padding:8px 10px;border-bottom:1px solid var(--border);font-weight:600">${esc(String(b.DESCRIPCION||''))}</td>
+          <td style="padding:8px 10px;border-bottom:1px solid var(--border)">${esc(String(b['TIPO DE SERVICIO']||''))}</td>
+          <td style="padding:8px 10px;border-bottom:1px solid var(--border)">${esc(String(b.MATERIAL||''))}</td>
+          <td style="padding:8px 10px;border-bottom:1px solid var(--border)">${esc(String(b.DUREZA||''))}</td>
+          <td style="padding:8px 10px;border-bottom:1px solid var(--border)">${esc(String(b.PRECIO||''))}</td>
         </tr>`).join('')}
       </tbody>
-    </table>` : ''}
+    </table>
+    </div>` : ''}
   `;
   openDetail(`Solicitud Externa — OP-${s.OP||'—'}`,html);
 }
@@ -1977,13 +2078,457 @@ function _imprimirSolicitudActual(){
   _imprimirSolicitud(_solActual, op||null);
 }
 
-// Abre el modal en modo edición para la solicitud actualmente mostrada.
-// Solo disponible para registros creados desde este módulo (_fuente:'calidad');
-// los que vienen de AppSheet se editan allá.
+// Abre la edición de la solicitud actualmente mostrada como una pestaña nueva
+// con el mismo formato del PDF oficial (COMPRAS-FO-002), pero con los campos
+// editables ahí mismo. Disponible para CUALQUIER solicitud, sea de este
+// módulo (🟢 Calidad) o de AppSheet (🔵). Al guardar desde esa pestaña, el
+// registro queda marcado como _fuente:'calidad' de aquí en adelante, porque
+// pasa a gestionarse desde este módulo vía updateSolicitudExterna.
 function _editarSolicitudActual(){
   if(!_solActual){ toast('Sin solicitud activa','error'); return; }
-  if(_solActual._fuente!=='calidad'){ toast('Esta solicitud viene de AppSheet — edítala allá','error'); return; }
-  abrirModalSolicitud('', _solActual);
+  const op=(DB.produccion||[]).find(o=>String(o.OP||o.IDQR)===String(_solActual.OP||''));
+  _abrirEditorPDFSolicitud(_solActual, op||null);
+}
+
+// ── Eliminar / Recuperar (papelera) ──────────────────────────────
+// Soft-delete: no se borra el registro, se marca ESTADO='ELIMINADA' y se
+// guarda el estado anterior en ESTADO_ANTERIOR para poder restaurarlo.
+// Disponible para cualquier solicitud, sea de este módulo o de AppSheet.
+function _cambiarEstadoSolicitud(id, nuevoEstado, estadoAnterior){
+  const idx=(DB.solicitudes||[]).findIndex(x=>String(_solKey(x))===String(id));
+  if(idx<0){ toast('Solicitud no encontrada','error'); return null; }
+  const s=DB.solicitudes[idx];
+  if(estadoAnterior!==undefined) s.ESTADO_ANTERIOR=estadoAnterior;
+  s.ESTADO=nuevoEstado;
+  DB.solicitudes[idx]=s;
+  POST_QA_BG('updateSolicitudExterna', s);
+  return s;
+}
+
+function _eliminarSolicitudActual(){
+  if(!_solActual){ toast('Sin solicitud activa','error'); return; }
+  const id=_solKey(_solActual);
+  confirm2('Eliminar solicitud','¿Enviar esta solicitud a la papelera? Podrás recuperarla después.',()=>{
+    const estadoPrevio=_solActual.ESTADO||'ENVIADO';
+    const s=_cambiarEstadoSolicitud(id,'ELIMINADA',estadoPrevio);
+    if(!s) return;
+    _solActual=s;
+    toast('🗑️ Solicitud enviada a la papelera');
+    renderSolicitudes();
+    detailSolicitud(id);
+  });
+}
+
+function _recuperarSolicitud(id){
+  const target=(DB.solicitudes||[]).find(x=>String(_solKey(x))===String(id));
+  const estadoRestaurado=(target&&target.ESTADO_ANTERIOR)||'ENVIADO';
+  const s=_cambiarEstadoSolicitud(id,estadoRestaurado);
+  if(!s) return;
+  toast('♻️ Solicitud recuperada');
+  renderSolicitudes();
+  if(_solActual && String(_solKey(_solActual))===String(id)){ _solActual=s; detailSolicitud(id); }
+}
+
+// Recibe los cambios guardados desde la pestaña del editor PDF (ver
+// _abrirEditorPDFSolicitud) vía postMessage y los persiste igual que el
+// modal: updateSolicitudExterna + saveItemsSolicitud.
+window.addEventListener('message', (ev)=>{
+  const msg=ev.data;
+  if(!msg || msg.type!=='solicitud-editor-save') return;
+  const payload=msg.payload||{};
+  const idx=(DB.solicitudes||[]).findIndex(x=>String(_solKey(x))===String(payload.ID_SOLICITUD));
+
+  // ── Creación de una solicitud nueva desde el formulario tipo PDF ──
+  if(idx<0){
+    const op=(DB.produccion||[]).find(o=>String(o.OP||o.IDQR)===String(payload.OP||''))||null;
+    const bienes=payload.BIENES||[];
+    const s={
+      ID_SOLICITUD: payload.ID_SOLICITUD,
+      OP: payload.OP||'',
+      IDQR: op?.IDQR||payload.OP||'',
+      ITEM: payload.ITEM||op?.ITEM||'',
+      CLIENTE: op?.EMPRESA||op?.CLIENTE||'',
+      SERVICIO: (bienes[0]&&bienes[0]['TIPO DE SERVICIO'])||'',
+      PROVEEDOR: '',
+      DESCRIPCION: '',
+      DUREZA: (bienes[0]&&bienes[0].DUREZA)||'',
+      DIAS: 3,
+      FECHA_SOLICITUD: today(),
+      FECHA_ENVIO: today(),
+      FECHA_RETORNO: '',
+      COLABORADOR: payload.COLABORADOR||'',
+      SOLICITANTE: payload.COLABORADOR||'',
+      AREA_TRABAJO: payload.AREA_TRABAJO||'',
+      'ÁREA DE TRABAJO': payload.AREA_TRABAJO||'',
+      COTIZACION: payload.COTIZACION||'',
+      OBSERVACIONES: payload.OBSERVACIONES||'',
+      ESTADO: 'ENVIADO',
+      BIENES: bienes,
+      _fuente: 'calidad'
+    };
+    if(!DB.solicitudes) DB.solicitudes=[];
+    DB.solicitudes.push(s);
+    // Añadir servicio/material nuevos al catálogo local para reutilizarlos en la misma sesión
+    if(s.SERVICIO && !(DB.servicios||[]).some(x=>x.SERVICIO===s.SERVICIO)) (DB.servicios=DB.servicios||[]).push({SERVICIO:s.SERVICIO});
+    bienes.forEach(b=>{
+      const m=String(b.MATERIAL||'').trim();
+      if(m && !(DB.materialesCatalogo||[]).includes(m)) (DB.materialesCatalogo=DB.materialesCatalogo||[]).push(m);
+    });
+    POST_QA_BG('createSolicitudExterna', s);
+    POST_QA_BG('saveItemsSolicitud', {ID_SOLICITUD:s.ID_SOLICITUD, filas:s.BIENES});
+    toast('✅ Solicitud creada');
+    renderSolicitudes();
+    return;
+  }
+
+  // ── Edición de una solicitud existente ──
+  const s=DB.solicitudes[idx];
+  s.COLABORADOR=payload.COLABORADOR;
+  s.SOLICITANTE=payload.COLABORADOR||s.SOLICITANTE;
+  s.AREA_TRABAJO=payload.AREA_TRABAJO;
+  s['ÁREA DE TRABAJO']=payload.AREA_TRABAJO; // alias exacto del encabezado de la hoja SERVICIOS EXTERNOS
+  s.OP=payload.OP||s.OP;
+  s.COTIZACION=payload.COTIZACION;
+  s.ITEM=payload.ITEM;
+  s.OBSERVACIONES=payload.OBSERVACIONES;
+  s.BIENES=payload.BIENES||[];
+  s._fuente='calidad';
+  DB.solicitudes[idx]=s;
+  const id=_solKey(s);
+  POST_QA_BG('updateSolicitudExterna', s);
+  POST_QA_BG('saveItemsSolicitud', {ID_SOLICITUD:id, filas:s.BIENES});
+  toast('✅ Cambios de la solicitud guardados');
+  renderSolicitudes();
+  if(_solActual && String(_solKey(_solActual))===String(id)){ _solActual=s; detailSolicitud(id); }
+});
+
+// ── Editor de solicitud en formato PDF (pestaña nueva, editable) ──────────
+// Reutiliza el mismo layout visual de _imprimirSolicitud, pero con inputs
+// en vez de texto fijo. Al guardar, envía los datos de vuelta a esta
+// ventana (window.opener) vía postMessage — ver el listener 'message' arriba.
+function _abrirEditorPDFSolicitud(s, op){
+  const esNueva    = !s;
+  s = s||{};
+  const numero     = esNueva ? 'Nueva' : (s.NUMERO||s.ID_SOLICITUD||s.ID||'—');
+  const colabor    = s.COLABORADOR||s.SOLICITANTE||'';
+  const areaTrabajo= s.AREA_TRABAJO||s['ÁREA DE TRABAJO']||'CALIDAD';
+  const fecha      = s.FECHA_SOLICITUD||s.FECHA||'';
+  const mes        = s.MES||(fecha?new Date(fecha).getMonth()+1:new Date().getMonth()+1)||'';
+  const dia        = s.DIA||(fecha?new Date(fecha).getDate():new Date().getDate())||'';
+  const anio       = s.AÑO||(fecha?new Date(fecha).getFullYear():new Date().getFullYear())||'';
+  const cotizacion = s.COTIZACION||'';
+  const item       = esNueva ? '' : (s.ITEM||'—');
+  const opNum      = s.OP||'';
+  const observ     = s.OBSERVACIONES||'';
+  const idSol      = esNueva ? (crypto.randomUUID?.()||Math.random().toString(36).slice(2)) : String(_solKey(s));
+
+  const rawBienes = s['Related BIENESs']||s.BIENES||s.bienes||[];
+  let bienes = (Array.isArray(rawBienes) && rawBienes.length) ? rawBienes : (esNueva ? [] : [{
+    CANTIDAD:s.CANTIDAD||'', DESCRIPCION:s.DESCRIPCION||s.OBSERVACIONES||'',
+    'TIPO DE SERVICIO':s.SERVICIO||s['TIPO DE SERVICIO']||'',
+    MATERIAL:s.MATERIAL||'', DUREZA:s.DUREZA||'', PRECIO:s.PRECIO||''
+  }]);
+  if(!bienes.length) bienes=[{}]; // siempre al menos una fila vacía para empezar a escribir
+
+  // ── Catálogos para los desplegables buscables (datalist nativo del navegador) ──
+  // Se listan como opciones sugeridas, pero el campo sigue siendo de texto libre:
+  // si lo que se busca no está en la lista, se puede escribir manualmente.
+  const svcOpts   = (DB.servicios||[]).map(x=>x.SERVICIO||'').filter(Boolean);
+  const matOpts   = DB.materialesCatalogo||[];
+  const cotizOpts = _extraerCatalogoCotizaciones(DB.produccion);
+  const opOpts    = [...new Set((DB.produccion||[]).map(o=>String(o.OP||o.IDQR||'').trim()).filter(Boolean))].sort();
+  const colabOpts = [...new Set(['C.POSADA','F.GIRALDO','J.GARCIA',
+    ...(DB.solicitudes||[]).map(x=>String(x.COLABORADOR||x.SOLICITANTE||'').trim())].filter(Boolean))];
+  // Índice OP → {ITEM, COTIZACION} para autocompletar esos campos al elegir una OP
+  const opIndex = {};
+  (DB.produccion||[]).forEach(o=>{
+    const k=String(o.OP||o.IDQR||'').trim();
+    if(k && !opIndex[k]) opIndex[k]={ITEM:String(o.ITEM||''), COTIZACION:String(o.COTIZACION||o.COT||'')};
+  });
+  // Índice OP → lista de ítems de producción de esa OP (ITEM, DESCRIPCION, CANT),
+  // para precargar el desplegable de "Descripción" de cada fila con lo que
+  // realmente hay en esa cotización, y autocompletar la cantidad al elegir uno.
+  const prodByOp = {};
+  (DB.produccion||[]).forEach(o=>{
+    const k=String(o.OP||o.IDQR||'').trim();
+    if(!k) return;
+    (prodByOp[k]=prodByOp[k]||[]).push({
+      ITEM: String(o.ITEM||''),
+      DESCRIPCION: String(o.DESCRIPCION||''),
+      CANT: String(o.CANT||o.CANTIDAD||'')
+    });
+  });
+  const dlOpts=(arr)=>arr.map(v=>`<option value="${esc(String(v))}">`).join('');
+
+  const filaBien = (b)=>`<tr>
+      <td style="border:1px solid #ccc;padding:2px"><input class="f-cant" type="text" value="${esc(String(b.CANTIDAD||''))}" style="text-align:center"></td>
+      <td style="border:1px solid #ccc;padding:2px"><input class="f-desc" type="text" list="dl-desc-item" onchange="_descChanged(this)" value="${esc(String(b.DESCRIPCION||''))}"></td>
+      <td style="border:1px solid #ccc;padding:2px"><input class="f-tipo" type="text" list="dl-tipo-servicio" value="${esc(String(b['TIPO DE SERVICIO']||b.TIPO_SERVICIO||''))}" style="text-align:center"></td>
+      <td style="border:1px solid #ccc;padding:2px"><input class="f-mat" type="text" list="dl-material" value="${esc(String(b.MATERIAL||''))}" style="text-align:center"></td>
+      <td style="border:1px solid #ccc;padding:2px"><input class="f-dur" type="text" value="${esc(String(b.DUREZA||''))}" style="text-align:center"></td>
+      <td style="border:1px solid #ccc;padding:2px;position:relative"><input class="f-precio" type="text" value="${esc(String(b.PRECIO||''))}" style="text-align:right;padding-right:16px">
+        <button type="button" class="del-row no-print" onclick="_delFila(this)" title="Quitar fila">✕</button></td>
+    </tr>`;
+  const filasHtml = bienes.map(filaBien).join('');
+
+  const html=`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+  <title>Editar SOLICITUD BN_${numero}OP${opNum}ITEM${item}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:Arial,sans-serif;font-size:9px;color:#000;margin:16px 20px;background:#f1f5f9;padding-top:52px}
+    table{width:100%;border-collapse:collapse}
+    input,textarea{font:inherit;color:inherit;border:none;background:transparent;width:100%;
+      padding:2px 3px;border-radius:3px;transition:background .15s}
+    input:hover,textarea:hover{background:rgba(37,99,235,.06)}
+    input:focus,textarea:focus{outline:none;background:#eaf1ff;box-shadow:0 0 0 2px #2563eb inset}
+    textarea{resize:vertical;min-height:26px;font-size:9px}
+    /* ── TOOLBAR ── */
+    .toolbar{position:fixed;top:0;left:0;right:0;z-index:99;background:#1a3a6b;color:#fff;
+      padding:10px 18px;display:flex;align-items:center;gap:10px;box-shadow:0 3px 10px rgba(0,0,0,.25)}
+    .toolbar b{flex:1;font-size:12.5px;font-weight:700}
+    .toolbar .status{font-size:11px;font-weight:600;color:#bbf7d0}
+    .toolbar button{border:none;border-radius:8px;padding:9px 16px;font-size:12px;font-weight:700;
+      cursor:pointer;transition:transform .1s,opacity .15s}
+    .toolbar button:active{transform:scale(.96)}
+    .btn-print{background:#0891b2;color:#fff}
+    .btn-save{background:#16a34a;color:#fff}
+    /* ── DOC (mismo layout que el PDF) ── */
+    .sheet{background:#fff;max-width:1150px;margin:0 auto;padding:14px;border-radius:6px;
+      box-shadow:0 2px 14px rgba(0,0,0,.12)}
+    .hdr-top{display:grid;grid-template-columns:120px 1fr auto auto;border:2px solid #1a3a6b;margin-bottom:0}
+    .hdr-logo{padding:6px;border-right:1px solid #1a3a6b;display:flex;align-items:center;justify-content:center}
+    .hdr-title{background:#fff;padding:6px 10px;display:flex;align-items:center;justify-content:center;border-right:1px solid #1a3a6b}
+    .hdr-title h1{font-size:13px;font-weight:900;color:#1a3a6b;text-align:center;line-height:1.3;text-transform:uppercase}
+    .hdr-dates{display:flex;flex-direction:column;border-right:1px solid #1a3a6b}
+    .hdr-date-row{padding:4px 8px;font-size:8px;text-align:center;border-bottom:1px solid #1a3a6b}
+    .hdr-date-row:last-child{border-bottom:none}
+    .hdr-date-label{font-weight:700;color:#1a3a6b;display:block;font-size:7px;text-transform:uppercase}
+    .hdr-op{display:flex;flex-direction:column;min-width:80px}
+    .hdr-op-label{background:#1a3a6b;color:#fff;font-size:8px;font-weight:700;text-align:center;padding:4px 8px}
+    .hdr-op-val{font-size:14px;font-weight:900;text-align:center;padding:6px 8px;background:#1a3a6b;color:#fff;flex:1;display:flex;align-items:center;justify-content:center}
+    .hdr-op-val input{color:#fff}
+    .hdr-op-val input::placeholder{color:#c7d4ea}
+    .hdr-op-val input:hover{background:rgba(255,255,255,.12)}
+    .hdr-op-val input:focus{background:rgba(255,255,255,.18);box-shadow:0 0 0 2px #fff inset}
+    .barra{display:grid;grid-template-columns:1fr auto;background:#1a3a6b;color:#fff;padding:4px 8px;border-left:2px solid #1a3a6b;border-right:2px solid #1a3a6b}
+    .barra-title{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+    .barra-right{font-size:8px;font-weight:700}
+    .info-table{border-left:2px solid #1a3a6b;border-right:2px solid #1a3a6b;border-bottom:1px solid #1a3a6b}
+    .info-table th{background:#d0d8e8;color:#1a3a6b;font-size:8px;font-weight:700;text-align:center;padding:4px 6px;border:1px solid #ccc;text-transform:uppercase}
+    .info-table td{font-size:9px;text-align:center;padding:2px 4px;border:1px solid #ccc}
+    .barra2{background:#1a3a6b;color:#fff;padding:4px 8px;font-size:9px;font-weight:700;text-transform:uppercase;text-align:center;border-left:2px solid #1a3a6b;border-right:2px solid #1a3a6b;letter-spacing:.5px}
+    .bienes-table{border-left:2px solid #1a3a6b;border-right:2px solid #1a3a6b;border-bottom:2px solid #1a3a6b}
+    .bienes-table th{background:#1a3a6b;color:#fff;font-size:8px;font-weight:700;text-align:center;padding:5px 4px;border:1px solid #2a4a7b;text-transform:uppercase}
+    .bienes-table td{font-size:9px;padding:2px;vertical-align:middle}
+    .del-row{position:absolute;top:2px;right:2px;background:#dc2626;color:#fff;border:none;
+      border-radius:4px;width:16px;height:16px;font-size:9px;line-height:1;cursor:pointer}
+    .btn-add-fila{width:100%;border:1.5px dashed #2563eb;background:#fff;color:#2563eb;
+      border-radius:8px;padding:7px;font-size:11px;font-weight:700;cursor:pointer;margin:8px 0 14px}
+    .obs-row{border-left:2px solid #1a3a6b;border-right:2px solid #1a3a6b;border-bottom:2px solid #1a3a6b;display:grid;grid-template-columns:100px 1fr;border-top:1px solid #ccc}
+    .obs-label{background:#d0d8e8;color:#1a3a6b;font-weight:700;font-size:8px;text-transform:uppercase;padding:6px 8px;display:flex;align-items:center;border-right:1px solid #ccc}
+    .obs-val{padding:4px 6px}
+    .aprob-title{background:#1a3a6b;color:#fff;font-size:9px;font-weight:700;text-align:center;padding:5px;text-transform:uppercase;border:2px solid #1a3a6b;border-bottom:none;margin-top:14px;letter-spacing:.5px}
+    .aprob-table{border:2px solid #1a3a6b;border-collapse:collapse;width:100%}
+    .aprob-table th{background:#d0d8e8;color:#1a3a6b;font-size:8px;font-weight:700;text-align:center;padding:4px 6px;border:1px solid #ccc;text-transform:uppercase}
+    .aprob-table td{font-size:9px;padding:8px 6px;border:1px solid #ccc;min-width:60px;min-height:24px}
+    @media print{
+      .no-print,.toolbar{display:none!important}
+      body{background:#fff;padding-top:0;margin:6px 10px}
+      .sheet{box-shadow:none;padding:0;max-width:none}
+      input,textarea{background:transparent!important;box-shadow:none!important}
+      @page{size:A4 landscape;margin:8mm}
+    }
+  </style></head><body>
+
+  <div class="toolbar no-print">
+    <b>${esNueva?'📋 Nueva Solicitud':'✏️ Editando Solicitud N° '+esc(String(numero))+' — OP-'+esc(String(opNum))}</b>
+    <span class="status" id="save-status"></span>
+    <button type="button" class="btn-print" onclick="window.print()">🖨️ Imprimir</button>
+    <button type="button" class="btn-save" onclick="_guardar()">💾 ${esNueva?'Crear solicitud':'Guardar cambios'}</button>
+  </div>
+
+  <datalist id="dl-tipo-servicio">${dlOpts(svcOpts)}</datalist>
+  <datalist id="dl-material">${dlOpts(matOpts)}</datalist>
+  <datalist id="dl-cotizacion">${dlOpts(cotizOpts)}</datalist>
+  <datalist id="dl-op">${dlOpts(opOpts)}</datalist>
+  <datalist id="dl-colaborador">${dlOpts(colabOpts)}</datalist>
+  <datalist id="dl-desc-item"></datalist>
+
+  <div class="sheet">
+  <div class="hdr-top">
+    <div class="hdr-logo"><div style="font-weight:900;font-size:14px;color:#1a3a6b;line-height:1.2">GRUPO<br>WEDM<br><span style="font-size:8px;font-weight:400">Metalmecánica Avanzada</span></div></div>
+    <div class="hdr-title"><h1>Formato de Solicitud<br>de Bienes y Servicios Externos</h1></div>
+    <div class="hdr-dates">
+      <div class="hdr-date-row"><span class="hdr-date-label">Fecha de Elaboración</span>12/08/2019</div>
+      <div class="hdr-date-row"><span class="hdr-date-label">Fecha de Actualización</span>09/11/2022</div>
+    </div>
+    <div class="hdr-op">
+      <div class="hdr-op-label">OP</div>
+      <div class="hdr-op-val"><input id="f-op" type="text" list="dl-op" value="${esc(String(opNum))}" placeholder="Buscar OP…" style="text-align:center;color:#fff;font-weight:900;font-size:14px" onchange="_opChanged()"></div>
+    </div>
+  </div>
+
+  <div class="barra">
+    <span class="barra-title">Información General</span>
+    <span class="barra-right">COMPRAS - FO - 002 &nbsp;&nbsp; N° &nbsp;<b>${esc(String(numero))}</b></span>
+  </div>
+
+  <table class="info-table">
+    <thead><tr>
+      <th>Nombre del Colaborador</th>
+      <th>Área de Trabajo</th>
+      <th>Mes</th>
+      <th>Día</th>
+      <th>Año</th>
+      <th>Cotización</th>
+      <th>Item</th>
+    </tr></thead>
+    <tbody><tr>
+      <td><input id="f-colab" type="text" list="dl-colaborador" value="${esc(colabor)}" style="text-align:center"></td>
+      <td><input id="f-area" type="text" value="${esc(areaTrabajo)}" style="text-align:center"></td>
+      <td>${esc(String(mes))}</td>
+      <td>${esc(String(dia))}</td>
+      <td>${esc(String(anio))}</td>
+      <td><input id="f-cotiz" type="text" list="dl-cotizacion" value="${esc(String(cotizacion))}" style="text-align:center"></td>
+      <td><input id="f-item" type="text" value="${esc(String(item))}" style="text-align:center"></td>
+    </tr></tbody>
+  </table>
+
+  <div class="barra2">Registro de Bien o Servicio Solicitado</div>
+
+  <table class="bienes-table">
+    <thead><tr>
+      <th style="width:8%">Cantidad</th>
+      <th style="width:30%">Descripción</th>
+      <th style="width:22%">Tipo de Servicio</th>
+      <th style="width:18%">Material</th>
+      <th style="width:12%">Dureza</th>
+      <th style="width:10%">Precio</th>
+    </tr></thead>
+    <tbody id="bienes-body">${filasHtml}</tbody>
+  </table>
+  <button type="button" class="btn-add-fila no-print" onclick="_addFila()">+ Agregar fila</button>
+
+  <div class="obs-row">
+    <div class="obs-label">Observaciones:</div>
+    <div class="obs-val"><textarea id="f-obs" rows="2">${esc(observ)}</textarea></div>
+  </div>
+
+  <div class="aprob-title">Aprobación y Verificación Final</div>
+  <table class="aprob-table">
+    <thead><tr>
+      <th style="width:25%">Responsable</th>
+      <th style="width:37%">Firma</th>
+      <th style="width:38%">Observaciones</th>
+    </tr></thead>
+    <tbody>
+      <tr><td>Solicitante</td><td></td><td></td></tr>
+      <tr><td>Jefatura de Compras</td><td></td><td></td></tr>
+      <tr><td>Fecha de Recibido</td><td></td><td></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <script>
+  var _opIndex = ${JSON.stringify(opIndex)};
+  var _prodByOp = ${JSON.stringify(prodByOp)};
+  function _addFila(){
+    var tr=document.createElement('tr');
+    tr.innerHTML='<td style="border:1px solid #ccc;padding:2px"><input class="f-cant" type="text" style="text-align:center"></td>'+
+      '<td style="border:1px solid #ccc;padding:2px"><input class="f-desc" type="text" list="dl-desc-item" onchange="_descChanged(this)"></td>'+
+      '<td style="border:1px solid #ccc;padding:2px"><input class="f-tipo" type="text" list="dl-tipo-servicio" style="text-align:center"></td>'+
+      '<td style="border:1px solid #ccc;padding:2px"><input class="f-mat" type="text" list="dl-material" style="text-align:center"></td>'+
+      '<td style="border:1px solid #ccc;padding:2px"><input class="f-dur" type="text" style="text-align:center"></td>'+
+      '<td style="border:1px solid #ccc;padding:2px;position:relative"><input class="f-precio" type="text" style="text-align:right;padding-right:16px">'+
+      '<button type="button" class="del-row no-print" onclick="_delFila(this)" title="Quitar fila">\u2715</button></td>';
+    document.getElementById('bienes-body').appendChild(tr);
+  }
+  function _delFila(btn){
+    var tr=btn.closest('tr');
+    var body=document.getElementById('bienes-body');
+    if(body.children.length>1){ tr.remove(); } else { tr.querySelectorAll('input').forEach(function(i){i.value='';}); }
+  }
+  // Reconstruye el desplegable "Descripción" de los ítems con lo que hay
+  // registrado en producción para la OP actualmente escrita/seleccionada.
+  function _buildDescList(){
+    var dl=document.getElementById('dl-desc-item');
+    if(!dl) return;
+    var opVal=document.getElementById('f-op').value.trim();
+    var items=_prodByOp[opVal]||[];
+    dl.innerHTML = items.map(function(it){
+      var label='ITEM '+it.ITEM+' - '+it.DESCRIPCION;
+      var esc2=label.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+      return '<option value="'+esc2+'">';
+    }).join('');
+  }
+  // Al elegir de la lista una descripción con el formato "ITEM N - ...", busca
+  // el ítem de producción correspondiente y autocompleta la cantidad (CANT)
+  // de esa fila — se puede editar después con total libertad.
+  function _descChanged(inp){
+    var opVal=document.getElementById('f-op').value.trim();
+    var items=_prodByOp[opVal]||[];
+    var match=items.find(function(it){ return ('ITEM '+it.ITEM+' - '+it.DESCRIPCION)===inp.value; });
+    if(!match) return;
+    var tr=inp.closest('tr');
+    var cantEl=tr&&tr.querySelector('.f-cant');
+    if(cantEl && match.CANT) cantEl.value=match.CANT;
+  }
+  // Al elegir/escribir una OP que existe en producción, autocompleta Item si
+  // sigue vacío, ACTUALIZA SIEMPRE la Cotización (se mantiene sincronizada con
+  // la OP elegida) y refresca la lista de ítems disponibles para "Descripción".
+  function _opChanged(){
+    var opVal=document.getElementById('f-op').value.trim();
+    var info=_opIndex[opVal];
+    if(info){
+      var itemEl=document.getElementById('f-item'), cotizEl=document.getElementById('f-cotiz');
+      if(itemEl && !itemEl.value && info.ITEM) itemEl.value=info.ITEM;
+      if(cotizEl) cotizEl.value=info.COTIZACION||'';
+    }
+    _buildDescList();
+  }
+  _buildDescList(); // primera carga, con la OP ya precargada (si aplica)
+  function _guardar(){
+    var filas=[].slice.call(document.querySelectorAll('#bienes-body tr')).map(function(tr){
+      return {
+        CANTIDAD: tr.querySelector('.f-cant').value,
+        DESCRIPCION: tr.querySelector('.f-desc').value,
+        'TIPO DE SERVICIO': tr.querySelector('.f-tipo').value,
+        MATERIAL: tr.querySelector('.f-mat').value,
+        DUREZA: tr.querySelector('.f-dur').value,
+        PRECIO: tr.querySelector('.f-precio').value
+      };
+    }).filter(function(b){ return b.CANTIDAD||b.DESCRIPCION||b['TIPO DE SERVICIO']||b.MATERIAL||b.DUREZA||b.PRECIO; });
+    var areaVal = document.getElementById('f-area').value;
+    var payload={
+      ID_SOLICITUD: ${JSON.stringify(idSol)},
+      ES_NUEVA: ${JSON.stringify(esNueva)},
+      OP: document.getElementById('f-op').value,
+      COLABORADOR: document.getElementById('f-colab').value,
+      AREA_TRABAJO: areaVal,
+      'ÁREA DE TRABAJO': areaVal,
+      COTIZACION: document.getElementById('f-cotiz').value,
+      ITEM: document.getElementById('f-item').value,
+      OBSERVACIONES: document.getElementById('f-obs').value,
+      BIENES: filas
+    };
+    if(!payload.OP){ alert('Escribe o selecciona la OP antes de guardar.'); return; }
+    if(!filas.length){ alert('Agrega al menos un ítem antes de guardar.'); return; }
+    var st=document.getElementById('save-status');
+    if(window.opener && !window.opener.closed){
+      window.opener.postMessage({type:'solicitud-editor-save', payload:payload}, '*');
+      st.textContent='✅ Guardado — ya puedes cerrar esta pestaña';
+    } else {
+      st.textContent='';
+      alert('No se pudo comunicar con la ventana principal. Vuelve a intentarlo desde allí.');
+    }
+  }
+  <\/script>
+  </body></html>`;
+
+  const win=window.open('','_blank');
+  if(!win){ toast('Permite ventanas emergentes para editar','error'); return; }
+  win.document.write(html);
+  win.document.close();
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -2017,11 +2562,14 @@ function detailConformidad(id){
   if(!c){ toast('Certificado no encontrado','error'); return; }
   let html=`
     <div class="qa-actions">
+      <div class="qa-btn qa-btn-pdf" onclick="abrirEditorConformidad('${esc(id)}')">
+        <div class="qa-btn-icon">✏️</div><div class="qa-btn-label">Editar / PDF</div>
+      </div>
       <div class="qa-btn" onclick="abrirPDFConformidad(null,'${esc(id)}')">
-        <div class="qa-btn-icon">📄</div><div class="qa-btn-label">PDF</div>
+        <div class="qa-btn-icon">📄</div><div class="qa-btn-label">Hoja Control</div>
       </div>
       <div class="qa-btn" onclick="abrirPDFConformidad(null,'${esc(id)}',true)">
-        <div class="qa-btn-icon" style="background:var(--success)">✅</div><div class="qa-btn-label">Conformidad PDF</div>
+        <div class="qa-btn-icon" style="background:var(--success)">✅</div><div class="qa-btn-label">Certificado</div>
       </div>
     </div>
     <div class="fields-grid">
@@ -2033,10 +2581,940 @@ function detailConformidad(id){
       <div class="field-group"><div class="field-label">F. Fabricación</div><div class="field-value">${fmtDate(c['FECHA DE FABRICACIÓN']||c['FECHA FABRICACION'])}</div></div>
     </div>
     <div class="field-group"><div class="field-label">Referencia Producto</div><div class="field-value">${esc(c['REFERENCIA PRODUCTO']||'—')}</div></div>
+    <div class="field-group"><div class="field-label">N° de Pieza</div><div class="field-value">${esc(c.NUMERO_PIEZA||'—')}</div></div>
     <div class="field-group"><div class="field-label">Cantidad</div><div class="field-value">${esc(String(c.CANTIDAD||'—'))}</div></div>
   `;
   openDetail('Certificado '+( c['CERTIFICADO NÚMERO']||''),html);
 }
+
+// ══════════════════════════════════════════════════════════════
+// EDITOR PDF CONFORMIDAD — ventana tipo PDF con tabla de medidas
+// Similar a _abrirEditorPDFSolicitud pero para certificados
+// ══════════════════════════════════════════════════════════════
+function abrirModalConformidad(){
+  // FAB en módulo conformidad → abre editor nuevo (sin conformidad previa)
+  abrirEditorConformidad(null);
+}
+
+function abrirEditorConformidad(confId){
+  // Conformidad existente (para editar) o nueva
+  const c = confId ? (DB.conformidades||[]).find(x=>String(x.ID_CONFORMIDAD||x['CERTIFICADO NÚMERO']||'')===String(confId)) : null;
+  const esNueva = !c;
+
+  // Datos precargados de la conformidad
+  // Número de certificado consecutivo: 0001, 0002...
+  // Se persiste en localStorage para mantener la secuencia entre sesiones
+  function _getNextCertNum(){
+    var seq=parseInt(localStorage.getItem('wedm_cert_seq')||'0',10);
+    seq=isNaN(seq)?0:seq;
+    seq++;
+    localStorage.setItem('wedm_cert_seq',seq);
+    return String(seq).padStart(4,'0');
+  }
+  const idConf = c
+    ? (c.ID_CONFORMIDAD||c['CERTIFICADO NÚMERO']||confId)
+    : _getNextCertNum();
+  const opActual  = c ? String(c['#OP']||c.OP||'') : '';
+  const itemActual= c ? String(c.ITEM||'') : '';
+
+  // Catálogos para datalists
+  const opOpts  = [...new Set((DB.produccion||[]).map(o=>String(o.OP||o.IDQR||'').trim()).filter(Boolean))].sort();
+  // Índice OP → datos de producción agrupados (puede haber varios ítems por OP)
+  const opItemIndex = {};
+  (DB.produccion||[]).forEach(o=>{
+    const k=String(o.OP||o.IDQR||'').trim();
+    if(!k) return;
+    if(!opItemIndex[k]) opItemIndex[k]=[];
+    opItemIndex[k].push({
+      ITEM:     String(o.ITEM||''),
+      CLIENTE:  String(o.EMPRESA||o.CLIENTE||''),
+      COTIZ:    String(o.COTIZACION||o.COT||''),
+      REF:      String(o['DESCRIPCION DEL PROYECTO']||o.DESCRIPCION||''),
+      CANT:     String(o.CANTIDAD||o.CANT||'1'),
+      MATERIAL: String(o.MATERIAL||o['MATERIAL 1']||''),
+      TRAT:     String(o.TRATAMIENTO||''),
+    });
+  });
+
+  // Cotas por defecto A–J
+  const COTAS_DEFAULT=['A','B','C','D','E','F','G','H','I','J'];
+  // Si es edición, reconstruir cotas desde los campos guardados en la conformidad
+  // (guardamos las cotas como JSON en c.COTAS_JSON)
+  let cotasPrev=[];
+  try{ cotasPrev=JSON.parse(c?.COTAS_JSON||'[]'); }catch(e){}
+  if(!cotasPrev.length) cotasPrev=COTAS_DEFAULT.map(letra=>({letra,nominal:'',tol_pos:'',tol_neg:''}));
+
+  // Número de pieza (orden de compra y N° pieza)
+  const ocActual    = c?.ORDEN_COMPRA||'';
+  const npiezaActual= c?.NUMERO_PIEZA||'';
+  const fEmision    = c?.['FECHA DE EMISIÓN']||c?.FECHA||today();
+  const fFabric     = c?.['FECHA DE FABRICACIÓN']||c?.['FECHA FABRICACION']||'';
+  const obsActual   = c?.OBSERVACIONES||c?.OBSERVACION||'';
+  const inspActual  = c?.INSPECTOR||'';
+
+  const dlOpts=(arr)=>arr.map(v=>`<option value="${esc(String(v))}">`).join('');
+
+  // Filas de cotas para la tabla
+  // Genera solo las celdas fijas (num, letra, nominal, tol+, tol-).
+  // Las celdas de pieza y estadísticas las inyecta _buildMedCells en JS.
+  const filasCota=cotasPrev.map((ct,i)=>`<tr id="cota-tr-${i}">
+    <td class="c-num" style="border:1px solid #ccc;padding:2px;text-align:center;background:#dde6f0;font-weight:700;font-size:9px;width:28px">${i+1}</td>
+    <td style="border:1px solid #ccc;padding:2px;width:36px"><input class="c-letra" type="text" value="${esc(ct.letra)}" maxlength="4" style="text-align:center;font-weight:700;font-size:11px;text-transform:uppercase"></td>
+    <td style="border:1px solid #ccc;padding:2px;width:64px"><input class="c-nom" type="text" value="${esc(ct.nominal)}" style="text-align:center;font-size:9px" placeholder="ej. 25.00" oninput="_nominalChanged(this,${i})"></td>
+    <td style="border:1px solid #ccc;padding:2px;width:48px"><input class="c-tpos" type="text" value="${esc(ct.tol_pos)}" style="text-align:center;font-size:9px;color:#166534" placeholder="+0.00" oninput="_tolManualChanged(this)"></td>
+    <td style="border:1px solid #ccc;padding:2px;width:48px"><input class="c-tneg" type="text" value="${esc(ct.tol_neg)}" style="text-align:center;font-size:9px;color:#991b1b" placeholder="-0.00" oninput="_tolManualChanged(this)"></td>
+  </tr>`).join('');
+
+  const html=`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+  <title>${esNueva?'Nueva Conformidad':'Editar Conformidad — '+esc(String(idConf))}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:Arial,sans-serif;font-size:9px;color:#000;background:#f1f5f9;padding-top:56px;margin:0}
+    table{width:100%;border-collapse:collapse}
+    input,textarea,select{font:inherit;color:inherit;border:none;background:transparent;width:100%;
+      padding:2px 3px;border-radius:3px;transition:background .15s}
+    input:hover,textarea:hover,select:hover{background:rgba(37,99,235,.06)}
+    input:focus,textarea:focus,select:focus{outline:none;background:#eaf1ff;box-shadow:0 0 0 2px #2563eb inset}
+    textarea{resize:vertical;min-height:26px}
+    /* TOOLBAR */
+    .toolbar{position:fixed;top:0;left:0;right:0;z-index:99;background:#1a3a6b;color:#fff;
+      padding:10px 18px;display:flex;align-items:center;gap:10px;box-shadow:0 3px 10px rgba(0,0,0,.25)}
+    .toolbar b{flex:1;font-size:12.5px;font-weight:700}
+    .toolbar .status{font-size:11px;font-weight:600;color:#bbf7d0;min-width:120px;text-align:right}
+    .toolbar button{border:none;border-radius:8px;padding:9px 16px;font-size:12px;font-weight:700;
+      cursor:pointer;transition:transform .1s}
+    .toolbar button:active{transform:scale(.96)}
+    .btn-print{background:#0891b2;color:#fff}
+    .btn-save{background:#16a34a;color:#fff}
+    /* SHEET */
+    .sheet{background:#fff;max-width:1200px;margin:12px auto;padding:14px;border-radius:6px;
+      box-shadow:0 2px 14px rgba(0,0,0,.12)}
+    /* HEADER del doc */
+    .hdr-top{display:grid;grid-template-columns:110px 1fr auto;border:2px solid #1a3a6b;margin-bottom:0}
+    .hdr-logo{padding:6px 8px;border-right:1px solid #1a3a6b;display:flex;align-items:center;justify-content:center}
+    .hdr-title{background:#fff;padding:6px 10px;display:flex;align-items:center;justify-content:center;border-right:1px solid #1a3a6b}
+    .hdr-title h1{font-size:13px;font-weight:900;color:#1a3a6b;text-align:center;text-transform:uppercase;line-height:1.3}
+    .hdr-cert{display:flex;flex-direction:column;min-width:130px}
+    .hdr-cert-label{background:#1a3a6b;color:#fff;font-size:8px;font-weight:700;text-align:center;padding:4px 8px;letter-spacing:.5px}
+    .hdr-cert-val{font-size:13px;font-weight:900;text-align:center;padding:6px 10px;color:#16a34a;flex:1;display:flex;align-items:center;justify-content:center}
+    /* BARRA */
+    .barra{background:#1a3a6b;color:#fff;padding:4px 8px;font-size:9px;font-weight:700;text-transform:uppercase;
+      letter-spacing:.5px;border-left:2px solid #1a3a6b;border-right:2px solid #1a3a6b}
+    .barra2{background:#dde6f0;color:#1a3a6b;padding:4px 8px;font-size:9px;font-weight:700;text-transform:uppercase;
+      letter-spacing:.5px;border-left:2px solid #1a3a6b;border-right:2px solid #1a3a6b;border-bottom:1px solid #ccc}
+    /* INFO TABLE */
+    .info-table{border-left:2px solid #1a3a6b;border-right:2px solid #1a3a6b;border-bottom:1px solid #ccc}
+    .info-table th{background:#dde6f0;color:#1a3a6b;font-size:8px;font-weight:700;text-align:center;
+      padding:4px 6px;border:1px solid #ccc;text-transform:uppercase}
+    .info-table td{font-size:9px;padding:3px 5px;border:1px solid #ccc;text-align:center}
+    /* SELECTOR OP-ITEM */
+    .op-item-wrap{border-left:2px solid #1a3a6b;border-right:2px solid #1a3a6b;border-bottom:1px solid #ccc;
+      display:grid;grid-template-columns:180px 1fr 120px 140px;gap:0}
+    .oi-cell{padding:4px 6px;border-right:1px solid #ccc;display:flex;flex-direction:column;gap:2px}
+    .oi-cell:last-child{border-right:none}
+    .oi-label{font-size:7px;font-weight:700;text-transform:uppercase;color:#1a3a6b;letter-spacing:.4px}
+    /* MEDIDAS TABLE */
+    .med-wrap{border-left:2px solid #1a3a6b;border-right:2px solid #1a3a6b;border-bottom:2px solid #1a3a6b;overflow-x:auto}
+    .med-table{border-collapse:collapse;min-width:100%}
+    .med-table th{background:#1a3a6b;color:#fff;font-size:8px;font-weight:700;text-align:center;
+      padding:5px 4px;border:1px solid #2a4a7b;text-transform:uppercase;white-space:nowrap}
+    .med-table th.th-pieza{background:#16a34a;min-width:52px}
+    .med-table td{font-size:9px;padding:1px;vertical-align:middle;border:1px solid #ccc}
+    .med-table input{font-size:9px;padding:2px 3px}
+    .meds-cell{padding:0!important}
+    /* OBS + firma */
+    .obs-row{border-left:2px solid #1a3a6b;border-right:2px solid #1a3a6b;border-bottom:2px solid #1a3a6b;
+      display:grid;grid-template-columns:90px 1fr;border-top:1px solid #ccc}
+    .obs-label{background:#dde6f0;color:#1a3a6b;font-weight:700;font-size:8px;text-transform:uppercase;
+      padding:6px 8px;display:flex;align-items:center;border-right:1px solid #ccc}
+    .obs-val{padding:4px 6px}
+    .firm-title{background:#1a3a6b;color:#fff;font-size:9px;font-weight:700;text-align:center;padding:5px;
+      text-transform:uppercase;border:2px solid #1a3a6b;border-bottom:none;margin-top:14px;letter-spacing:.5px}
+    .firm-table{border:2px solid #1a3a6b;border-collapse:collapse;width:100%}
+    .firm-table th{background:#dde6f0;color:#1a3a6b;font-size:8px;font-weight:700;text-align:center;
+      padding:4px 6px;border:1px solid #ccc;text-transform:uppercase}
+    .firm-table td{font-size:9px;padding:18px 6px 6px;border:1px solid #ccc;text-align:center;vertical-align:bottom}
+    /* Botones inline */
+    .btn-add-cota{width:100%;border:1.5px dashed #2563eb;background:#fff;color:#2563eb;
+      border-radius:8px;padding:7px;font-size:11px;font-weight:700;cursor:pointer;margin:8px 0 4px}
+    .result-pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:8px;font-weight:700}
+    .pill-ok{background:#dcfce7;color:#166534}
+    .pill-nok{background:#fee2e2;color:#991b1b}
+    @media print{
+      .no-print,.toolbar{display:none!important}
+      body{background:#fff;padding-top:0;margin:6px 10px}
+      .sheet{box-shadow:none;padding:0;max-width:none}
+      input,textarea,select{background:transparent!important;box-shadow:none!important}
+      @page{size:A4 portrait;margin:10mm}
+
+      /* ── OCULTAR columnas de piezas individuales al imprimir ── */
+      /* Cabeceras de pieza (th-pieza) y sus inputs */
+      .th-pieza{display:none!important}
+      /* Celdas de pieza: son los td con inputs data-cota/data-pieza */
+      td.td-pieza{display:none!important}
+      /* Ocultar también la barra de cantidad de piezas */
+      #barra-cant-info{display:none!important}
+      /* Ajustar ancho de columnas para impresión */
+      .med-wrap{overflow:visible}
+      .med-table{width:100%}
+
+      /* ── MOSTRAR tabla de resumen (oculta en pantalla) ── */
+      #print-summary{display:table!important}
+      #print-summary-wrap{display:block!important}
+
+      /* Colores de fondo en impresión */
+      .med-table th{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    }
+  </style></head><body>
+
+  <datalist id="dl-op">${dlOpts(opOpts)}</datalist>
+
+  <div class="toolbar no-print">
+    <b>${esNueva?'🏅 Nueva Conformidad':'✏️ Editando Conformidad — '+esc(String(idConf))}</b>
+    <span class="status" id="save-status"></span>
+    <button type="button" class="btn-print" onclick="_imprimirResumen()">🖨️ Imprimir / PDF</button>
+    <button type="button" class="btn-save" onclick="_guardarConf()">${esNueva?'💾 Crear Certificado':'💾 Guardar Cambios'}</button>
+  </div>
+
+  <div class="sheet">
+
+    <!-- ── ENCABEZADO ── -->
+    <div class="hdr-top">
+      <div class="hdr-logo">
+        <div style="font-weight:900;font-size:13px;color:#1a3a6b;line-height:1.25;text-align:center">
+          GRUPO<br>WEDM<br><span style="font-size:7px;font-weight:400">Metalmecánica Avanzada</span>
+        </div>
+      </div>
+      <div class="hdr-title">
+        <h1>Certificado de Conformidad<br><span style="font-size:10px;font-weight:600;color:#555">Centralizar Resultados de Medición</span></h1>
+      </div>
+      <div class="hdr-cert">
+        <div class="hdr-cert-label">Certificado N°</div>
+        <div class="hdr-cert-val"><span id="lbl-cert">${esc(String(idConf))}</span></div>
+      </div>
+    </div>
+
+    <!-- ── BARRA: DATOS GENERALES ── -->
+    <div class="barra">Datos Generales</div>
+
+    <!-- ── SELECTOR OP + ÍTEM ── -->
+    <div class="op-item-wrap">
+      <div class="oi-cell">
+        <div class="oi-label">OP — Ítem</div>
+        <input id="f-op" type="text" list="dl-op" placeholder="Buscar OP…" value="${esc(opActual)}"
+          style="font-weight:900;font-size:12px;color:#1a3a6b" onchange="_confOpChanged()">
+        <datalist id="dl-item-sel"></datalist>
+        <select id="f-item" style="font-size:9px;margin-top:2px;border:1px solid #ccc;border-radius:3px;background:#fff"
+          onchange="_confItemChanged()">
+          <option value="">— Ítem —</option>
+        </select>
+        <input type="hidden" id="f-cant" value="${esc(String(c?.CANTIDAD||1))}">
+      </div>
+      <div class="oi-cell">
+        <div class="oi-label">Referencia / Producto</div>
+        <input id="f-ref" type="text" value="${esc(c?.['REFERENCIA PRODUCTO']||c?.REFERENCIA||'')}" style="font-size:10px">
+      </div>
+      <div class="oi-cell">
+        <div class="oi-label">Orden de Compra (OC)</div>
+        <input id="f-oc" type="text" value="${esc(ocActual)}" placeholder="N° OC" style="text-align:center">
+      </div>
+      <div class="oi-cell">
+        <div class="oi-label">N° de Pieza</div>
+        <input id="f-npieza" type="text" value="${esc(npiezaActual)}" placeholder="ej. REF-001" style="text-align:center">
+      </div>
+    </div>
+
+    <!-- ── INFO: CLIENTE, FECHAS, CANTIDAD ── -->
+    <table class="info-table">
+      <thead><tr>
+        <th>Cliente</th>
+        <th>Cotización</th>
+        <th>N° de Ítem</th>
+        <th>F. Fabricación</th>
+        <th>F. Emisión</th>
+      </tr></thead>
+      <tbody><tr>
+        <td><input id="f-cliente" type="text" value="${esc(c?.CLIENTE||c?.EMPRESA||'')}" style="text-align:center;font-weight:700"></td>
+        <td><input id="f-cotiz" type="text" value="${esc(String(c?.COTIZACION||''))}" style="text-align:center"></td>
+        <td><span id="lbl-item-cell" style="font-weight:700;font-size:13px;color:#1a3a6b">${esc(itemActual||"—")}</span></td>
+        <td><input id="f-ffabric" type="date" value="${esc(String(fFabric).slice(0,10))}" style="text-align:center"></td>
+        <td><input id="f-femision" type="date" value="${esc(String(fEmision).slice(0,10)||today())}" style="text-align:center"></td>
+      </tr></tbody>
+    </table>
+
+    <!-- ── BARRA: MEDIDAS CRÍTICAS ── -->
+    <div class="barra">Medidas Críticas — Registro por Pieza</div>
+    <div class="barra2" id="barra-cant-info">N° de Ítem: <b id="lbl-item-num">${esc(itemActual||String(c?.CANTIDAD||1))}</b> &nbsp;·&nbsp; Piezas a medir: <b id="lbl-npiezas">${esc(String(c?.CANTIDAD||1))}</b> &nbsp;|&nbsp; Ingrese la medición obtenida en cada celda</div>
+
+    <!-- ── TABLA DE MEDIDAS ── -->
+    <div class="med-wrap">
+      <table class="med-table" id="med-table">
+        <thead id="med-thead">
+          <!-- se construye dinámicamente por JS según cantidad de piezas -->
+        </thead>
+        <tbody id="med-tbody">
+          ${filasCota}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Botón agregar cota -->
+    <button type="button" class="btn-add-cota no-print" onclick="_confAddCota()">+ Agregar cota</button>
+
+    <!-- ── OBSERVACIONES ── -->
+    <div class="obs-row">
+      <div class="obs-label">Observaciones:</div>
+      <div class="obs-val"><textarea id="f-obs" rows="2">${esc(obsActual)}</textarea></div>
+    </div>
+
+    <!-- ── FIRMAS ── -->
+    <div class="firm-title">Aprobación y Verificación</div>
+    <table class="firm-table">
+      <thead><tr>
+        <th>Inspector de Calidad</th>
+        <th>Jefe de Calidad</th>
+        <th>Aprobado por</th>
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td>${esc(c?.INSPECTOR||'')}</td>
+          <td></td>
+          <td></td>
+        </tr>
+      </tbody>
+    </table>
+
+  </div><!-- /sheet -->
+
+  <script>
+  // ── Datos embebidos desde el main ─────────────────────────────
+  var _ID_CONF   = ${JSON.stringify(idConf)};
+  var _ES_NUEVA  = ${JSON.stringify(esNueva)};
+  var _opItemIdx = ${JSON.stringify(opItemIndex)};
+  // Mediciones previas guardadas como JSON: { "cotaIdx_piezaIdx": "valor" }
+  var _medsPrev  = {};
+  try{ _medsPrev = JSON.parse(${JSON.stringify(JSON.stringify(c?._MEDICIONES_JSON||c?.MEDICIONES_JSON||'{}'))}); }catch(e){}
+
+  // ── Cabecera dinámica de piezas ──────────────────────────────
+  // Tabla tolerancias HADA S.A. (mm)
+  var _HADA_TOL=[
+    {max:6,    tol:0.1},
+    {max:30,   tol:0.2},
+    {max:100,  tol:0.25},
+    {max:300,  tol:0.5},
+    {max:1000, tol:0.8},
+    {max:2000, tol:1.3},
+    {max:3000, tol:1.8},
+  ];
+  function _hadaTol(nominal){
+    var n=Math.abs(parseFloat(nominal));
+    if(isNaN(n)) return null;
+    for(var i=0;i<_HADA_TOL.length;i++){
+      if(n<=_HADA_TOL[i].max) return _HADA_TOL[i].tol;
+    }
+    return 1.8;
+  }
+
+  function _buildHeader(n){
+    var ths='<th style="width:28px">#</th><th style="width:36px">Cota</th>'+
+      '<th style="width:64px">Nominal</th><th style="width:48px">Tol +</th>'+
+      '<th style="width:48px">Tol −</th>';
+    for(var i=0;i<n;i++) ths+='<th class="th-pieza">P'+(i+1)+'</th>';
+    // Columnas estadísticas
+    ths+='<th style="min-width:52px;background:#1e40af">Prom.</th>';
+    ths+='<th style="min-width:52px;background:#166534">Mín</th>';
+    ths+='<th style="min-width:52px;background:#991b1b">Máx</th>';
+    ths+='<th style="min-width:52px;background:#6b21a8">D.Est</th>';
+    ths+='<th style="width:24px" class="no-print">Del</th>';
+    document.getElementById('med-thead').innerHTML='<tr>'+ths+'</tr>';
+  }
+
+  // ── _buildMedCells: inyecta <td> de pieza y estadísticas DIRECTAMENTE en el <tr> ──
+  // La fila ya tiene 5 <td> fijos (num, letra, nominal, tol+, tol-).
+  // Esta función elimina los td dinámicos previos y agrega los nuevos.
+  function _buildMedCells(cotaIdx, n){
+    var tr=document.getElementById('cota-tr-'+cotaIdx);
+    if(!tr) return;
+    // Quitar todos los td después de los 5 fijos
+    while(tr.cells.length > 5) tr.deleteCell(5);
+    // Agregar una celda por pieza
+    for(var i=0;i<n;i++){
+      var key=cotaIdx+'_'+i;
+      var val=_medsPrev[key]||'';
+      var td=document.createElement('td');
+      td.className='td-pieza';
+      td.style.cssText='border:1px solid #ccc;padding:0;min-width:52px';
+      var inp=document.createElement('input');
+      inp.type='text';
+      inp.dataset.cota=cotaIdx;
+      inp.dataset.pieza=i;
+      inp.value=val;
+      inp.placeholder='—';
+      inp.style.cssText='text-align:center;font-size:9px;width:100%;border:none;background:transparent;padding:3px 2px';
+      inp.addEventListener('input', function(e){ _medChanged(e.target); });
+      td.appendChild(inp);
+      tr.appendChild(td);
+    }
+    // Celdas estadísticas — solo lectura
+    var stats=[
+      {id:'stat-prom-'+cotaIdx, label:'—', border:'2px solid #1e40af', color:'#1e40af', bg:'#eff6ff'},
+      {id:'stat-min-'+cotaIdx,  label:'—', border:'1px solid #166534', color:'#166534', bg:'#f0fdf4'},
+      {id:'stat-max-'+cotaIdx,  label:'—', border:'1px solid #991b1b', color:'#991b1b', bg:'#fef2f2'},
+      {id:'stat-dev-'+cotaIdx,  label:'—', border:'1px solid #6b21a8', color:'#6b21a8', bg:'#faf5ff'},
+    ];
+    stats.forEach(function(s){
+      var td=document.createElement('td');
+      td.id=s.id;
+      td.style.cssText='border-left:'+s.border+';border-top:1px solid #ccc;border-bottom:1px solid #ccc;border-right:1px solid #ccc;padding:2px 4px;min-width:52px;text-align:center;font-size:9px;font-weight:700;color:'+s.color+';background:'+s.bg;
+      td.textContent='—';
+      tr.appendChild(td);
+    });
+    // Celda del botón eliminar (siempre al final)
+    var tdDel=document.createElement('td');
+    tdDel.style.cssText='border:1px solid #ccc;padding:2px;text-align:center;width:24px';
+    tdDel.className='no-print';
+    tdDel.innerHTML='<button type="button" onclick="_confDelCota('+cotaIdx+')" style="background:#dc2626;color:#fff;border:none;border-radius:3px;width:16px;height:16px;font-size:9px;cursor:pointer;line-height:1">✕</button>';
+    tr.appendChild(tdDel);
+    // Colorear mediciones ya existentes
+    for(var j=0;j<n;j++){
+      var inp2=tr.querySelector('input[data-pieza="'+j+'"]');
+      if(inp2&&inp2.value) _medChanged(inp2);
+    }
+  }
+
+  // ── Recalcular estadísticas de una cota — lee del DOM ──────────
+  function _recalcStats(cotaIdx){
+    // Leer todos los inputs de medición de esta cota directo del DOM
+    var inps=document.querySelectorAll('input[data-cota="'+cotaIdx+'"]');
+    var vals=[];
+    inps.forEach(function(el){
+      var v=parseFloat(el.value);
+      if(!isNaN(v)) vals.push(v);
+    });
+    var prom='—', mn='—', mx='—', dev='—';
+    if(vals.length>0){
+      var sum=vals.reduce(function(a,b){return a+b;},0);
+      var avg=sum/vals.length;
+      prom=avg.toFixed(3);
+      mn=Math.min.apply(null,vals).toFixed(3);
+      mx=Math.max.apply(null,vals).toFixed(3);
+      if(vals.length>1){
+        var vr=vals.reduce(function(a,b){return a+Math.pow(b-avg,2);},0)/(vals.length-1);
+        dev=Math.sqrt(vr).toFixed(4);
+      } else {
+        dev='0.0000';
+      }
+    }
+    var sp=document.getElementById('stat-prom-'+cotaIdx);
+    var smn=document.getElementById('stat-min-'+cotaIdx);
+    var smx=document.getElementById('stat-max-'+cotaIdx);
+    var sd=document.getElementById('stat-dev-'+cotaIdx);
+    if(sp) sp.textContent=prom;
+    if(smn) smn.textContent=mn;
+    if(smx) smx.textContent=mx;
+    if(sd) sd.textContent=dev;
+  }
+
+  function _rebuildAllMedCells(n){
+    var rows=document.querySelectorAll('#med-tbody tr[id^=cota-tr-]');
+    rows.forEach(function(tr,i){
+      _buildMedCells(i,n);
+      _recalcStats(i);
+    });
+  }
+
+  function _getCantPiezas(){
+    return Math.max(1,parseInt(document.getElementById('f-cant').value||1,10));
+  }
+
+  function _confCantChanged(){
+    var n=_getCantPiezas();
+    var lbN=document.getElementById('lbl-npiezas');
+    if(lbN) lbN.textContent=n;
+    _buildHeader(n);
+    _rebuildAllMedCells(n);
+  }
+  function _confUpdateItemLabel(){
+    var sel=document.getElementById('f-item');
+    var lbI=document.getElementById('lbl-item-num');
+    if(!lbI||!sel) return;
+    var txt=sel.options[sel.selectedIndex]?sel.options[sel.selectedIndex].text:'';
+    var match=txt.match(/^Item\s*(\S+)/);
+    lbI.textContent=match?match[1]:(txt||'—');
+  }
+
+  // Guardar valores al cambiar una celda de medición
+  function _medChanged(inp){
+    var cotaIdx=parseInt(inp.dataset.cota, 10);
+    var piezaIdx=parseInt(inp.dataset.pieza, 10);
+    var key=cotaIdx+'_'+piezaIdx;
+    _medsPrev[key]=inp.value.trim();
+
+    // Resaltar si fuera de tolerancia
+    var row=document.getElementById('cota-tr-'+cotaIdx);
+    if(!row) return;
+    var nom=parseFloat(row.querySelector('.c-nom').value);
+    var tpos=parseFloat(row.querySelector('.c-tpos').value);
+    var tneg=parseFloat(row.querySelector('.c-tneg').value);
+    if(isNaN(tpos)||isNaN(tneg)){
+      var t=_hadaTol(nom);
+      if(t!==null){ tpos=t; tneg=-t; }
+    }
+    var val=parseFloat(inp.value);
+    if(!isNaN(nom)&&!isNaN(val)&&!isNaN(tpos)&&!isNaN(tneg)){
+      var ok=(val>=(nom+tneg))&&(val<=(nom+tpos));
+      inp.style.background=ok?'#f0fdf4':'#fef2f2';
+      inp.style.color=ok?'#166534':'#dc2626';
+      inp.style.fontWeight=ok?'normal':'700';
+    } else {
+      inp.style.background='';inp.style.color='';inp.style.fontWeight='';
+    }
+    // Recalcular estadísticas leyendo directo del DOM (fuente de verdad)
+    _recalcStats(cotaIdx);
+  }
+
+  // ── Autocalcular tolerancia HADA al escribir el nominal ──────
+  function _nominalChanged(inp, cotaIdx){
+    var nom=parseFloat(inp.value);
+    var row=document.getElementById('cota-tr-'+cotaIdx);
+    if(!row||isNaN(nom)) return;
+    var tposEl=row.querySelector('.c-tpos');
+    var tnegEl=row.querySelector('.c-tneg');
+    // Recalcular SIEMPRE con HADA, salvo que el usuario los haya editado manualmente
+    // (marcados con data-manual="1" en el evento oninput de los propios inputs)
+    var manualPos=tposEl.getAttribute('data-manual')==='1';
+    var manualNeg=tnegEl.getAttribute('data-manual')==='1';
+    if(!manualPos || !manualNeg){
+      var t=_hadaTol(nom);
+      if(t!==null){
+        if(!manualPos){ tposEl.value='+'+t.toFixed(2); }
+        if(!manualNeg){ tnegEl.value='-'+t.toFixed(2); }
+      }
+    }
+    // Re-colorear y recalcular stats de todas las mediciones de esta cota
+    var inpsC=document.querySelectorAll('input[data-cota="'+cotaIdx+'"]');
+    inpsC.forEach(function(el){ if(el.value) _medChanged(el); });
+    _recalcStats(cotaIdx);
+  }
+
+  // Marcar como "editado manualmente" cuando el usuario toca tol+ o tol-
+  // y limpiar la marca si borra el contenido (para volver al automático)
+  function _tolManualChanged(el){
+    el.setAttribute('data-manual', el.value.trim() ? '1' : '0');
+    // Re-colorear mediciones de esa cota
+    var row=el.closest('tr');
+    if(!row) return;
+    var cotaIdx=parseInt(row.id.replace('cota-tr-',''),10);
+    var inpsT=document.querySelectorAll('input[data-cota="'+cotaIdx+'"]');
+    inpsT.forEach(function(el){ if(el.value) _medChanged(el); });
+    _recalcStats(cotaIdx);
+  }
+
+  // ── OP cambió: llenar selector de ítems ─────────────────────
+  function _confOpChanged(){
+    var opVal=document.getElementById('f-op').value.trim();
+    var items=_opItemIdx[opVal]||[];
+    var sel=document.getElementById('f-item');
+    sel.innerHTML='<option value="">— Ítem —</option>';
+    items.forEach(function(it,i){
+      var opt=document.createElement('option');
+      opt.value=i;
+      opt.textContent='Item '+_esc(it.ITEM)+(it.REF?' — '+it.REF.slice(0,40):'');
+      sel.appendChild(opt);
+    });
+    // Si solo hay un ítem, seleccionarlo automáticamente
+    if(items.length===1){ sel.value=0; _confItemChanged(); } else { _confUpdateItemLabel(); }
+  }
+
+  // ── Ítem elegido: llenar campos automáticamente ──────────────
+  function _confItemChanged(){
+    var opVal=document.getElementById('f-op').value.trim();
+    var selVal=document.getElementById('f-item').value;
+    if(selVal==='') return;
+    var items=_opItemIdx[opVal]||[];
+    var it=items[parseInt(selVal,10)];
+    if(!it) return;
+    var set=function(id,v){ var el=document.getElementById(id); if(el&&!el.value) el.value=v; };
+    var setForce=function(id,v){ var el=document.getElementById(id); if(el) el.value=v; };
+    setForce('f-cliente', it.CLIENTE);
+    setForce('f-cotiz',   it.COTIZ);
+    setForce('f-ref',     it.REF);
+    setForce('f-cant',    it.CANT);
+    _confCantChanged();
+    _confUpdateItemLabel();
+    // Actualizar celda N° de Ítem en la tabla de datos generales
+    var lblIC=document.getElementById('lbl-item-cell');
+    if(lblIC) lblIC.textContent=it.ITEM||'—';
+  }
+
+  // ── Agregar / quitar cotas ───────────────────────────────────
+  var _cotaSeq=0;
+  function _confAddCota(){
+    var tbody=document.getElementById('med-tbody');
+    var idx=tbody.rows.length;
+    var n=_getCantPiezas();
+    var tr=document.createElement('tr');
+    tr.id='cota-tr-'+idx;
+    // Solo las 5 celdas fijas; _buildMedCells agrega el resto
+    tr.innerHTML=
+      '<td class="c-num" style="border:1px solid #ccc;padding:2px;text-align:center;background:#dde6f0;font-weight:700;font-size:9px;width:28px">'+(idx+1)+'</td>'+
+      '<td style="border:1px solid #ccc;padding:2px;width:36px"><input class="c-letra" type="text" maxlength="4" style="text-align:center;font-weight:700;font-size:11px;text-transform:uppercase" placeholder="—"></td>'+
+      '<td style="border:1px solid #ccc;padding:2px;width:64px"><input class="c-nom" type="text" style="text-align:center;font-size:9px" placeholder="ej. 25.00" oninput="_nominalChanged(this,'+idx+')"></td>'+
+      '<td style="border:1px solid #ccc;padding:2px;width:48px"><input class="c-tpos" type="text" style="text-align:center;font-size:9px;color:#166534" placeholder="+0.00" oninput="_tolManualChanged(this)"></td>'+
+      '<td style="border:1px solid #ccc;padding:2px;width:48px"><input class="c-tneg" type="text" style="text-align:center;font-size:9px;color:#991b1b" placeholder="-0.00" oninput="_tolManualChanged(this)"></td>';
+    tbody.appendChild(tr);
+    _buildMedCells(idx, n);
+  }
+
+  function _confDelCota(idx){
+    var tr=document.getElementById('cota-tr-'+idx);
+    if(tr) tr.remove();
+    // Limpiar mediciones de esa cota del estado
+    Object.keys(_medsPrev).forEach(function(k){ if(k.startsWith(idx+'_')) delete _medsPrev[k]; });
+    // Renumerar las filas restantes
+    var rows=document.querySelectorAll('#med-tbody tr[id^=cota-tr-]');
+    rows.forEach(function(row,i){
+      var numCell=row.querySelector('.c-num');
+      if(numCell) numCell.textContent=(i+1);
+    });
+  }
+
+  // ── Recolectar datos y enviar al main via postMessage ────────
+  function _guardarConf(){
+    var opVal=document.getElementById('f-op').value.trim();
+    var cant=_getCantPiezas();
+    // Recolectar cotas
+    var cotas=[];
+    document.querySelectorAll('#med-tbody tr[id^=cota-tr-]').forEach(function(tr){
+      cotas.push({
+        letra:  tr.querySelector('.c-letra').value.trim().toUpperCase(),
+        nominal:tr.querySelector('.c-nom').value.trim(),
+        tol_pos:tr.querySelector('.c-tpos').value.trim(),
+        tol_neg:tr.querySelector('.c-tneg').value.trim(),
+      });
+    });
+    // Recolectar mediciones como array de filas para GAS
+    var filasGAS=[];
+    cotas.forEach(function(ct,ci){
+      for(var pi=0;pi<cant;pi++){
+        var key=ci+'_'+pi;
+        var val=_medsPrev[key]||'';
+        filasGAS.push({
+          COTA:      ct.letra,
+          NOMINAL:   ct.nominal,
+          TOL_POS:   ct.tol_pos,
+          TOL_NEG:   ct.tol_neg,
+          PIEZA:     pi+1,
+          MEDICION:  val,
+          MINIMO:    ct.tol_neg ? String((parseFloat(ct.nominal||0)+parseFloat(ct.tol_neg||0)).toFixed(4)) : '',
+          MAXIMO:    ct.tol_pos ? String((parseFloat(ct.nominal||0)+parseFloat(ct.tol_pos||0)).toFixed(4)) : '',
+        });
+      }
+    });
+    if(!opVal){ alert('Selecciona una OP antes de guardar.'); return; }
+    if(!cotas.length){ alert('Agrega al menos una cota antes de guardar.'); return; }
+
+
+    var payload={
+      ID_CONFORMIDAD:    _ID_CONF,
+      ES_NUEVA:          _ES_NUEVA,
+      OP:                opVal,
+      ITEM:              (function(){ var s=document.getElementById('f-item'); return s.options[s.selectedIndex]&&s.options[s.selectedIndex].dataset&&s.options[s.selectedIndex].dataset.item||document.getElementById('f-item').options[document.getElementById('f-item').selectedIndex]?.text?.match(/^Item\s*(\S+)/)?.[1]||''; })(),
+      CLIENTE:           document.getElementById('f-cliente').value,
+      COTIZACION:        document.getElementById('f-cotiz').value,
+      REFERENCIA:        document.getElementById('f-ref').value,
+      ORDEN_COMPRA:      document.getElementById('f-oc').value,
+      NUMERO_PIEZA:      document.getElementById('f-npieza').value,
+      CANTIDAD:          cant,
+      'FECHA DE EMISIÓN':document.getElementById('f-femision').value,
+      'FECHA DE FABRICACIÓN':document.getElementById('f-ffabric').value,
+      OBSERVACIONES:     document.getElementById('f-obs').value,
+      COTAS_JSON:        JSON.stringify(cotas),
+      MEDICIONES_JSON:   JSON.stringify(_medsPrev),
+      filasMedidas:      cotas.map(function(ct,ci){
+        // Calcular estadísticas de esta cota para guardar en MEDIDAS
+        var valsC=[];
+        for(var pj=0;pj<cant;pj++){ var vv=parseFloat(_medsPrev[ci+'_'+pj]); if(!isNaN(vv)) valsC.push(vv); }
+        var promC='',devC='',mnC='',mxC='';
+        if(valsC.length>0){
+          var sumC=valsC.reduce(function(a,b){return a+b;},0); promC=(sumC/valsC.length).toFixed(3);
+          mnC=Math.min.apply(null,valsC).toFixed(3); mxC=Math.max.apply(null,valsC).toFixed(3);
+          if(valsC.length>1){ var vrC=valsC.reduce(function(a,b){return a+Math.pow(b-promC,2);},0)/(valsC.length-1); devC=Math.sqrt(vrC).toFixed(4); }
+        }
+        return { COTA:ct.letra, NOMINAL:ct.nominal, TOL_POS:ct.tol_pos, TOL_NEG:ct.tol_neg, PROMEDIO:promC, MINIMO:mnC, MAXIMO:mxC, DESV_EST:devC };
+      }),
+      filasMediciones:   filasGAS,
+    };
+    var st=document.getElementById('save-status');
+    if(window.opener && !window.opener.closed){
+      window.opener.postMessage({type:'conformidad-editor-save', payload:payload}, '*');
+      st.textContent='✅ Guardado — puedes cerrar esta pestaña';
+      st.style.color='#bbf7d0';
+    } else {
+      alert('No se pudo comunicar con la ventana principal. Ábrelo de nuevo desde allí.');
+    }
+  }
+
+  function _esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  // ── Generar resumen e imprimir ──────────────────────────────
+  function _imprimirResumen(){
+    // Recolectar datos de todas las cotas
+    var rows=document.querySelectorAll('#med-tbody tr[id^=cota-tr-]');
+    var filas=[];
+    rows.forEach(function(tr,i){
+      var letra=tr.querySelector('.c-letra')?tr.querySelector('.c-letra').value:'';
+      var nom=tr.querySelector('.c-nom')?tr.querySelector('.c-nom').value:'';
+      var tpos=tr.querySelector('.c-tpos')?tr.querySelector('.c-tpos').value:'';
+      var tneg=tr.querySelector('.c-tneg')?tr.querySelector('.c-tneg').value:'';
+      var sp=document.getElementById('stat-prom-'+i);
+      var smn=document.getElementById('stat-min-'+i);
+      var smx=document.getElementById('stat-max-'+i);
+      var sd=document.getElementById('stat-dev-'+i);
+      // Solo si hay nominal o alguna estadística
+      if(!nom&&(!sp||sp.textContent==='—')) return;
+      filas.push({
+        num:i+1, letra:letra, nom:nom, tpos:tpos, tneg:tneg,
+        prom:sp?sp.textContent:'—',
+        mn:smn?smn.textContent:'—',
+        mx:smx?smx.textContent:'—',
+        dev:sd?sd.textContent:'—'
+      });
+    });
+
+    // Datos generales del encabezado
+    var opVal=document.getElementById('f-op')?document.getElementById('f-op').value:'';
+    var clienteVal=document.getElementById('f-cliente')?document.getElementById('f-cliente').value:'';
+    var cotizVal=document.getElementById('f-cotiz')?document.getElementById('f-cotiz').value:'';
+    var refVal=document.getElementById('f-ref')?document.getElementById('f-ref').value:'';
+    var cantVal=document.getElementById('f-cant')?document.getElementById('f-cant').value:'';
+    var ocVal=document.getElementById('f-oc')?document.getElementById('f-oc').value:'';
+    var npiezaVal=document.getElementById('f-npieza')?document.getElementById('f-npieza').value:'';
+    var femisionVal=document.getElementById('f-femision')?document.getElementById('f-femision').value:'';
+    var ffabricVal=document.getElementById('f-ffabric')?document.getElementById('f-ffabric').value:'';
+    var obsVal=document.getElementById('f-obs')?document.getElementById('f-obs').value:'';
+    // N° de Ítem: leer el texto del option seleccionado en f-item
+    var itemValPDF=(function(){
+      var sel=document.getElementById('f-item');
+      if(!sel) return '';
+      var txt=sel.options[sel.selectedIndex]?sel.options[sel.selectedIndex].text:'';
+      var m=txt.match(/^Item\s*(\S+)/);
+      return m?m[1]:txt;
+    })();
+    var certNum=document.getElementById('lbl-cert')?document.getElementById('lbl-cert').textContent:_ID_CONF;
+
+    // Generar filas de la tabla resumen con colores de conformidad
+    var filasHtml=filas.map(function(f){
+      var promNum=parseFloat(f.prom);
+      var nomNum=parseFloat(f.nom);
+      var tposNum=parseFloat(f.tpos);
+      var tnegNum=parseFloat(f.tneg);
+      // Límites absolutos: nominal + tolerancia (ej. 90 ±0.25 → Lím.Mín=89.75, Lím.Máx=90.25)
+      var limMin='—', limMax='—';
+      if(!isNaN(nomNum)&&!isNaN(tnegNum)) limMin=(nomNum+tnegNum).toFixed(3);
+      if(!isNaN(nomNum)&&!isNaN(tposNum)) limMax=(nomNum+tposNum).toFixed(3);
+      var conforme='';
+      var trStyle='';
+      if(!isNaN(promNum)&&!isNaN(nomNum)&&!isNaN(tposNum)&&!isNaN(tnegNum)){
+        var ok=(promNum>=(nomNum+tnegNum))&&(promNum<=(nomNum+tposNum));
+        conforme=ok
+          ?'<span style="color:#166534;font-weight:700;font-size:10px">✓ OK</span>'
+          :'<span style="color:#dc2626;font-weight:700;font-size:10px">✗ NC</span>';
+        trStyle=ok?'background:#f0fdf4':'background:#fef2f2';
+      }
+      return '<tr style="'+trStyle+'">'+
+        '<td style="border:1px solid #ccc;padding:5px 6px;text-align:center;font-weight:700;background:#dde6f0;color:#1a3a6b">'+_esc(String(f.num))+'</td>'+
+        '<td style="border:1px solid #ccc;padding:5px 6px;text-align:center;font-weight:900;font-size:12px;color:#1a3a6b">'+_esc(f.letra)+'</td>'+
+        '<td style="border:1px solid #ccc;padding:5px 6px;text-align:center;font-weight:700">'+_esc(f.nom)+'</td>'+
+        '<td style="border:1px solid #ccc;padding:5px 6px;text-align:center;color:#166534;font-weight:700">'+limMax+'</td>'+
+        '<td style="border:1px solid #ccc;padding:5px 6px;text-align:center;color:#991b1b;font-weight:700">'+limMin+'</td>'+
+        '<td style="border:1px solid #ccc;padding:5px 8px;text-align:center;font-weight:700;color:#1e40af">'+_esc(f.prom)+'</td>'+
+        '<td style="border:1px solid #ccc;padding:5px 8px;text-align:center;font-weight:700;color:#166534">'+_esc(f.mn)+'</td>'+
+        '<td style="border:1px solid #ccc;padding:5px 8px;text-align:center;font-weight:700;color:#991b1b">'+_esc(f.mx)+'</td>'+
+        '<td style="border:1px solid #ccc;padding:5px 8px;text-align:center;font-weight:700;color:#6b21a8">'+_esc(f.dev)+'</td>'+
+        '<td style="border:1px solid #ccc;padding:5px 8px;text-align:center">'+conforme+'</td>'+
+      '</tr>';
+    }).join('');
+
+    var fmtD=function(s){ if(!s) return '—'; try{ return new Date(s).toLocaleDateString('es-CO',{day:'2-digit',month:'2-digit',year:'numeric'}); }catch(e){ return s; } };
+
+    var html='<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">'+
+    '<title>CERTIFICADO-'+_esc(certNum)+'</title>'+
+    '<style>'+
+    '*{box-sizing:border-box;margin:0;padding:0}'+
+    'body{font-family:Arial,sans-serif;font-size:10px;color:#111;margin:14px 18px}'+
+    '.hdr{display:grid;grid-template-columns:110px 1fr 140px;border:2px solid #1a3a6b;margin-bottom:0}'+
+    '.hdr-logo{padding:8px;border-right:1px solid #1a3a6b;display:flex;align-items:center;justify-content:center;text-align:center}'+
+    '.hdr-title{padding:8px 12px;display:flex;align-items:center;justify-content:center;border-right:1px solid #1a3a6b}'+
+    '.hdr-cert{padding:6px 10px;display:flex;flex-direction:column;align-items:center;justify-content:center}'+
+    'h1{font-size:14px;font-weight:900;color:#1a3a6b;text-align:center;text-transform:uppercase;line-height:1.3}'+
+    '.barra{background:#1a3a6b;color:#fff;padding:4px 8px;font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}'+
+    '.info-grid{display:grid;grid-template-columns:repeat(5,1fr);border-left:2px solid #1a3a6b;border-right:2px solid #1a3a6b;border-bottom:1px solid #ccc}'+
+    '.ig-cell{padding:5px 7px;border-right:1px solid #ccc;border-bottom:1px solid #ccc}'+
+    '.ig-cell:last-child{border-right:none}'+
+    '.ig-label{font-size:7px;font-weight:700;text-transform:uppercase;color:#555;margin-bottom:2px}'+
+    '.ig-val{font-size:11px;font-weight:700;color:#1a3a6b}'+
+    '.ref-row{border-left:2px solid #1a3a6b;border-right:2px solid #1a3a6b;border-bottom:1px solid #ccc;padding:5px 7px}'+
+    'table{width:100%;border-collapse:collapse;border-left:2px solid #1a3a6b;border-right:2px solid #1a3a6b;border-bottom:2px solid #1a3a6b}'+
+    'th{background:#1a3a6b;color:#fff;padding:6px 4px;font-size:8px;text-align:center;text-transform:uppercase;letter-spacing:.3px;border:1px solid #2a4a7b}'+
+    'th.th-stat{background:#0f2d5c}'+
+    'td{border:1px solid #ccc;padding:4px 6px;text-align:center;font-size:10px}'+
+    '.obs{border:2px solid #1a3a6b;padding:8px;margin-top:8px;min-height:32px}'+
+    '.firm{margin-top:28px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px}'+
+    '.firm-cell{border-top:1px solid #333;padding-top:4px;text-align:center;font-size:8px;color:#555}'+
+    '.seal{text-align:center;margin-top:16px;font-size:8px;color:#aaa}'+
+    '@media print{body{margin:6px 10px}@page{size:A4 portrait;margin:8mm}}'+
+    '</style></head><body>'+
+
+    '<div class="hdr">'+
+      '<div class="hdr-logo"><div style="font-weight:900;font-size:13px;color:#1a3a6b;line-height:1.3">GRUPO<br>WEDM<br><span style="font-size:7px;font-weight:400">Metalmecánica Avanzada</span></div></div>'+
+      '<div class="hdr-title"><h1>Certificado de Conformidad<br><span style="font-size:10px;font-weight:600;color:#555">Centralizar Resultados de Medición</span></h1></div>'+
+      '<div class="hdr-cert"><div style="font-size:8px;font-weight:700;color:#555;text-transform:uppercase;margin-bottom:4px">Certificado N°</div>'+
+      '<div style="font-size:16px;font-weight:900;color:#16a34a">'+_esc(certNum)+'</div></div>'+
+    '</div>'+
+
+    '<div class="barra">Datos Generales</div>'+
+    '<div class="info-grid">'+
+      '<div class="ig-cell"><div class="ig-label">OP</div><div class="ig-val">'+_esc(opVal)+'</div></div>'+
+      '<div class="ig-cell"><div class="ig-label">Cliente</div><div class="ig-val">'+_esc(clienteVal)+'</div></div>'+
+      '<div class="ig-cell"><div class="ig-label">Cotización</div><div class="ig-val">'+_esc(cotizVal)+'</div></div>'+
+      '<div class="ig-cell"><div class="ig-label">N° de Ítem</div><div class="ig-val">'+(itemValPDF||'—')+'</div></div>'+
+      '<div class="ig-cell"><div class="ig-label">F. Emisión</div><div class="ig-val">'+fmtD(femisionVal)+'</div></div>'+
+      '<div class="ig-cell"><div class="ig-label">Orden de Compra</div><div class="ig-val">'+(_esc(ocVal)||'—')+'</div></div>'+
+      '<div class="ig-cell"><div class="ig-label">N° de Pieza</div><div class="ig-val">'+(_esc(npiezaVal)||'—')+'</div></div>'+
+      '<div class="ig-cell"><div class="ig-label">F. Fabricación</div><div class="ig-val">'+fmtD(ffabricVal)+'</div></div>'+
+    '</div>'+
+    '<div class="ref-row"><span style="font-size:8px;font-weight:700;text-transform:uppercase;color:#555">Referencia / Producto: </span><span style="font-weight:700;color:#1a3a6b">'+_esc(refVal)+'</span></div>'+
+
+    '<div class="barra" style="margin-top:8px">Medidas Críticas — Resumen de Inspección</div>'+
+    '<table>'+
+      '<thead><tr>'+
+        '<th style="width:28px">#</th>'+
+        '<th style="width:36px">Cota</th>'+
+        '<th>Nominal</th>'+
+        '<th style="color:#bbf7d0">Lím. Máx</th>'+
+        '<th style="color:#fca5a5">Lím. Mín</th>'+
+        '<th class="th-stat" style="color:#93c5fd">Promedio</th>'+
+        '<th class="th-stat" style="color:#86efac">Mín</th>'+
+        '<th class="th-stat" style="color:#fca5a5">Máx</th>'+
+        '<th class="th-stat" style="color:#d8b4fe">D. Est</th>'+
+        '<th class="th-stat">Resultado</th>'+
+      '</tr></thead>'+
+      '<tbody>'+filasHtml+'</tbody>'+
+    '</table>'+
+
+    (obsVal?'<div class="obs"><b>Observaciones:</b> '+_esc(obsVal)+'</div>':'<div class="obs"><b>Observaciones:</b></div>')+
+
+    '<div class="firm">'+
+      '<div class="firm-cell">Inspector de Calidad<br><br>Firma</div>'+
+      '<div class="firm-cell">Jefe de Calidad<br><br>Firma</div>'+
+      '<div class="firm-cell">Aprobado por<br><br>Firma</div>'+
+    '</div>'+
+    '<div class="seal">Documento generado el '+new Date().toLocaleDateString('es-CO',{day:'2-digit',month:'long',year:'numeric'})+' · GRUPO WEDM · NIT 900763241-7</div>'+
+    '</body></html>';
+
+    // Abrir en nueva pestaña e imprimir
+    var win=window.open('','_blank','width=800,height=1100');
+    if(!win){ alert('Permite ventanas emergentes para imprimir'); return; }
+    win.document.write(html);
+    win.document.close();
+    setTimeout(function(){ win.print(); }, 400);
+  }
+
+  // ── Inicialización ───────────────────────────────────────────
+  (function(){
+    var n=_getCantPiezas();
+    _buildHeader(n);
+    _rebuildAllMedCells(n);
+    // Si hay OP precargada, poblar el selector de ítems
+    var opEl=document.getElementById('f-op');
+    if(opEl.value.trim()) _confOpChanged();
+    // Si hay ítem precargado, seleccionarlo
+    ${opActual && itemActual ? `
+    var sel=document.getElementById('f-item');
+    for(var i=0;i<sel.options.length;i++){
+      if(sel.options[i].text.indexOf('Item '+${JSON.stringify(itemActual)})===0){ sel.value=i; break; }
+    }` : ''}
+    // Cargar mediciones previas resaltadas
+    // Actualizar label de ítem si ya hay uno preseleccionado
+    _confUpdateItemLabel();
+    // Colorear y calcular estadísticas iniciales para todas las cotas
+    var nCotas=document.querySelectorAll('#med-tbody tr[id^=cota-tr-]').length;
+    for(var ci=0;ci<nCotas;ci++){
+      var inpsInit=document.querySelectorAll('input[data-cota="'+ci+'"]');
+      inpsInit.forEach(function(el){ if(el.value) _medChanged(el); });
+      _recalcStats(ci);
+    }
+  })();
+  <\/script>
+  </body></html>`;
+
+  const win=window.open('','_blank');
+  if(!win){ toast('Permite ventanas emergentes para editar','error'); return; }
+  win.document.write(html);
+  win.document.close();
+}
+
+// ── Listener postMessage de vuelta del editor de conformidades ─
+window.addEventListener('message',(ev)=>{
+  const msg=ev.data;
+  if(!msg || msg.type!=='conformidad-editor-save') return;
+  const payload=msg.payload||{};
+  const idConf=payload.ID_CONFORMIDAD;
+
+  // Normalizar como objeto de conformidad
+  const confObj={
+    ID_CONFORMIDAD:           idConf,
+    'CERTIFICADO NÚMERO':     idConf,
+    '#OP':                    payload.OP,
+    OP:                       payload.OP,
+    ITEM:                     payload.ITEM||'',
+    CLIENTE:                  payload.CLIENTE||'',
+    EMPRESA:                  payload.CLIENTE||'',
+    COTIZACION:               payload.COTIZACION||'',
+    'REFERENCIA PRODUCTO':    payload.REFERENCIA||'',
+    REFERENCIA:               payload.REFERENCIA||'',
+    ORDEN_COMPRA:             payload.ORDEN_COMPRA||'',
+    NUMERO_PIEZA:             payload.NUMERO_PIEZA||'',
+    MATERIAL:                 payload.MATERIAL||'',
+    TRATAMIENTO:              payload.TRATAMIENTO||'',
+    CANTIDAD:                 payload.CANTIDAD||1,
+    'FECHA DE EMISIÓN':       payload['FECHA DE EMISIÓN']||today(),
+    'FECHA DE FABRICACIÓN':   payload['FECHA DE FABRICACIÓN']||'',
+    OBSERVACIONES:            payload.OBSERVACIONES||'',
+
+    COTAS_JSON:               payload.COTAS_JSON||'[]',
+    MEDICIONES_JSON:          payload.MEDICIONES_JSON||'{}',
+    _MEDICIONES_JSON:         payload.MEDICIONES_JSON||'{}',
+  };
+
+  // Actualizar en memoria
+  if(!DB.conformidades) DB.conformidades=[];
+  if(payload.ES_NUEVA){
+    DB.conformidades.push(confObj);
+  } else {
+    const idx=DB.conformidades.findIndex(x=>String(x.ID_CONFORMIDAD||x['CERTIFICADO NÚMERO']||'')===String(idConf));
+    if(idx>=0) DB.conformidades[idx]=Object.assign({},DB.conformidades[idx],confObj);
+    else DB.conformidades.push(confObj);
+  }
+
+  // Persistir al GAS — createConformidad / updateConformidad
+  const gasConf=Object.assign({},confObj);
+  delete gasConf.filasMedidas; delete gasConf.filasMediciones;
+  POST_QA_BG(payload.ES_NUEVA?'createConformidad':'updateConformidad', gasConf);
+
+  // Guardar medidas (tabla de cotas: MEDIDAS)
+  if(Array.isArray(payload.filasMedidas)&&payload.filasMedidas.length){
+    POST_QA_BG('saveMedidas',{ID_CONFORMIDAD:idConf, OP:payload.OP, filas:payload.filasMedidas});
+  }
+  // Guardar mediciones (valores por pieza: MEDICIONES)
+  if(Array.isArray(payload.filasMediciones)&&payload.filasMediciones.length){
+    POST_QA_BG('saveMediciones',{ID_CONFORMIDAD:idConf, OP:payload.OP, filas:payload.filasMediciones});
+  }
+
+  toast(payload.ES_NUEVA?'🏅 Certificado creado':'✅ Certificado actualizado');
+  renderConformidad();
+});
 
 // ══════════════════════════════════════════════════════════════
 // HOJA DE ENVÍO A TEMPLE
@@ -2235,7 +3713,7 @@ function _imprimirSolicitud(s, op){
     body{font-family:Arial,sans-serif;font-size:9px;color:#000;margin:16px 20px;background:#fff}
     table{width:100%;border-collapse:collapse}
     /* ── HEADER SUPERIOR ── */
-    .hdr-top{display:grid;grid-template-columns:120px 1fr auto auto;border:2px solid #1a3a6b;margin-bottom:0}
+    .hdr-top{display:grid;grid-template-columns:120px 1fr auto auto;border:1.5px solid #1a3a6b;margin-bottom:0}
     .hdr-logo{padding:6px;border-right:1px solid #1a3a6b;display:flex;align-items:center;justify-content:center}
     .hdr-logo img{width:100px}
     .hdr-title{background:#fff;padding:6px 10px;display:flex;align-items:center;justify-content:center;border-right:1px solid #1a3a6b}
@@ -2245,30 +3723,30 @@ function _imprimirSolicitud(s, op){
     .hdr-date-row:last-child{border-bottom:none}
     .hdr-date-label{font-weight:700;color:#1a3a6b;display:block;font-size:7px;text-transform:uppercase}
     .hdr-op{display:flex;flex-direction:column;min-width:80px}
-    .hdr-op-label{background:#1a3a6b;color:#fff;font-size:8px;font-weight:700;text-align:center;padding:4px 8px}
-    .hdr-op-val{font-size:14px;font-weight:900;text-align:center;padding:6px 8px;background:#1a3a6b;color:#fff;flex:1;display:flex;align-items:center;justify-content:center}
+    .hdr-op-label{background:#fff;color:#1a3a6b;font-size:8px;font-weight:700;text-align:center;padding:4px 8px;border-bottom:1px solid #1a3a6b}
+    .hdr-op-val{font-size:14px;font-weight:900;text-align:center;padding:6px 8px;background:#fff;color:#1a3a6b;flex:1;display:flex;align-items:center;justify-content:center}
     /* ── BARRA INFO GENERAL ── */
-    .barra{display:grid;grid-template-columns:1fr auto;background:#1a3a6b;color:#fff;padding:4px 8px;margin-top:0;border-left:2px solid #1a3a6b;border-right:2px solid #1a3a6b}
+    .barra{display:grid;grid-template-columns:1fr auto;background:#fff;color:#1a3a6b;padding:4px 8px;margin-top:0;border:1px solid #1a3a6b;border-bottom:none}
     .barra-title{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
     .barra-right{font-size:8px;font-weight:700}
     /* ── TABLA INFO COLABORADOR ── */
-    .info-table{border-left:2px solid #1a3a6b;border-right:2px solid #1a3a6b;border-bottom:1px solid #1a3a6b}
-    .info-table th{background:#d0d8e8;color:#1a3a6b;font-size:8px;font-weight:700;text-align:center;padding:4px 6px;border:1px solid #ccc;text-transform:uppercase}
+    .info-table{border-left:1.5px solid #1a3a6b;border-right:1.5px solid #1a3a6b;border-bottom:1px solid #1a3a6b}
+    .info-table th{background:#fff;color:#1a3a6b;font-size:8px;font-weight:700;text-align:center;padding:4px 6px;border:1px solid #ccc;text-transform:uppercase}
     .info-table td{font-size:9px;text-align:center;padding:5px 6px;border:1px solid #ccc}
     /* ── BARRA REGISTRO ── */
-    .barra2{background:#1a3a6b;color:#fff;padding:4px 8px;font-size:9px;font-weight:700;text-transform:uppercase;text-align:center;border-left:2px solid #1a3a6b;border-right:2px solid #1a3a6b;letter-spacing:.5px}
+    .barra2{background:#fff;color:#1a3a6b;padding:4px 8px;font-size:9px;font-weight:700;text-transform:uppercase;text-align:center;border-left:1.5px solid #1a3a6b;border-right:1.5px solid #1a3a6b;border-top:1px solid #1a3a6b;letter-spacing:.5px}
     /* ── TABLA BIENES ── */
-    .bienes-table{border-left:2px solid #1a3a6b;border-right:2px solid #1a3a6b;border-bottom:2px solid #1a3a6b}
-    .bienes-table th{background:#1a3a6b;color:#fff;font-size:8px;font-weight:700;text-align:center;padding:5px 4px;border:1px solid #2a4a7b;text-transform:uppercase}
+    .bienes-table{border-left:1.5px solid #1a3a6b;border-right:1.5px solid #1a3a6b;border-bottom:1.5px solid #1a3a6b}
+    .bienes-table th{background:#fff;color:#1a3a6b;font-size:8px;font-weight:700;text-align:center;padding:5px 4px;border:1px solid #ccc;text-transform:uppercase}
     .bienes-table td{font-size:9px;padding:5px 4px;vertical-align:middle;min-height:22px}
     /* ── OBSERVACIONES ── */
-    .obs-row{border-left:2px solid #1a3a6b;border-right:2px solid #1a3a6b;border-bottom:2px solid #1a3a6b;display:grid;grid-template-columns:100px 1fr;border-top:1px solid #ccc}
-    .obs-label{background:#d0d8e8;color:#1a3a6b;font-weight:700;font-size:8px;text-transform:uppercase;padding:6px 8px;display:flex;align-items:center;border-right:1px solid #ccc}
+    .obs-row{border-left:1.5px solid #1a3a6b;border-right:1.5px solid #1a3a6b;border-bottom:1.5px solid #1a3a6b;display:grid;grid-template-columns:100px 1fr;border-top:1px solid #ccc}
+    .obs-label{background:#fff;color:#1a3a6b;font-weight:700;font-size:8px;text-transform:uppercase;padding:6px 8px;display:flex;align-items:center;border-right:1px solid #ccc}
     .obs-val{padding:6px 8px;font-size:9px;min-height:28px}
     /* ── APROBACIÓN ── */
-    .aprob-title{background:#1a3a6b;color:#fff;font-size:9px;font-weight:700;text-align:center;padding:5px;text-transform:uppercase;border:2px solid #1a3a6b;border-bottom:none;margin-top:14px;letter-spacing:.5px}
-    .aprob-table{border:2px solid #1a3a6b;border-collapse:collapse;width:100%}
-    .aprob-table th{background:#d0d8e8;color:#1a3a6b;font-size:8px;font-weight:700;text-align:center;padding:4px 6px;border:1px solid #ccc;text-transform:uppercase}
+    .aprob-title{background:#fff;color:#1a3a6b;font-size:9px;font-weight:700;text-align:center;padding:5px;text-transform:uppercase;border:1.5px solid #1a3a6b;border-bottom:none;margin-top:14px;letter-spacing:.5px}
+    .aprob-table{border:1.5px solid #1a3a6b;border-collapse:collapse;width:100%}
+    .aprob-table th{background:#fff;color:#1a3a6b;font-size:8px;font-weight:700;text-align:center;padding:4px 6px;border:1px solid #ccc;text-transform:uppercase}
     .aprob-table td{font-size:9px;padding:8px 6px;border:1px solid #ccc;min-width:60px;min-height:24px}
     @media print{body{margin:6px 10px;-webkit-print-color-adjust:exact;print-color-adjust:exact}@page{size:A4 landscape;margin:8mm}}
   </style></head><body>
@@ -2622,6 +4100,7 @@ async function refreshCurrent(){
       DB.solicitudes=Array.isArray(rs)?rs:(rs?.data??[]);
       DB.servicios=_extraerCatalogoServicios(DB.solicitudes);
       DB.bienesCatalogo=_extraerCatalogoBienes(DB.solicitudes);
+      DB.materialesCatalogo=_extraerCatalogoMateriales(DB.solicitudes);
       const provWEDM = await _cargarProveedoresWEDM();
       DB.proveedores = _mergeProveedores(provWEDM, DB.solicitudes);
     }catch(e){}
