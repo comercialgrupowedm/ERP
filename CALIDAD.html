@@ -68,7 +68,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
 .nav-item.active{color:var(--primary);border-color:var(--primary)}
 
 /* ── CONTENT ── */
-#content{padding:16px;max-width:900px;margin:0 auto;padding-bottom:80px}
+#content{padding:16px;max-width:1900px;margin:0 auto;padding-bottom:80px}
 
 /* ── CARDS ── */
 .card{background:var(--card);border-radius:var(--radius);box-shadow:0 1px 4px rgba(0,0,0,.06);
@@ -90,6 +90,37 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
   overflow:hidden;text-overflow:ellipsis}
 .op-sub{font-size:11px;color:var(--muted);margin-top:2px}
 .op-status{font-size:18px}
+
+/* ── VISTA LISTA / PROYECTO — toggle ── */
+.vista-toggle{display:flex;gap:4px;background:#fff;border:1px solid var(--border);
+  border-radius:8px;padding:3px;width:fit-content;margin-bottom:10px}
+.vt-btn{border:none;background:transparent;color:var(--muted);font-size:12px;font-weight:600;
+  padding:6px 12px;border-radius:6px;cursor:pointer}
+.vt-btn.active{background:var(--primary);color:#fff}
+
+/* ── VISTA PROYECTO — grid de tarjetas ── */
+.proyecto-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
+.proyecto-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+  cursor:pointer;transition:box-shadow .15s;border-top:3px solid var(--primary);
+  display:flex;flex-direction:column}
+.proyecto-card:active{box-shadow:0 0 0 2px var(--accent)}
+.proyecto-thumb{width:100%;aspect-ratio:16/10;background:var(--card2);display:flex;
+  align-items:center;justify-content:center;font-size:30px;overflow:hidden;flex-shrink:0;
+  border-radius:var(--radius) var(--radius) 0 0}
+.proyecto-thumb img{width:100%;height:100%;object-fit:cover}
+.proyecto-body{padding:10px 12px;flex:1}
+.proyecto-actions{display:flex;gap:6px;padding:8px 12px;flex-wrap:nowrap;border-top:1px solid var(--border);
+  flex-shrink:0;border-radius:0 0 var(--radius) var(--radius)}
+.pa-btn{border:none;background:var(--card2);color:var(--text);border-radius:7px;
+  flex:1;height:32px;font-size:14px;cursor:pointer;display:flex;align-items:center;
+  justify-content:center;min-width:0}
+.pa-btn:active{background:#e2e8f0}
+.proyecto-badge{display:inline-block;background:var(--primary);color:#fff;border-radius:6px;
+  padding:2px 7px;font-size:10px;font-weight:700;margin-bottom:6px}
+.proyecto-title{font-size:12.5px;font-weight:700;color:var(--text);line-height:1.3;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.proyecto-sub{font-size:10.5px;color:var(--muted);margin-top:4px;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
 
 /* ── SEMÁFORO ── */
 .sem{display:inline-block;padding:3px 8px;border-radius:20px;font-size:10px;
@@ -188,7 +219,7 @@ textarea.form-input{resize:vertical;min-height:80px}
 .vb-toggle.ok{background:var(--success);color:#fff;border-color:var(--success)}
 
 /* ── FOTO ── */
-.foto-box{width:100%;aspect-ratio:4/3;border:2px dashed var(--border);
+.foto-box{width:100%;aspect-ratio:4/3;max-height:220px;border:2px dashed var(--border);
   border-radius:10px;display:flex;align-items:center;justify-content:center;
   background:var(--card2);overflow:hidden;cursor:pointer;position:relative}
 .foto-box img{width:100%;height:100%;object-fit:cover}
@@ -306,10 +337,15 @@ table.data-table tr:active td{background:#dbeafe}
 <div id="pin-screen">
   <div class="pin-title">🔍 Módulo Calidad</div>
   <div class="pin-sub">Ingresa tu PIN o selecciona rol</div>
-  <div class="pin-dots" id="pin-dots">
+  <div class="pin-dots" id="pin-dots" onclick="_focusPinKeyboard()">
     <div class="pin-dot" id="pd0"></div><div class="pin-dot" id="pd1"></div>
     <div class="pin-dot" id="pd2"></div><div class="pin-dot" id="pd3"></div>
   </div>
+  <input id="pin-kb-input" type="tel" inputmode="numeric" pattern="[0-9]*" maxlength="4"
+    autocomplete="off"
+    style="opacity:0;position:absolute;width:1px;height:1px">
+  <div class="pin-sub" style="cursor:pointer;text-decoration:underline;margin-top:-16px;margin-bottom:16px"
+    onclick="_focusPinKeyboard()">⌨️ Escribir con el teclado</div>
   <div class="pin-grid">
     <button class="pin-btn" onclick="_pinKey('1')">1</button>
     <button class="pin-btn" onclick="_pinKey('2')">2</button>
@@ -412,7 +448,8 @@ table.data-table tr:active td{background:#dbeafe}
 // ══════════════════════════════════════════════════════════════
 // CONFIG — ajusta estas URLs a tu despliegue
 // ══════════════════════════════════════════════════════════════
-const API         = 'TU_API_URL_GAS_AQUI'; // mismo GAS que el ERP
+const API         = 'https://script.google.com/macros/s/AKfycbzvVCgj3lxZZS4RFbucb-onZ6nLP-LdygX9CFSBuyx_qri8cEioETTnIjm3jJ-rI83eKg/exec'; // GAS principal ERP (producción)
+const API_CALIDAD  = 'https://script.google.com/macros/s/AKfycbwwLhotSZ7IsI6Ui0AdZc0ljffK_XsuRUo3SUKxV72uOQiUXKegulhd6Pa8Z9pVANKoUA/exec'; // GAS nuevo de Calidad - reemplazar tras desplegar
 const IMGBB_API_KEY = 'TU_IMGBB_KEY_AQUI';
 
 // ══════════════════════════════════════════════════════════════
@@ -448,6 +485,23 @@ function _updatePinDots(){
     document.getElementById('pd'+i)?.classList.toggle('filled', i<_pinBuffer.length);
   }
 }
+function _focusPinKeyboard(){
+  const inp=document.getElementById('pin-kb-input');
+  inp.value=_pinBuffer;
+  inp.focus();
+}
+function _initPinKeyboard(){
+  const inp=document.getElementById('pin-kb-input');
+  if(!inp) return;
+  inp.addEventListener('input',()=>{
+    const v=inp.value.replace(/\D/g,'').slice(0,4);
+    inp.value=v;
+    _pinBuffer=v;
+    _updatePinDots();
+    if(_pinBuffer.length===4) setTimeout(_pinCheck,150);
+  });
+}
+document.addEventListener('DOMContentLoaded',_initPinKeyboard);
 function _pinKey(k){
   if(k==='del'){ _pinBuffer=_pinBuffer.slice(0,-1); _updatePinDots(); return; }
   if(k==='ok'){ _pinCheck(); return; }
@@ -495,6 +549,36 @@ async function POST(action, data={}){
 function POST_BG(action, data={}, onError=null){
   const _send=(retry=false)=>{
     fetch(API,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({action,data})})
+    .then(r=>r.json())
+    .then(j=>{ if(!j.ok){ if(!retry) setTimeout(()=>_send(true),4000);
+      else{ toast('⚠️ Error: '+j.error,'error'); if(onError) onError(j.error); } } })
+    .catch(e=>{ if(!retry) setTimeout(()=>_send(true),4000);
+      else{ toast('⚠️ Sin conexión','error'); if(onError) onError(e); } });
+  };
+  _send();
+}
+
+// GAS CALIDAD (hoja separada) — conformidades, medidas, servicios externos, etc.
+async function GET_QA(action, params={}){
+  let url=`${API_CALIDAD}?action=${action}&_t=${Date.now()}`;
+  Object.keys(params).forEach(k=>{ url+=`&${k}=${encodeURIComponent(params[k])}`; });
+  const r=await fetch(url);
+  const j=await r.json();
+  if(!j.ok) throw new Error(j.error||'Error GAS-QA');
+  return j.data;
+}
+async function POST_QA(action, data={}){
+  showBusy(action);
+  try{
+    const r=await fetch(API_CALIDAD,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({action,data})});
+    const j=await r.json();
+    if(!j.ok) throw new Error(j.error||'Error GAS-QA');
+    return j.data;
+  }finally{ hideBusy(); }
+}
+function POST_QA_BG(action, data={}, onError=null){
+  const _send=(retry=false)=>{
+    fetch(API_CALIDAD,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({action,data})})
     .then(r=>r.json())
     .then(j=>{ if(!j.ok){ if(!retry) setTimeout(()=>_send(true),4000);
       else{ toast('⚠️ Error: '+j.error,'error'); if(onError) onError(j.error); } } })
@@ -553,8 +637,8 @@ function gn(id){ return Number(document.getElementById(id)?.value||0); }
 // ETAPAS (igual que ERP)
 // ══════════════════════════════════════════════════════════════
 const ETAPAS=[
-  {id:'diseno',  doneKeys:['INGENIERIA Y PLANEACIÓN','ING_PLANEACION'], label:'Diseño',    icon:'📐', doneIcon:'✅'},
-  {id:'mp',      doneKeys:['MP\nINSUMOS','MP INSUMOS'],                 label:'MP/Insumos',icon:'🧱', doneIcon:'✅'},
+  {id:'diseno',  doneKeys:[' INGENIERIA Y PLANEACIÓN','INGENIERIA Y PLANEACIÓN','ING_PLANEACION'], label:'Diseño',    icon:'📐', doneIcon:'✅'},
+  {id:'mp',      doneKeys:[' MP\nINSUMOS','MP\\nINSUMOS','MP INSUMOS'],                 label:'MP/Insumos',icon:'🧱', doneIcon:'✅'},
   {id:'servicio',doneKeys:['SERVICIO EXTERNO'],                         label:'Svc.Ext',   icon:'🚚', doneIcon:'✅'},
   {id:'entrega', doneKeys:['ENTREGA DE PRODUCCIÓN','ENTREGA DE PRODUCCION'], label:'Entrega',icon:'📦',doneIcon:'✅'},
   {id:'calidad', doneKeys:['CALIDAD'],                                  label:'Calidad',   icon:'🔍', doneIcon:'✅'},
@@ -573,11 +657,29 @@ function renderEtapas(op){
   }).join('')}</div>`;
 }
 function enExterno(op){ return normKey(op['SEMAFORO AVANCE']||'')==='TRABAJO EXTERNO'; }
+function pendienteCalidad(op){ return normKey(op['ESTADO']||'')==='PENDIENTE DESPACHO'; }
+// AND( [ESTADO]="TERMINADO", NOT([DESPACHO]) )
+function pendienteDespacho(op){
+  const kDes=keyFor(op,['DESPACHO']);
+  return normKey(op['ESTADO']||'')==='TERMINADO' && !truthy(op[kDes]);
+}
 
 // ══════════════════════════════════════════════════════════════
 // NAV / MÓDULOS
 // ══════════════════════════════════════════════════════════════
 let MOD='pendiente';
+let VISTA=localStorage.getItem('calidad_vista')||'proyecto'; // 'lista' | 'proyecto' — persiste y aplica a todos los módulos
+function setVista(v){
+  VISTA=v;
+  localStorage.setItem('calidad_vista',v);
+  nav(MOD);
+}
+function _vistaToggleHtml(){
+  return `<div class="vista-toggle">
+    <button class="vt-btn${VISTA==='lista'?' active':''}" onclick="setVista('lista')">☰ Lista</button>
+    <button class="vt-btn${VISTA==='proyecto'?' active':''}" onclick="setVista('proyecto')">⊞ Proyecto</button>
+  </div>`;
+}
 function nav(m){
   MOD=m;
   document.querySelectorAll('.nav-item').forEach(el=>el.classList.toggle('active',el.dataset.mod===m));
@@ -643,29 +745,27 @@ async function _initApp(){
   document.getElementById('content').style.display='block';
   setSplash(20,'Cargando órdenes de producción…');
   try{
-    // Cargar producción
-    const cached=cGet('produccion');
-    if(cached){ DB.produccion=cached; setSplash(50,'Desde caché…'); }
-    else{
-      const r=await GET('getControlProduccion',{modo:'todo'});
-      DB.produccion=Array.isArray(r)?r:(r?.data??[]);
-      cSet('produccion',DB.produccion);
-    }
+    // Cargar producción: mostrar caché al instante si existe, pero SIEMPRE sincronizar con el servidor
+    const cached=cGetStale('produccion');
+    if(cached){ DB.produccion=cached; setSplash(50,'Desde caché… sincronizando'); }
+    const r=await GET('getControlProduccion',{modo:'todo'});
+    DB.produccion=Array.isArray(r)?r:(r?.data??[]);
+    cSet('produccion',DB.produccion);
     setSplash(60,'Cargando solicitudes externas…');
     // Cargar solicitudes externas (hoja propia)
     try{
-      const rs=await GET('getSolicitudesExternas');
+      const rs=await GET_QA('getSolicitudesExternas');
       DB.solicitudes=Array.isArray(rs)?rs:(rs?.data??[]);
     }catch(e){ DB.solicitudes=[]; }
     setSplash(75,'Cargando certificados…');
     // Cargar conformidad desde Bienes y Servicios (hoja CONFORMIDAD en AppSheet / hoja propia)
     try{
-      const rc=await GET('getConformidades');
+      const rc=await GET_QA('getConformidades');
       DB.conformidades=Array.isArray(rc)?rc:(rc?.data??[]);
     }catch(e){ DB.conformidades=[]; }
     setSplash(90,'Cargando servicios externos…');
     try{
-      const rsv=await GET('getServicios');
+      const rsv=await GET_QA('getServicios');
       DB.servicios=Array.isArray(rsv)?rsv:(rsv?.data??[]);
     }catch(e){ DB.servicios=[]; }
     setSplash(100,'¡Listo!');
@@ -682,10 +782,10 @@ async function _initApp(){
 
 function _updateBadges(){
   const prod=DB.produccion||[];
-  // Pendiente calidad: entrega producción = TRUE, calidad = FALSE/vacío
-  const pend=prod.filter(op=>etapaDone(op,ETAPAS[3])&&!etapaDone(op,ETAPAS[4]));
+  // Pendiente calidad: ESTADO = 'PENDIENTE DESPACHO'
+  const pend=prod.filter(op=>pendienteCalidad(op));
   const ext=prod.filter(op=>enExterno(op));
-  const desp=prod.filter(op=>etapaDone(op,ETAPAS[4])&&!etapaDone(op,ETAPAS[5]));
+  const desp=prod.filter(op=>pendienteDespacho(op));
   const b=(id,arr)=>{ const el=document.getElementById('badge-'+id); if(el){ el.textContent=arr.length||''; el.style.display=arr.length?'':'none'; } };
   b('pendiente',pend); b('externo',ext); b('despacho',desp);
 }
@@ -695,12 +795,37 @@ function _updateBadges(){
 // ══════════════════════════════════════════════════════════════
 function renderPendiente(){
   const prod=DB.produccion||[];
-  const ops=prod.filter(op=>etapaDone(op,ETAPAS[3])&&!etapaDone(op,ETAPAS[4]));
+  const ops=prod.filter(op=>pendienteCalidad(op));
   let html=`
     <div class="search-bar"><span>🔍</span><input type="text" placeholder="Buscar OP, cliente, referencia…" oninput="_filterRows(this.value,'op-row')"></div>
-    <div class="section-divider">${ops.length} OPs pendientes de calidad</div>`;
+    <div class="section-divider">${ops.length} OPs pendientes de calidad</div>
+    ${_vistaToggleHtml()}`;
   if(!ops.length){
     html+=`<div class="empty"><div class="empty-icon">✅</div><div class="empty-text">Todo aprobado — sin pendientes de calidad</div></div>`;
+  } else if(VISTA==='proyecto'){
+    html+='<div class="proyecto-grid">';
+    ops.forEach(op=>{
+      const qaData=_parseQA(op);
+      const qaOk=qaData?.resultado;
+      const imgSrc=op.IMAGEN_B64&&op.IMAGEN_B64.length>50?(op.IMAGEN_B64.startsWith('http')?op.IMAGEN_B64:'data:image/jpeg;base64,'+op.IMAGEN_B64):(op.IMAGEN||'');
+      html+=`<div class="proyecto-card op-row" onclick="detailCalidad('${esc(op.IDQR||op.OP)}')">
+        <div class="proyecto-thumb">${imgSrc?`<img src="${esc(imgSrc)}">`:(qaOk?'🟡':'⏳')}</div>
+        <div class="proyecto-body">
+          <div class="proyecto-badge">OP-${esc(op.OP||op.IDQR)}</div>
+          <div class="proyecto-title">${esc(op['DESCRIPCION DEL PROYECTO']||op.REFERENCIA||op.DESCRIPCION||'Sin descripción')}</div>
+          <div class="proyecto-sub">${esc(op.EMPRESA||op.CLIENTE||'—')} · Item ${esc(String(op.ITEM||''))}</div>
+          <div class="proyecto-sub">${fmtDate(op['FECHA ENTREGA PRODUCCION']||op['FECHA ENTREGA'])}</div>
+        </div>
+        <div class="proyecto-actions">
+          <button class="pa-btn" title="Formato QA" onclick="event.stopPropagation();abrirFormatoQA('${esc(op.IDQR||op.OP)}')">📋</button>
+          <button class="pa-btn" title="Aprobar Calidad" onclick="event.stopPropagation();_accionCalidadOK('${esc(op.IDQR||op.OP)}')">✅</button>
+          <button class="pa-btn" title="Reproceso" onclick="event.stopPropagation();_accionReproceso('${esc(op.IDQR||op.OP)}')">⚠️</button>
+          <button class="pa-btn" title="Hoja Temple" onclick="event.stopPropagation();abrirModalTemple('${esc(op.IDQR||op.OP)}')">🔥</button>
+          <button class="pa-btn" title="Svc. Externo" onclick="event.stopPropagation();_toggleExterno('${esc(op.IDQR||op.OP)}')">🚚</button>
+        </div>
+      </div>`;
+    });
+    html+='</div>';
   } else {
     ops.forEach(op=>{
       const qaData=_parseQA(op);
@@ -1124,7 +1249,7 @@ async function _guardarReproceso(idqr){
     FECHA: today(),
   };
   try{
-    POST_BG('createReproceso', data);
+    POST_QA_BG('createReproceso', data);
     // Marcar REPROCESO en la OP
     POST_BG('updateOP',{IDQR:op.IDQR||idqr, REPROCESO:'TRUE', FECHA_REPROCESO:today()});
     op.REPROCESO='TRUE';
@@ -1147,9 +1272,25 @@ function renderExterno(){
   const ops=prod.filter(op=>enExterno(op));
   let html=`
     <div class="search-bar"><span>🔍</span><input type="text" placeholder="Buscar…" oninput="_filterRows(this.value,'op-row')"></div>
-    <div class="section-divider">${ops.length} OPs en servicio externo</div>`;
+    <div class="section-divider">${ops.length} OPs en servicio externo</div>
+    ${_vistaToggleHtml()}`;
   if(!ops.length){
     html+=`<div class="empty"><div class="empty-icon">🚚</div><div class="empty-text">Sin OPs en servicio externo</div></div>`;
+  } else if(VISTA==='proyecto'){
+    html+='<div class="proyecto-grid">';
+    ops.forEach(op=>{
+      const imgSrc=op.IMAGEN_B64&&op.IMAGEN_B64.length>50?(op.IMAGEN_B64.startsWith('http')?op.IMAGEN_B64:'data:image/jpeg;base64,'+op.IMAGEN_B64):(op.IMAGEN||'');
+      html+=`<div class="proyecto-card op-row" onclick="detailExterno('${esc(op.IDQR||op.OP)}')">
+        <div class="proyecto-thumb">${imgSrc?`<img src="${esc(imgSrc)}">`:'🏭'}</div>
+        <div class="proyecto-body">
+          <div class="proyecto-badge">OP-${esc(String(op.OP||op.IDQR))}</div>
+          <div class="proyecto-title">${esc(op['DESCRIPCION DEL PROYECTO']||op.DESCRIPCION||'Sin descripción')}</div>
+          <div class="proyecto-sub">${esc(op.EMPRESA||op.CLIENTE||'—')}</div>
+          <div style="margin-top:5px"><span class="sem sem-te">🚚 EXTERNO</span></div>
+        </div>
+      </div>`;
+    });
+    html+='</div>';
   } else {
     ops.forEach(op=>{
       const imgSrc=op.IMAGEN_B64&&op.IMAGEN_B64.length>50?(op.IMAGEN_B64.startsWith('http')?op.IMAGEN_B64:'data:image/jpeg;base64,'+op.IMAGEN_B64):(op.IMAGEN||'');
@@ -1237,13 +1378,30 @@ async function _recibirExterno(idqr){
 // ══════════════════════════════════════════════════════════════
 function renderDespacho(){
   const prod=DB.produccion||[];
-  // Calidad aprobada pero LIBERACION no TRUE
-  const ops=prod.filter(op=>etapaDone(op,ETAPAS[4])&&!etapaDone(op,ETAPAS[5]));
+  // ESTADO = "TERMINADO" y DESPACHO vacío/falso
+  const ops=prod.filter(op=>pendienteDespacho(op));
   let html=`
     <div class="search-bar"><span>🔍</span><input type="text" placeholder="Buscar…" oninput="_filterRows(this.value,'op-row')"></div>
-    <div class="section-divider">${ops.length} OPs pendientes de despacho</div>`;
+    <div class="section-divider">${ops.length} OPs pendientes de despacho</div>
+    ${_vistaToggleHtml()}`;
   if(!ops.length){
     html+=`<div class="empty"><div class="empty-icon">📦</div><div class="empty-text">Sin OPs pendientes de despacho</div></div>`;
+  } else if(VISTA==='proyecto'){
+    html+='<div class="proyecto-grid">';
+    ops.forEach(op=>{
+      const fCal=op['FECHA CALIDAD']||op['FECHA \nCALIDAD\nDD/MM/AA']||'';
+      const imgSrc=op.IMAGEN_B64&&op.IMAGEN_B64.length>50?(op.IMAGEN_B64.startsWith('http')?op.IMAGEN_B64:'data:image/jpeg;base64,'+op.IMAGEN_B64):(op.IMAGEN||'');
+      html+=`<div class="proyecto-card op-row" style="border-top-color:var(--success)" onclick="detailDespacho('${esc(op.IDQR||op.OP)}')">
+        <div class="proyecto-thumb">${imgSrc?`<img src="${esc(imgSrc)}">`:'✅'}</div>
+        <div class="proyecto-body">
+          <div class="proyecto-badge" style="background:var(--success)">OP-${esc(String(op.OP||op.IDQR))}</div>
+          <div class="proyecto-title">${esc(op['DESCRIPCION DEL PROYECTO']||op.DESCRIPCION||'Sin descripción')}</div>
+          <div class="proyecto-sub">${esc(op.EMPRESA||op.CLIENTE||'—')}</div>
+          <div class="proyecto-sub">Calidad: ${fmtDate(fCal)} · Cant: ${esc(String(op.CANTIDAD||op.CANT||'—'))}</div>
+        </div>
+      </div>`;
+    });
+    html+='</div>';
   } else {
     ops.forEach(op=>{
       const fCal=op['FECHA CALIDAD']||op['FECHA \nCALIDAD\nDD/MM/AA']||'';
@@ -1314,9 +1472,24 @@ function renderSolicitudes(){
   const sols=DB.solicitudes||[];
   let html=`
     <div class="search-bar"><span>🔍</span><input type="text" placeholder="Buscar…" oninput="_filterRows(this.value,'sol-row')"></div>
-    <div class="section-divider">${sols.length} solicitudes externas</div>`;
+    <div class="section-divider">${sols.length} solicitudes externas</div>
+    ${_vistaToggleHtml()}`;
   if(!sols.length){
     html+=`<div class="empty"><div class="empty-icon">📋</div><div class="empty-text">Sin solicitudes externas</div></div>`;
+  } else if(VISTA==='proyecto'){
+    html+='<div class="proyecto-grid">';
+    sols.slice().reverse().forEach(s=>{
+      html+=`<div class="proyecto-card sol-row" style="border-top-color:var(--info)" onclick="detailSolicitud('${esc(s.ID_SOLICITUD||'')}')">
+        <div class="proyecto-thumb">📋</div>
+        <div class="proyecto-body">
+          <div class="proyecto-badge" style="background:var(--info)">OP-${esc(String(s.OP||'—'))}</div>
+          <div class="proyecto-title">${esc(s.SERVICIO||s.TIPO||'Solicitud')}</div>
+          <div class="proyecto-sub">${esc(s.PROVEEDOR||'—')}</div>
+          <div class="proyecto-sub">${fmtDate(s.FECHA||s.FECHA_SOLICITUD)} · ${esc(s.ESTADO||'Pendiente')}</div>
+        </div>
+      </div>`;
+    });
+    html+='</div>';
   } else {
     sols.slice().reverse().forEach(s=>{
       html+=`<div class="op-row sol-row" onclick="detailSolicitud('${esc(s.ID_SOLICITUD||'')}')">
@@ -1426,7 +1599,7 @@ async function _guardarSolicitud(){
     ESTADO: 'ENVIADO',
   };
   try{
-    POST_BG('createSolicitudExterna', data);
+    POST_QA_BG('createSolicitudExterna', data);
     if(!DB.solicitudes) DB.solicitudes=[];
     DB.solicitudes.push(data);
     toast('✅ Solicitud creada');
@@ -1609,7 +1782,7 @@ async function _guardarTemple(idqr){
     OBSERVACIONES: gv('tmp-obs'),
     SOLICITANTE: _SESSION?.nombre||'',
   };
-  POST_BG('createHojaTemple', data);
+  POST_QA_BG('createHojaTemple', data);
   toast('🔥 Hoja de temple guardada');
   closeModal('modal-temple');
   // Marcar externo en producción
@@ -1818,8 +1991,8 @@ async function refreshCurrent(){
     const r=await GET('getControlProduccion',{modo:'todo'});
     DB.produccion=Array.isArray(r)?r:(r?.data??[]);
     cSet('produccion',DB.produccion);
-    try{ const rs=await GET('getSolicitudesExternas'); DB.solicitudes=Array.isArray(rs)?rs:(rs?.data??[]); }catch(e){}
-    try{ const rc=await GET('getConformidades'); DB.conformidades=Array.isArray(rc)?rc:(rc?.data??[]); }catch(e){}
+    try{ const rs=await GET_QA('getSolicitudesExternas'); DB.solicitudes=Array.isArray(rs)?rs:(rs?.data??[]); }catch(e){}
+    try{ const rc=await GET_QA('getConformidades'); DB.conformidades=Array.isArray(rc)?rc:(rc?.data??[]); }catch(e){}
     _updateBadges();
     toast('✅ Datos actualizados');
     nav(MOD);
