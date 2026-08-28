@@ -765,7 +765,7 @@ async function _initApp(){
     }catch(e){ DB.conformidades=[]; }
     setSplash(90,'Cargando servicios externos…');
     try{
-      const rsv=await GET_QA('getServicios');
+      const rsv=await GET_QA('getSolicitudesExternas');
       DB.servicios=Array.isArray(rsv)?rsv:(rsv?.data??[]);
     }catch(e){ DB.servicios=[]; }
     setSplash(100,'¡Listo!');
