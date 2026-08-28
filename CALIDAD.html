@@ -179,6 +179,31 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
   background-repeat:no-repeat;background-position:right 12px center}
 textarea.form-input{resize:vertical;min-height:80px}
 
+/* ── COMBO BUSCABLE (servicio / proveedor) ── */
+.combo-wrap{position:relative}
+.combo-list{position:absolute;z-index:60;top:calc(100% + 2px);left:0;right:0;
+  background:#fff;border:1px solid var(--border);border-radius:8px;
+  max-height:190px;overflow-y:auto;box-shadow:0 6px 18px rgba(0,0,0,.14);display:none}
+.combo-list.show{display:block}
+.combo-item{padding:9px 12px;font-size:13px;color:var(--text);cursor:pointer;
+  border-bottom:1px solid var(--card2)}
+.combo-item:last-child{border-bottom:none}
+.combo-item:active{background:var(--card2)}
+.combo-empty{padding:9px 12px;font-size:11.5px;color:var(--muted)}
+
+/* ── ITEMS (BIENES) DEL SERVICIO EXTERNO ── */
+.item-row{border:1px solid var(--border);border-radius:10px;padding:12px 10px 4px;
+  margin-bottom:10px;position:relative;background:var(--card2)}
+.item-row-del{position:absolute;top:6px;right:6px;background:none;border:none;
+  color:var(--danger);font-size:15px;font-weight:700;cursor:pointer;width:26px;height:26px}
+.item-row-num{position:absolute;top:8px;left:10px;font-size:10px;font-weight:700;
+  color:var(--muted);letter-spacing:.5px;text-transform:uppercase}
+.item-row .fields-grid,.item-row .form-field{margin-top:18px}
+.btn-add-item{width:100%;border:1.5px dashed var(--accent);background:#fff;
+  color:var(--accent);border-radius:10px;padding:10px;font-size:13px;font-weight:700;
+  cursor:pointer;margin-bottom:14px}
+.btn-add-item:active{background:#eff6ff}
+
 /* ── SPIN ROW ── */
 .spin-row{display:flex;align-items:center;gap:8px}
 .spin-btn{width:36px;height:36px;border:1px solid var(--border);background:#fff;
@@ -786,8 +811,14 @@ async function _initApp(){
     }catch(e){ DB.conformidades=[]; }
     setSplash(90,'Preparando catálogo de servicios…');
     // DB.servicios = lista única de TIPO DE SERVICIO extraída de DB.solicitudes
-    // (se usa para poblar el <select> del modal — sin segunda llamada al GAS)
+    // (se usa para poblar el combo del modal — sin segunda llamada al GAS)
     DB.servicios = _extraerCatalogoServicios(DB.solicitudes);
+    DB.bienesCatalogo = _extraerCatalogoBienes(DB.solicitudes);
+    setSplash(95,'Cargando proveedores de Grupo WEDM…');
+    // Proveedores reales del ERP principal (Grupo WEDM), con fallback al
+    // catálogo local si esa acción aún no existe en el GAS principal
+    const provWEDM = await _cargarProveedoresWEDM();
+    DB.proveedores = _mergeProveedores(provWEDM, DB.solicitudes);
     setSplash(100,'¡Listo!');
     _updateBadges();
     setTimeout(()=>{
@@ -813,6 +844,104 @@ function _extraerCatalogoServicios(solicitudes){
   });
   // Ordenar alfabéticamente y devolver como array de objetos {SERVICIO}
   return [...set].sort().map(v=>({SERVICIO:v}));
+}
+
+// ══════════════════════════════════════════════════════════════
+// CATÁLOGO DE PROVEEDORES
+// Extrae proveedores únicos de DB.solicitudes (y de los ítems/BIENES
+// relacionados, cuando existan) para precargar el combo de "Proveedor".
+// ══════════════════════════════════════════════════════════════
+function _extraerCatalogoProveedores(solicitudes){
+  const set=new Set();
+  (solicitudes||[]).forEach(s=>{
+    const v=String(s.PROVEEDOR||'').trim();
+    if(v) set.add(v);
+  });
+  return [...set].sort().map(v=>({PROVEEDOR:v}));
+}
+
+// ══════════════════════════════════════════════════════════════
+// PROVEEDORES — precargados desde el ERP principal (Grupo WEDM)
+// ══════════════════════════════════════════════════════════════
+// Llama a la API principal (module Proveedores del ERP Grupo WEDM),
+// NO a API_CALIDAD. Si la acción todavía no existe en ese GAS o falla
+// por cualquier motivo, se cae de vuelta al catálogo extraído
+// localmente del historial de solicitudes — el combo sigue permitiendo
+// buscar y escribir un proveedor nuevo en cualquier caso.
+async function _cargarProveedoresWEDM(){
+  try{
+    const r = await GET('getProveedores');
+    const arr = Array.isArray(r)?r:(r?.data??[]);
+    return arr.map(p=>String(p.NOMBRE||p.PROVEEDOR||p.RAZON_SOCIAL||p.EMPRESA||'').trim()).filter(Boolean);
+  }catch(e){
+    console.warn('getProveedores (ERP principal Grupo WEDM) no disponible, uso catálogo local:', e.message);
+    return null;
+  }
+}
+function _mergeProveedores(wedmArr, solicitudes){
+  const set=new Set((wedmArr||[]).filter(Boolean));
+  _extraerCatalogoProveedores(solicitudes).forEach(p=>{ if(p.PROVEEDOR) set.add(p.PROVEEDOR); });
+  return [...set].sort().map(v=>({PROVEEDOR:v}));
+}
+
+// ══════════════════════════════════════════════════════════════
+// CATÁLOGO DE BIENES (ítems) — descripciones únicas ya registradas
+// en solicitudes previas (AppSheet + Calidad), para reutilizar al
+// agregar ítems a una nueva solicitud o al editar una existente.
+// ══════════════════════════════════════════════════════════════
+function _extraerCatalogoBienes(solicitudes){
+  const set=new Set();
+  (solicitudes||[]).forEach(s=>{
+    const arr = s.BIENES||s['Related BIENESs']||s.bienes||[];
+    (Array.isArray(arr)?arr:[]).forEach(b=>{
+      const v=String(b.DESCRIPCION||'').trim();
+      if(v) set.add(v);
+    });
+  });
+  return [...set].sort();
+}
+
+// ══════════════════════════════════════════════════════════════
+// COMBO BUSCABLE (input + lista filtrable, permite texto libre)
+// Usado para Servicio / Proveedor / Tipo de servicio por ítem.
+// ══════════════════════════════════════════════════════════════
+let _comboOpts = {};
+function jsStr(s){ return String(s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+function comboField(id, options, opts={}){
+  _comboOpts[id] = options||[];
+  const val = opts.value||'';
+  const ph  = opts.placeholder||'Buscar o escribir…';
+  return `<div class="combo-wrap">
+    <input class="form-input" type="text" id="${id}" placeholder="${esc(ph)}" value="${esc(val)}"
+      autocomplete="off"
+      oninput="_comboFilter('${id}')"
+      onfocus="_comboFilter('${id}')"
+      onblur="setTimeout(()=>_comboHide('${id}'),160)">
+    <div class="combo-list" id="${id}-list"></div>
+  </div>`;
+}
+function _comboFilter(id){
+  const inp=document.getElementById(id), list=document.getElementById(id+'-list');
+  if(!inp||!list) return;
+  const q=normKey(inp.value);
+  const opts=(_comboOpts[id]||[]).filter(o=>!q||normKey(o).includes(q));
+  if(!opts.length){
+    list.innerHTML = inp.value.trim()
+      ? `<div class="combo-empty">Sin coincidencias — se guardará "${esc(inp.value.trim())}"</div>`
+      : `<div class="combo-empty">Escribe para buscar o agregar uno nuevo</div>`;
+  } else {
+    list.innerHTML = opts.slice(0,60).map(o=>
+      `<div class="combo-item" onmousedown="_comboPick('${id}','${jsStr(o)}')">${esc(o)}</div>`
+    ).join('');
+  }
+  list.classList.add('show');
+}
+function _comboPick(id,val){
+  const inp=document.getElementById(id); if(inp) inp.value=val;
+  _comboHide(id);
+}
+function _comboHide(id){
+  const list=document.getElementById(id+'-list'); if(list) list.classList.remove('show');
 }
 
 function _updateBadges(){
@@ -1553,89 +1682,186 @@ function renderSolicitudes(){
   setContent(html);
 }
 
-function abrirModalSolicitud(idqr=''){
+// Estado del modal de solicitud: id en edición (null = creando nueva) y
+// contador de filas de ítems renderizadas en la sesión actual del modal.
+let _editSolicitudId = null;
+let _itemRowSeq = 0;
+
+function abrirModalSolicitud(idqr='', solEdit=null){
   const op=idqr?(DB.produccion||[]).find(o=>String(o.IDQR||o.OP)===String(idqr)):null;
-  // DB.servicios ya tiene objetos {SERVICIO:...} generados por _extraerCatalogoServicios
-  const svcs=(DB.servicios||[]).map(s=>s.SERVICIO||s['SERVICIO EXTERNO']||s.NOMBRE||'').filter(Boolean);
-  document.getElementById('modal-solicitud-title').textContent='📋 Nueva Solicitud de Servicio Externo';
+  // DB.servicios / DB.proveedores ya vienen como {SERVICIO:...} / {PROVEEDOR:...}
+  // generados por _extraerCatalogoServicios / _extraerCatalogoProveedores
+  const svcs =(DB.servicios||[]).map(s=>s.SERVICIO||s['SERVICIO EXTERNO']||s.NOMBRE||'').filter(Boolean);
+  const provs=(DB.proveedores||[]).map(p=>p.PROVEEDOR||'').filter(Boolean);
+
+  _editSolicitudId = solEdit ? String(solEdit.ID_SOLICITUD||solEdit.ID||'') : null;
+  _itemRowSeq = 0;
+
+  const opValActual = solEdit ? String(solEdit.OP||'') : (op?String(op.OP||op.IDQR):'');
+
+  document.getElementById('modal-solicitud-title').textContent =
+    solEdit ? '✏️ Editar Solicitud de Servicio Externo' : '📋 Nueva Solicitud de Servicio Externo';
+
   document.getElementById('modal-solicitud-body').innerHTML=`
     <div class="form-field">
       <label class="form-label">OP</label>
       <select class="form-select" id="sol-op">
         <option value="">— Sin OP específica —</option>
-        ${(DB.produccion||[]).filter(o=>!truthy(o.LIBERACION)).map(o=>
-          `<option value="${esc(String(o.OP||o.IDQR))}"${op&&String(o.OP||o.IDQR)===String(op.OP||idqr)?' selected':''}>${esc('OP-'+String(o.OP||o.IDQR)+' · '+String(o.ITEM||''))}</option>`
+        ${(DB.produccion||[]).filter(o=>!truthy(o.LIBERACION)||String(o.OP||o.IDQR)===opValActual).map(o=>
+          `<option value="${esc(String(o.OP||o.IDQR))}"${opValActual&&String(o.OP||o.IDQR)===opValActual?' selected':''}>${esc('OP-'+String(o.OP||o.IDQR)+' · '+String(o.ITEM||''))}</option>`
         ).join('')}
       </select>
     </div>
     <div class="form-field">
       <label class="form-label">Servicio</label>
-      <select class="form-select" id="sol-servicio">
-        <option value="">— Seleccionar servicio —</option>
-        ${svcs.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('')}
-        <option value="OTRO">Otro (especificar)</option>
-      </select>
+      ${comboField('sol-servicio', svcs, {value:solEdit?(solEdit.SERVICIO||''):'', placeholder:'Buscar servicio o escribir uno nuevo…'})}
     </div>
     <div class="form-field">
       <label class="form-label">Proveedor</label>
-      <input class="form-input" type="text" id="sol-proveedor" placeholder="Nombre del proveedor">
+      ${comboField('sol-proveedor', provs, {value:solEdit?(solEdit.PROVEEDOR||''):'', placeholder:'Buscar proveedor o escribir uno nuevo…'})}
     </div>
     <div class="form-field">
       <label class="form-label">Descripción / Especificación</label>
-      <textarea class="form-input" id="sol-desc" rows="3" placeholder="Detalle del servicio a realizar…"></textarea>
+      <textarea class="form-input" id="sol-desc" rows="3" placeholder="Detalle del servicio a realizar…">${esc(solEdit?(solEdit.DESCRIPCION||''):'')}</textarea>
     </div>
     <div class="fields-grid">
       <div class="form-field">
         <label class="form-label">Dureza / Tratamiento</label>
-        <input class="form-input" type="text" id="sol-dureza" placeholder="ej. 55 HRC">
+        <input class="form-input" type="text" id="sol-dureza" placeholder="ej. 55 HRC" value="${esc(solEdit?(solEdit.DUREZA||''):'')}">
       </div>
       <div class="form-field">
         <label class="form-label">Días estimados</label>
         <div class="spin-row">
           <button class="spin-btn" onclick="_spin('sol-dias',-1)">−</button>
-          <input class="spin-input" type="number" id="sol-dias" value="3" min="1">
+          <input class="spin-input" type="number" id="sol-dias" value="${esc(String(solEdit?.DIAS||3))}" min="1">
           <button class="spin-btn" onclick="_spin('sol-dias',1)">+</button>
         </div>
       </div>
     </div>
     <div class="form-field">
       <label class="form-label">Fecha de envío</label>
-      <input class="form-input" type="date" id="sol-fecha-envio" value="${today()}">
+      <input class="form-input" type="date" id="sol-fecha-envio" value="${esc(solEdit?(solEdit.FECHA_ENVIO||today()):today())}">
     </div>
     <div class="form-field">
       <label class="form-label">Fecha estimada retorno</label>
-      <input class="form-input" type="date" id="sol-fecha-retorno">
+      <input class="form-input" type="date" id="sol-fecha-retorno" value="${esc(solEdit?(solEdit.FECHA_RETORNO||''):'')}">
     </div>
     <div class="form-field">
       <label class="form-label">Observaciones</label>
-      <textarea class="form-input" id="sol-obs" rows="2" placeholder="Notas adicionales…"></textarea>
+      <textarea class="form-input" id="sol-obs" rows="2" placeholder="Notas adicionales…">${esc(solEdit?(solEdit.OBSERVACIONES||''):'')}</textarea>
     </div>
     <div class="form-field">
       <label class="form-label">Solicitado por</label>
       <select class="form-select" id="sol-solicitante">
-        ${['C.POSADA','F.GIRALDO','J.GARCIA'].map(n=>`<option value="${n}">${n}</option>`).join('')}
+        ${['C.POSADA','F.GIRALDO','J.GARCIA'].map(n=>`<option value="${n}"${solEdit&&solEdit.SOLICITANTE===n?' selected':''}>${n}</option>`).join('')}
       </select>
     </div>
+
+    <div class="form-section-title" style="margin-top:8px">Ítems (Bienes) del servicio</div>
+    <div id="items-container"></div>
+    <button type="button" class="btn-add-item" onclick="_addItemRow()">+ Agregar ítem</button>
+
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal('modal-solicitud')">Cancelar</button>
-      <button class="btn btn-primary" onclick="_guardarSolicitud()">📋 Crear & PDF</button>
+      <button class="btn btn-primary" onclick="_guardarSolicitud()">${solEdit?'💾 Guardar cambios':'📋 Crear & PDF'}</button>
     </div>
   `;
+
+  // Precargar filas de ítems existentes (si se está editando), o una fila vacía
+  const bienesPrev = (solEdit && Array.isArray(solEdit.BIENES)) ? solEdit.BIENES : [];
+  if(bienesPrev.length){ bienesPrev.forEach(b=>_addItemRow(b)); }
+  else { _addItemRow(); }
+
   openModal('modal-solicitud');
+}
+
+// ── Filas de ítems (BIENES): cantidad, descripción, tipo de servicio, material, dureza, precio ──
+function _addItemRow(data=null){
+  const n=++_itemRowSeq;
+  const cont=document.getElementById('items-container');
+  if(!cont) return;
+  const svcs=(DB.servicios||[]).map(s=>s.SERVICIO||'').filter(Boolean);
+  const d=data||{};
+  const wrap=document.createElement('div');
+  wrap.className='item-row';
+  wrap.id='item-row-'+n;
+  wrap.innerHTML=`
+    <span class="item-row-num">Ítem ${n}</span>
+    <button type="button" class="item-row-del" onclick="_removeItemRow(${n})" title="Quitar ítem">✕</button>
+    <div class="fields-grid">
+      <div class="form-field">
+        <label class="form-label">Cantidad</label>
+        <input class="form-input" type="number" id="item-${n}-cant" min="0" value="${esc(String(d.CANTIDAD||''))}">
+      </div>
+      <div class="form-field">
+        <label class="form-label">Tipo de servicio</label>
+        ${comboField('item-'+n+'-tipo', svcs, {value:d['TIPO DE SERVICIO']||'', placeholder:'Buscar o escribir…'})}
+      </div>
+    </div>
+    <div class="form-field">
+      <label class="form-label">Descripción</label>
+      ${comboField('item-'+n+'-desc', DB.bienesCatalogo||[], {value:String(d.DESCRIPCION||''), placeholder:'Buscar bien existente o escribir uno nuevo…'})}
+    </div>
+    <div class="fields-grid">
+      <div class="form-field">
+        <label class="form-label">Material</label>
+        <input class="form-input" type="text" id="item-${n}-mat" value="${esc(String(d.MATERIAL||''))}">
+      </div>
+      <div class="form-field">
+        <label class="form-label">Dureza</label>
+        <input class="form-input" type="text" id="item-${n}-dur" value="${esc(String(d.DUREZA||''))}">
+      </div>
+    </div>
+    <div class="form-field">
+      <label class="form-label">Precio</label>
+      <input class="form-input" type="number" id="item-${n}-precio" min="0" value="${esc(String(d.PRECIO||''))}">
+    </div>
+  `;
+  cont.appendChild(wrap);
+}
+
+function _removeItemRow(n){
+  const el=document.getElementById('item-row-'+n);
+  if(!el) return;
+  el.remove();
+  // Nunca dejar el formulario sin ninguna fila de ítem
+  const cont=document.getElementById('items-container');
+  if(cont && !cont.children.length) _addItemRow();
+}
+
+function _collectItemRows(){
+  const cont=document.getElementById('items-container');
+  if(!cont) return [];
+  const filas=[];
+  [...cont.children].forEach(row=>{
+    const n=row.id.replace('item-row-','');
+    const cant=gv('item-'+n+'-cant'), desc=gv('item-'+n+'-desc'), tipo=gv('item-'+n+'-tipo'),
+          mat=gv('item-'+n+'-mat'), dur=gv('item-'+n+'-dur'), precio=gv('item-'+n+'-precio');
+    // Ignorar filas completamente vacías
+    if(!cant&&!desc&&!tipo&&!mat&&!dur&&!precio) return;
+    filas.push({
+      CANTIDAD: cant, DESCRIPCION: desc, 'TIPO DE SERVICIO': tipo,
+      MATERIAL: mat, DUREZA: dur, PRECIO: precio
+    });
+  });
+  return filas;
 }
 
 async function _guardarSolicitud(){
   const opVal=gv('sol-op'), servicio=gv('sol-servicio');
-  if(!servicio){ toast('Selecciona el servicio','error'); return; }
+  if(!servicio){ toast('Escribe o selecciona el servicio','error'); return; }
   const op=(DB.produccion||[]).find(o=>String(o.OP||o.IDQR)===opVal)||null;
+  const editId=_editSolicitudId;
+  const id=editId||(crypto.randomUUID?.()||Math.random().toString(36).slice(2));
+  const proveedor=gv('sol-proveedor');
   const data={
-    ID_SOLICITUD: crypto.randomUUID?.()|| Math.random().toString(36).slice(2),
+    ID_SOLICITUD: id,
     OP: opVal||'',
     IDQR: op?.IDQR||opVal||'',
     ITEM: op?.ITEM||'',
     CLIENTE: op?.EMPRESA||op?.CLIENTE||'',
     SERVICIO: servicio,
-    PROVEEDOR: gv('sol-proveedor'),
+    PROVEEDOR: proveedor,
     DESCRIPCION: gv('sol-desc'),
     DUREZA: gv('sol-dureza'),
     DIAS: gn('sol-dias'),
@@ -1646,13 +1872,30 @@ async function _guardarSolicitud(){
     SOLICITANTE: gv('sol-solicitante'),
     ESTADO: 'ENVIADO',
   };
+  const items=_collectItemRows();
   try{
-    POST_QA_BG('createSolicitudExterna', data);
+    POST_QA_BG(editId?'updateSolicitudExterna':'createSolicitudExterna', data);
+    POST_QA_BG('saveItemsSolicitud', {ID_SOLICITUD:id, filas:items});
+
     if(!DB.solicitudes) DB.solicitudes=[];
-    DB.solicitudes.push(data);
-    toast('✅ Solicitud creada');
+    const merged=Object.assign({},data,{BIENES:items,_fuente:'calidad'});
+    if(editId){
+      const idx=DB.solicitudes.findIndex(x=>String(x.ID_SOLICITUD||x.ID||'')===String(editId));
+      if(idx>=0) DB.solicitudes[idx]=merged; else DB.solicitudes.push(merged);
+    } else {
+      DB.solicitudes.push(merged);
+    }
+    // Añadir servicio/proveedor/ítems nuevos al catálogo local para reutilizarlos en la misma sesión
+    if(servicio && !(DB.servicios||[]).some(s=>s.SERVICIO===servicio)) (DB.servicios=DB.servicios||[]).push({SERVICIO:servicio});
+    if(proveedor && !(DB.proveedores||[]).some(p=>p.PROVEEDOR===proveedor)) (DB.proveedores=DB.proveedores||[]).push({PROVEEDOR:proveedor});
+    items.forEach(it=>{
+      const dsc=String(it.DESCRIPCION||'').trim();
+      if(dsc && !(DB.bienesCatalogo||[]).includes(dsc)) (DB.bienesCatalogo=DB.bienesCatalogo||[]).push(dsc);
+    });
+
+    toast(editId?'✅ Solicitud actualizada':'✅ Solicitud creada');
     closeModal('modal-solicitud');
-    _imprimirSolicitud(data, op);
+    _imprimirSolicitud(merged, op);
   }catch(e){ toast('❌ '+e.message,'error'); }
 }
 
@@ -1673,12 +1916,16 @@ function detailSolicitud(id){
   const descripcion= s.DESCRIPCION||s.OBSERVACIONES||'—';
   const fecha      = s.FECHA_SOLICITUD||s.FECHA||'';
   const esFuente   = s._fuente==='appsheet'?'🔵 AppSheet':'🟢 Calidad';
+  const bienes     = Array.isArray(s.BIENES)?s.BIENES:(Array.isArray(s['Related BIENESs'])?s['Related BIENESs']:[]);
 
   let html=`
     <div class="qa-actions">
       <div class="qa-btn" onclick="_imprimirSolicitudActual()">
         <div class="qa-btn-icon">📄</div><div class="qa-btn-label">PDF</div>
       </div>
+      ${s._fuente==='calidad' ? `<div class="qa-btn" onclick="_editarSolicitudActual()">
+        <div class="qa-btn-icon">✏️</div><div class="qa-btn-label">Editar</div>
+      </div>` : ''}
     </div>
     <div class="fields-grid">
       <div class="field-group"><div class="field-label">OP</div><div class="field-value">OP-${esc(String(s.OP||'—'))}</div></div>
@@ -1697,6 +1944,28 @@ function detailSolicitud(id){
     </div>
     <div class="field-group"><div class="field-label">Descripción / Observaciones</div><div class="field-value">${esc(descripcion)}</div></div>
     ${s.PDF_SERV?`<div class="field-group"><div class="field-label">PDF Servicio</div><div class="field-value" style="font-size:11px;color:var(--accent)">${esc(s.PDF_SERV)}</div></div>`:''}
+    ${bienes.length?`
+    <div class="form-section-title" style="margin-top:14px">Ítems (Bienes) del servicio</div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:6px">
+      <thead><tr style="background:var(--panel2,#f2f2f2)">
+        <th style="text-align:left;padding:6px;border-bottom:1px solid #ddd">Cant.</th>
+        <th style="text-align:left;padding:6px;border-bottom:1px solid #ddd">Descripción</th>
+        <th style="text-align:left;padding:6px;border-bottom:1px solid #ddd">Tipo servicio</th>
+        <th style="text-align:left;padding:6px;border-bottom:1px solid #ddd">Material</th>
+        <th style="text-align:left;padding:6px;border-bottom:1px solid #ddd">Dureza</th>
+        <th style="text-align:left;padding:6px;border-bottom:1px solid #ddd">Precio</th>
+      </tr></thead>
+      <tbody>
+        ${bienes.map(b=>`<tr>
+          <td style="padding:6px;border-bottom:1px solid #eee">${esc(String(b.CANTIDAD||''))}</td>
+          <td style="padding:6px;border-bottom:1px solid #eee">${esc(String(b.DESCRIPCION||''))}</td>
+          <td style="padding:6px;border-bottom:1px solid #eee">${esc(String(b['TIPO DE SERVICIO']||''))}</td>
+          <td style="padding:6px;border-bottom:1px solid #eee">${esc(String(b.MATERIAL||''))}</td>
+          <td style="padding:6px;border-bottom:1px solid #eee">${esc(String(b.DUREZA||''))}</td>
+          <td style="padding:6px;border-bottom:1px solid #eee">${esc(String(b.PRECIO||''))}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>` : ''}
   `;
   openDetail(`Solicitud Externa — OP-${s.OP||'—'}`,html);
 }
@@ -1706,6 +1975,15 @@ function _imprimirSolicitudActual(){
   if(!_solActual){ toast('Sin solicitud activa','error'); return; }
   const op=(DB.produccion||[]).find(o=>String(o.OP||o.IDQR)===String(_solActual.OP||''));
   _imprimirSolicitud(_solActual, op||null);
+}
+
+// Abre el modal en modo edición para la solicitud actualmente mostrada.
+// Solo disponible para registros creados desde este módulo (_fuente:'calidad');
+// los que vienen de AppSheet se editan allá.
+function _editarSolicitudActual(){
+  if(!_solActual){ toast('Sin solicitud activa','error'); return; }
+  if(_solActual._fuente!=='calidad'){ toast('Esta solicitud viene de AppSheet — edítala allá','error'); return; }
+  abrirModalSolicitud('', _solActual);
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -1869,13 +2147,43 @@ async function _guardarTemple(idqr){
 // ══════════════════════════════════════════════════════════════
 // PDF — IMPRIMIR DOCUMENTOS
 // ══════════════════════════════════════════════════════════════
-function _abrirDocParaImprimir(html, nombre){
-  const w=window.open('','_blank','width=900,height=700');
-  if(!w){ toast('Permite ventanas emergentes para imprimir','error'); return; }
-  w.document.open();
-  w.document.write(html);
-  w.document.close();
-  w.onload=()=>{ w.focus(); setTimeout(()=>w.print(),400); };
+function _abrirDocParaImprimir(html, filename) {
+  function _esperarImagenes(win, doc, cb) {
+    const imgs = Array.from(doc.images || []);
+    if (!imgs.length) { cb(); return; }
+    let pendientes = imgs.length, resuelto = false;
+    const terminar = () => { if(resuelto)return; pendientes--; if(pendientes<=0){resuelto=true;cb();} };
+    imgs.forEach(img => {
+      if(img.complete){terminar();return;}
+      img.addEventListener('load',terminar,{once:true});
+      img.addEventListener('error',terminar,{once:true});
+    });
+    setTimeout(()=>{if(!resuelto){resuelto=true;cb();}},4000);
+  }
+  try {
+    const old=document.getElementById('_print_iframe');
+    if(old) old.remove();
+    const iframe=document.createElement('iframe');
+    iframe.id='_print_iframe';
+    iframe.style.cssText='position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:none;opacity:0;';
+    document.body.appendChild(iframe);
+    const doc=iframe.contentDocument||iframe.contentWindow.document;
+    doc.open(); doc.write(html); doc.close();
+    iframe.onload=()=>{
+      _esperarImagenes(iframe.contentWindow,doc,()=>{
+        setTimeout(()=>{
+          iframe.contentWindow.focus();
+          iframe.contentWindow.print();
+          setTimeout(()=>iframe.remove(),2000);
+        },150);
+      });
+    };
+    return;
+  } catch(e){ console.warn('iframe print fallback:',e); }
+  const win=window.open('','_blank','width=900,height=1200');
+  if(!win){toast('Permite ventanas emergentes para imprimir','error');return;}
+  win.document.write(html); win.document.close();
+  _esperarImagenes(win,win.document,()=>setTimeout(()=>win.print(),150));
 }
 
 // PDF SOLICITUD EXTERNA — Formato corporativo GRUPO WEDM (COMPRAS-FO-002)
@@ -1962,7 +2270,7 @@ function _imprimirSolicitud(s, op){
     .aprob-table{border:2px solid #1a3a6b;border-collapse:collapse;width:100%}
     .aprob-table th{background:#d0d8e8;color:#1a3a6b;font-size:8px;font-weight:700;text-align:center;padding:4px 6px;border:1px solid #ccc;text-transform:uppercase}
     .aprob-table td{font-size:9px;padding:8px 6px;border:1px solid #ccc;min-width:60px;min-height:24px}
-    @media print{body{margin:8px 12px}@page{size:A4;margin:10mm}}
+    @media print{body{margin:6px 10px;-webkit-print-color-adjust:exact;print-color-adjust:exact}@page{size:A4 landscape;margin:8mm}}
   </style></head><body>
 
   <!-- HEADER -->
@@ -2046,7 +2354,7 @@ function _imprimirSolicitud(s, op){
 
   </body></html>`;
 
-  _abrirDocParaImprimir(html,\`SOLICITUD_BN_\${numero}OP\${opNum}ITEM\${item}.pdf\`);
+  _abrirDocParaImprimir(html,`SOLICITUD_BN_${numero}OP${opNum}ITEM${item}.pdf`);
 }
 
 
@@ -2071,7 +2379,7 @@ function _imprimirTemple(t, op){
     .highlight-value{font-size:24px;font-weight:900;color:#dc4a18}
     .firm{margin-top:40px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:30px}
     .firm-line{border-top:1px solid #333;padding-top:4px;text-align:center;font-size:9px;color:#555}
-    @media print{body{margin:8px}}
+    @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact;margin:8px}}
   </style></head><body>
   <div class="logo">🔥 GRUPO WEDM</div>
   <div class="sub">Metalmecánica Avanzada · NIT: 900763241-7 · Cali, Colombia</div>
@@ -2129,7 +2437,7 @@ function _imprimirReproceso(r, op){
     td{border:1px solid #ccc;padding:6px 8px}
     .firm{margin-top:40px;display:grid;grid-template-columns:1fr 1fr;gap:40px}
     .firm-line{border-top:1px solid #333;padding-top:4px;text-align:center;font-size:9px;color:#555}
-    @media print{body{margin:8px}}
+    @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact;margin:8px}}
   </style></head><body>
   <div class="logo">⚠️ GRUPO WEDM — REPORTE DE REPROCESO</div>
   <h2>NO CONFORMIDAD / REPROCESO</h2>
@@ -2201,7 +2509,7 @@ function abrirPDFConformidad(idqr, confId, esConformidad=false){
       .firm{margin-top:44px;display:grid;grid-template-columns:1fr 1fr;gap:50px}
       .firm-line{border-top:1px solid #333;padding-top:4px;text-align:center;font-size:9px;color:#555}
       .seal{text-align:center;margin-top:24px;font-size:9px;color:#aaa}
-      @media print{body{margin:12px}}
+      @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact;margin:12px}}
     </style></head><body>
     <div class="header">
       <div>
@@ -2262,7 +2570,7 @@ function abrirPDFConformidad(idqr, confId, esConformidad=false){
       .check-table tr:nth-child(even) td{background:#f8fafc}
       .firm{margin-top:40px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:30px}
       .firm-line{border-top:1px solid #333;padding-top:4px;text-align:center;font-size:9px;color:#555}
-      @media print{body{margin:8px}}
+      @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact;margin:8px}}
     </style></head><body>
     <div class="logo">🏅 GRUPO WEDM</div>
     <div class="sub">Metalmecánica Avanzada · NIT: 900763241-7 · Cali, Colombia</div>
@@ -2309,7 +2617,14 @@ async function refreshCurrent(){
     const r=await GET('getControlProduccion',{modo:'todo'});
     DB.produccion=Array.isArray(r)?r:(r?.data??[]);
     cSet('produccion',DB.produccion);
-    try{ const rs=await GET_QA('getSolicitudesExternas'); DB.solicitudes=Array.isArray(rs)?rs:(rs?.data??[]); DB.servicios=_extraerCatalogoServicios(DB.solicitudes); }catch(e){}
+    try{
+      const rs=await GET_QA('getSolicitudesExternas');
+      DB.solicitudes=Array.isArray(rs)?rs:(rs?.data??[]);
+      DB.servicios=_extraerCatalogoServicios(DB.solicitudes);
+      DB.bienesCatalogo=_extraerCatalogoBienes(DB.solicitudes);
+      const provWEDM = await _cargarProveedoresWEDM();
+      DB.proveedores = _mergeProveedores(provWEDM, DB.solicitudes);
+    }catch(e){}
     try{ const rc=await GET_QA('getConformidades'); DB.conformidades=Array.isArray(rc)?rc:(rc?.data??[]); }catch(e){}
     _updateBadges();
     toast('✅ Datos actualizados');
