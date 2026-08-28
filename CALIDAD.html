@@ -1528,7 +1528,7 @@ function renderSolicitudes(){
         <div class="proyecto-thumb">📋</div>
         <div class="proyecto-body">
           <div class="proyecto-badge" style="background:var(--info)">OP-${esc(String(s.OP||'—'))} · Item ${esc(String(s.ITEM||'—'))}</div>
-          <div class="proyecto-title">${esc(s.SERVICIO||s['TIPO DE SERVICIO']||'Sin servicio')}</div>
+          <div class="proyecto-title">${esc(s.SERVICIO||s['TIPO DE SERVICIO']||s['TIPO']||s.TIPO_SERVICIO||'Sin servicio')}</div>
           <div class="proyecto-sub">${esc(s.COLABORADOR||s.SOLICITANTE||s.PROVEEDOR||'—')}</div>
           <div class="proyecto-sub">${fmtDate(s.FECHA||s.FECHA_SOLICITUD)} · <span class="sem sem-ep">${esc(s.ESTADO||'REGISTRADO')}</span> ${fuente}</div>
         </div>
@@ -1542,7 +1542,7 @@ function renderSolicitudes(){
       html+=`<div class="op-row sol-row" onclick="detailSolicitud('${esc(key)}')">
         <div class="op-badge" style="background:var(--info)">📋</div>
         <div class="op-info">
-          <div class="op-title">${esc(s.SERVICIO||s['TIPO DE SERVICIO']||'Sin servicio')}</div>
+          <div class="op-title">${esc(s.SERVICIO||s['TIPO DE SERVICIO']||s['TIPO']||s.TIPO_SERVICIO||'Sin servicio')}</div>
           <div class="op-sub">OP-${esc(String(s.OP||'—'))} · Item ${esc(String(s.ITEM||'—'))} · ${esc(s.COLABORADOR||s.SOLICITANTE||'—')}</div>
           <div class="op-sub">${fmtDate(s.FECHA||s.FECHA_SOLICITUD)} · <b>${esc(s.ESTADO||'REGISTRADO')}</b> ${fuente}</div>
         </div>
@@ -1656,22 +1656,27 @@ async function _guardarSolicitud(){
   }catch(e){ toast('❌ '+e.message,'error'); }
 }
 
+// Almacena temporalmente la solicitud activa para el PDF (evita JSON inline en onclick)
+let _solActual = null;
+
 function detailSolicitud(id){
   // Buscar por ID_SOLICITUD (registros nuevos) o ID (registros AppSheet)
   const s=(DB.solicitudes||[]).find(x=>String(x.ID_SOLICITUD||x.ID||'')===String(id));
   if(!s){ toast('Solicitud no encontrada','error'); return; }
-  const op=(DB.produccion||[]).find(o=>String(o.OP||o.IDQR)===String(s.OP||''));
-  // Normalizar campos compatibles con ambas fuentes
+
+  // Guardar referencia global para el PDF
+  _solActual = s;
+
+  // Normalizar campos — compatible con ambas fuentes (AppSheet y Calidad)
   const servicio   = s.SERVICIO||s['TIPO DE SERVICIO']||'—';
   const colaborador= s.COLABORADOR||s.SOLICITANTE||'—';
   const descripcion= s.DESCRIPCION||s.OBSERVACIONES||'—';
   const fecha      = s.FECHA_SOLICITUD||s.FECHA||'';
   const esFuente   = s._fuente==='appsheet'?'🔵 AppSheet':'🟢 Calidad';
-  // JSON seguro para el PDF (sin etiquetas HTML)
-  const sJson=JSON.stringify(s).replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
   let html=`
     <div class="qa-actions">
-      <div class="qa-btn" onclick="_imprimirSolicitud(${sJson},null)">
+      <div class="qa-btn" onclick="_imprimirSolicitudActual()">
         <div class="qa-btn-icon">📄</div><div class="qa-btn-label">PDF</div>
       </div>
     </div>
@@ -1694,6 +1699,13 @@ function detailSolicitud(id){
     ${s.PDF_SERV?`<div class="field-group"><div class="field-label">PDF Servicio</div><div class="field-value" style="font-size:11px;color:var(--accent)">${esc(s.PDF_SERV)}</div></div>`:''}
   `;
   openDetail(`Solicitud Externa — OP-${s.OP||'—'}`,html);
+}
+
+// Wrapper seguro — usa la referencia global en lugar de JSON inline
+function _imprimirSolicitudActual(){
+  if(!_solActual){ toast('Sin solicitud activa','error'); return; }
+  const op=(DB.produccion||[]).find(o=>String(o.OP||o.IDQR)===String(_solActual.OP||''));
+  _imprimirSolicitud(_solActual, op||null);
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -1866,71 +1878,177 @@ function _abrirDocParaImprimir(html, nombre){
   w.onload=()=>{ w.focus(); setTimeout(()=>w.print(),400); };
 }
 
-// PDF SOLICITUD EXTERNA
+// PDF SOLICITUD EXTERNA — Formato corporativo GRUPO WEDM (COMPRAS-FO-002)
 function _imprimirSolicitud(s, op){
-  // Normalizar campos — compatible con registros AppSheet y registros propios
-  const solId      = s.ID_SOLICITUD||s.ID||s.NUMERO||'—';
-  const solFecha   = s.FECHA_SOLICITUD||s.FECHA||'';
-  const solServicio= s.SERVICIO||s['TIPO DE SERVICIO']||'—';
-  const solColabor = s.COLABORADOR||s.SOLICITANTE||'—';
-  const solDesc    = s.DESCRIPCION||s.OBSERVACIONES||'—';
-  const solProv    = s.PROVEEDOR||'—';
-  const solDureza  = s.DUREZA||'—';
-  const solDias    = s.DIAS||'—';
+  // Normalizar campos — compatible con AppSheet y registros propios
+  const numero     = s.NUMERO||s.ID_SOLICITUD||s.ID||'—';
+  const colabor    = s.COLABORADOR||s.SOLICITANTE||'—';
+  const areaTrabajo= s.AREA_TRABAJO||s['ÁREA DE TRABAJO']||'CALIDAD';
+  const mes        = s.MES||(s.FECHA?new Date(s.FECHA).getMonth()+1:new Date().getMonth()+1)||'';
+  const dia        = s.DIA||(s.FECHA?new Date(s.FECHA).getDate():new Date().getDate())||'';
+  const anio       = s.AÑO||(s.FECHA?new Date(s.FECHA).getFullYear():new Date().getFullYear())||'';
+  const cotizacion = s.COTIZACION||'—';
+  const item       = s.ITEM||'—';
+  const opNum      = s.OP||'—';
+  const observ     = s.OBSERVACIONES||'';
+
+  // BIENES relacionados — vienen como array en s['Related BIENESs'] o s.BIENES
+  // Cada bien: {CANTIDAD, DESCRIPCION, TIPO DE SERVICIO, MATERIAL, DUREZA, PRECIO}
+  let bienes = [];
+  const rawBienes = s['Related BIENESs']||s.BIENES||s.bienes||[];
+  if(Array.isArray(rawBienes) && rawBienes.length){
+    bienes = rawBienes;
+  } else {
+    // Si no hay bienes relacionados, crear una fila con los datos del registro
+    bienes = [{
+      CANTIDAD:          s.CANTIDAD||'',
+      DESCRIPCION:       s.DESCRIPCION||s.OBSERVACIONES||'',
+      'TIPO DE SERVICIO':s.SERVICIO||s['TIPO DE SERVICIO']||'',
+      MATERIAL:          s.MATERIAL||'',
+      DUREZA:            s.DUREZA||'',
+      PRECIO:            s.PRECIO||''
+    }];
+  }
+
+  const filasHtml = bienes.map(b=>`
+    <tr>
+      <td style="text-align:center;border:1px solid #ccc;padding:5px 4px">${esc(String(b.CANTIDAD||''))}</td>
+      <td style="border:1px solid #ccc;padding:5px 6px">${esc(String(b.DESCRIPCION||''))}</td>
+      <td style="text-align:center;border:1px solid #ccc;padding:5px 4px">${esc(String(b['TIPO DE SERVICIO']||b.TIPO_SERVICIO||''))}</td>
+      <td style="text-align:center;border:1px solid #ccc;padding:5px 4px">${esc(String(b.MATERIAL||''))}</td>
+      <td style="text-align:center;border:1px solid #ccc;padding:5px 4px">${esc(String(b.DUREZA||''))}</td>
+      <td style="text-align:right;border:1px solid #ccc;padding:5px 4px">${esc(String(b.PRECIO||''))}</td>
+    </tr>`).join('');
+
   const html=`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
-  <title>SOL-EXT-${s.OP||''}</title>
+  <title>SOLICITUD BN_${numero}OP${opNum}ITEM${item}</title>
   <style>
-    body{font-family:Arial,sans-serif;font-size:10px;color:#111;margin:20px}
-    .logo{font-weight:900;font-size:18px;color:#1a3a6b}
-    .sub{font-size:9px;color:#555;margin-bottom:20px}
-    h2{color:#1a3a6b;font-size:13px;text-align:center;margin:12px 0;
-      border-bottom:2px solid #1a3a6b;padding-bottom:6px}
-    table{width:100%;border-collapse:collapse;margin-bottom:12px}
-    th{background:#1a3a6b;color:#fff;padding:6px 8px;font-size:9px;text-align:left}
-    td{border:1px solid #ccc;padding:6px 8px}
-    .hdr td{border:none;font-size:10px}
-    .firm{margin-top:40px;display:grid;grid-template-columns:1fr 1fr;gap:40px}
-    .firm-line{border-top:1px solid #333;padding-top:4px;text-align:center;font-size:9px;color:#555}
-    @media print{body{margin:8px}}
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:Arial,sans-serif;font-size:9px;color:#000;margin:16px 20px;background:#fff}
+    table{width:100%;border-collapse:collapse}
+    /* ── HEADER SUPERIOR ── */
+    .hdr-top{display:grid;grid-template-columns:120px 1fr auto auto;border:2px solid #1a3a6b;margin-bottom:0}
+    .hdr-logo{padding:6px;border-right:1px solid #1a3a6b;display:flex;align-items:center;justify-content:center}
+    .hdr-logo img{width:100px}
+    .hdr-title{background:#fff;padding:6px 10px;display:flex;align-items:center;justify-content:center;border-right:1px solid #1a3a6b}
+    .hdr-title h1{font-size:13px;font-weight:900;color:#1a3a6b;text-align:center;line-height:1.3;text-transform:uppercase}
+    .hdr-dates{display:flex;flex-direction:column;border-right:1px solid #1a3a6b}
+    .hdr-date-row{padding:4px 8px;font-size:8px;text-align:center;border-bottom:1px solid #1a3a6b}
+    .hdr-date-row:last-child{border-bottom:none}
+    .hdr-date-label{font-weight:700;color:#1a3a6b;display:block;font-size:7px;text-transform:uppercase}
+    .hdr-op{display:flex;flex-direction:column;min-width:80px}
+    .hdr-op-label{background:#1a3a6b;color:#fff;font-size:8px;font-weight:700;text-align:center;padding:4px 8px}
+    .hdr-op-val{font-size:14px;font-weight:900;text-align:center;padding:6px 8px;background:#1a3a6b;color:#fff;flex:1;display:flex;align-items:center;justify-content:center}
+    /* ── BARRA INFO GENERAL ── */
+    .barra{display:grid;grid-template-columns:1fr auto;background:#1a3a6b;color:#fff;padding:4px 8px;margin-top:0;border-left:2px solid #1a3a6b;border-right:2px solid #1a3a6b}
+    .barra-title{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+    .barra-right{font-size:8px;font-weight:700}
+    /* ── TABLA INFO COLABORADOR ── */
+    .info-table{border-left:2px solid #1a3a6b;border-right:2px solid #1a3a6b;border-bottom:1px solid #1a3a6b}
+    .info-table th{background:#d0d8e8;color:#1a3a6b;font-size:8px;font-weight:700;text-align:center;padding:4px 6px;border:1px solid #ccc;text-transform:uppercase}
+    .info-table td{font-size:9px;text-align:center;padding:5px 6px;border:1px solid #ccc}
+    /* ── BARRA REGISTRO ── */
+    .barra2{background:#1a3a6b;color:#fff;padding:4px 8px;font-size:9px;font-weight:700;text-transform:uppercase;text-align:center;border-left:2px solid #1a3a6b;border-right:2px solid #1a3a6b;letter-spacing:.5px}
+    /* ── TABLA BIENES ── */
+    .bienes-table{border-left:2px solid #1a3a6b;border-right:2px solid #1a3a6b;border-bottom:2px solid #1a3a6b}
+    .bienes-table th{background:#1a3a6b;color:#fff;font-size:8px;font-weight:700;text-align:center;padding:5px 4px;border:1px solid #2a4a7b;text-transform:uppercase}
+    .bienes-table td{font-size:9px;padding:5px 4px;vertical-align:middle;min-height:22px}
+    /* ── OBSERVACIONES ── */
+    .obs-row{border-left:2px solid #1a3a6b;border-right:2px solid #1a3a6b;border-bottom:2px solid #1a3a6b;display:grid;grid-template-columns:100px 1fr;border-top:1px solid #ccc}
+    .obs-label{background:#d0d8e8;color:#1a3a6b;font-weight:700;font-size:8px;text-transform:uppercase;padding:6px 8px;display:flex;align-items:center;border-right:1px solid #ccc}
+    .obs-val{padding:6px 8px;font-size:9px;min-height:28px}
+    /* ── APROBACIÓN ── */
+    .aprob-title{background:#1a3a6b;color:#fff;font-size:9px;font-weight:700;text-align:center;padding:5px;text-transform:uppercase;border:2px solid #1a3a6b;border-bottom:none;margin-top:14px;letter-spacing:.5px}
+    .aprob-table{border:2px solid #1a3a6b;border-collapse:collapse;width:100%}
+    .aprob-table th{background:#d0d8e8;color:#1a3a6b;font-size:8px;font-weight:700;text-align:center;padding:4px 6px;border:1px solid #ccc;text-transform:uppercase}
+    .aprob-table td{font-size:9px;padding:8px 6px;border:1px solid #ccc;min-width:60px;min-height:24px}
+    @media print{body{margin:8px 12px}@page{size:A4;margin:10mm}}
   </style></head><body>
-  <div class="logo">GRUPO WEDM</div>
-  <div class="sub">Metalmecánica Avanzada · NIT: 900763241-7 · Cali, Colombia</div>
-  <h2>SOLICITUD DE SERVICIO EXTERNO</h2>
-  <table class="hdr"><tr>
-    <td><b>N° Solicitud:</b> ${esc(String(solId))}</td>
-    <td><b>Fecha:</b> ${fmtDate(solFecha)}</td>
-    <td><b>OP:</b> OP-${esc(String(s.OP||'—'))}</td>
-    <td><b>Item:</b> ${esc(String(s.ITEM||'—'))}</td>
-  </tr></table>
-  <table>
-    <thead><tr><th colspan="2">DATOS DEL SERVICIO</th></tr></thead>
+
+  <!-- HEADER -->
+  <div class="hdr-top">
+    <div class="hdr-logo"><div style="font-weight:900;font-size:14px;color:#1a3a6b;line-height:1.2">GRUPO<br>WEDM<br><span style="font-size:8px;font-weight:400">Metalmecánica Avanzada</span></div></div>
+    <div class="hdr-title"><h1>Formato de Solicitud<br>de Bienes y Servicios Externos</h1></div>
+    <div class="hdr-dates">
+      <div class="hdr-date-row"><span class="hdr-date-label">Fecha de Elaboración</span>12/08/2019</div>
+      <div class="hdr-date-row"><span class="hdr-date-label">Fecha de Actualización</span>09/11/2022</div>
+    </div>
+    <div class="hdr-op">
+      <div class="hdr-op-label">OP</div>
+      <div class="hdr-op-val">${esc(String(opNum))}</div>
+    </div>
+  </div>
+
+  <!-- BARRA INFO GENERAL -->
+  <div class="barra">
+    <span class="barra-title">Información General</span>
+    <span class="barra-right">COMPRAS - FO - 002 &nbsp;&nbsp; N° &nbsp;<b>${esc(String(numero))}</b></span>
+  </div>
+
+  <!-- TABLA COLABORADOR -->
+  <table class="info-table">
+    <thead><tr>
+      <th>Nombre del Colaborador</th>
+      <th>Área de Trabajo</th>
+      <th>Mes</th>
+      <th>Día</th>
+      <th>Año</th>
+      <th>Cotización</th>
+      <th>Item</th>
+    </tr></thead>
+    <tbody><tr>
+      <td>${esc(colabor)}</td>
+      <td>${esc(areaTrabajo)}</td>
+      <td>${esc(String(mes))}</td>
+      <td>${esc(String(dia))}</td>
+      <td>${esc(String(anio))}</td>
+      <td>${esc(String(cotizacion))}</td>
+      <td>${esc(String(item))}</td>
+    </tr></tbody>
+  </table>
+
+  <!-- BARRA REGISTRO BIENES -->
+  <div class="barra2">Registro de Bien o Servicio Solicitado</div>
+
+  <!-- TABLA BIENES -->
+  <table class="bienes-table">
+    <thead><tr>
+      <th style="width:8%">Cantidad</th>
+      <th style="width:30%">Descripción</th>
+      <th style="width:22%">Tipo de Servicio</th>
+      <th style="width:18%">Material</th>
+      <th style="width:12%">Dureza</th>
+      <th style="width:10%">Precio</th>
+    </tr></thead>
+    <tbody>${filasHtml}</tbody>
+  </table>
+
+  <!-- OBSERVACIONES -->
+  <div class="obs-row">
+    <div class="obs-label">Observaciones:</div>
+    <div class="obs-val">${esc(observ)}</div>
+  </div>
+
+  <!-- APROBACIÓN -->
+  <div class="aprob-title">Aprobación y Verificación Final</div>
+  <table class="aprob-table">
+    <thead><tr>
+      <th style="width:25%">Responsable</th>
+      <th style="width:37%">Firma</th>
+      <th style="width:38%">Observaciones</th>
+    </tr></thead>
     <tbody>
-      <tr><td style="width:30%"><b>Servicio</b></td><td>${esc(solServicio)}</td></tr>
-      <tr><td><b>Proveedor / Colaborador</b></td><td>${esc(solProv!=='—'?solProv:solColabor)}</td></tr>
-      <tr><td><b>Descripción</b></td><td>${esc(solDesc)}</td></tr>
-      <tr><td><b>Dureza / Tratamiento</b></td><td>${esc(solDureza)}</td></tr>
-      <tr><td><b>Días estimados</b></td><td>${esc(String(solDias))}</td></tr>
-      <tr><td><b>Fecha envío</b></td><td>${fmtDate(s.FECHA_ENVIO||s.FECHA||'')}</td></tr>
-      <tr><td><b>Fecha retorno estimada</b></td><td>${fmtDate(s.FECHA_RETORNO||'')}</td></tr>
+      <tr><td>Solicitante</td><td></td><td></td></tr>
+      <tr><td>Jefatura de Compras</td><td></td><td></td></tr>
+      <tr><td>Fecha de Recibido</td><td></td><td></td></tr>
     </tbody>
   </table>
-  ${op?`<table>
-    <thead><tr><th colspan="2">DATOS DE LA PIEZA</th></tr></thead>
-    <tbody>
-      <tr><td style="width:30%"><b>Cliente</b></td><td>${esc(op.EMPRESA||op.CLIENTE||'—')}</td></tr>
-      <tr><td><b>Descripción</b></td><td>${esc(op['DESCRIPCION DEL PROYECTO']||op.DESCRIPCION||'—')}</td></tr>
-      <tr><td><b>Material</b></td><td>${esc(op.MATERIAL||op['MATERIAL 1']||'—')}</td></tr>
-      <tr><td><b>Cantidad</b></td><td>${esc(String(op.CANTIDAD||op.CANT||'—'))}</td></tr>
-    </tbody>
-  </table>`:''}
-  ${s.OBSERVACIONES?`<table><tr><td><b>Observaciones:</b> ${esc(s.OBSERVACIONES)}</td></tr></table>`:''}
-  <div class="firm">
-    <div class="firm-line">Solicitado por: ${esc(solColabor)}<br>Firma</div>
-    <div class="firm-line">Recibido por proveedor<br>Firma / Sello</div>
-  </div>
+
   </body></html>`;
-  _abrirDocParaImprimir(html,`SOL-EXT-OP${s.OP||''}.pdf`);
+
+  _abrirDocParaImprimir(html,\`SOLICITUD_BN_\${numero}OP\${opNum}ITEM\${item}.pdf\`);
 }
+
 
 // PDF HOJA DE TEMPLE
 function _imprimirTemple(t, op){
