@@ -321,6 +321,28 @@ table.data-table tr:active td{background:#dbeafe}
 .foto-ext-item{border-radius:8px;overflow:hidden;aspect-ratio:1;
   background:var(--card2);border:1px solid var(--border)}
 .foto-ext-item img{width:100%;height:100%;object-fit:cover}
+
+/* ── THUMBNAIL IMAGEN OP ── */
+.img-thumb-wrap{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.img-thumb{width:96px;height:72px;object-fit:cover;border-radius:10px;
+  border:2px solid var(--border);cursor:zoom-in;flex-shrink:0;
+  box-shadow:0 2px 8px rgba(0,0,0,.12);transition:transform .15s,box-shadow .15s}
+.img-thumb:active{transform:scale(.96)}
+.btn-plano{display:inline-flex;align-items:center;gap:6px;background:var(--primary);
+  color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:12px;
+  font-weight:700;cursor:pointer;text-decoration:none;transition:opacity .15s}
+.btn-plano:active{opacity:.8}
+
+/* ── LIGHTBOX ── */
+#lightbox{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:2000;
+  display:none;align-items:center;justify-content:center;flex-direction:column}
+#lightbox.open{display:flex}
+#lightbox img{max-width:96vw;max-height:88vh;object-fit:contain;border-radius:8px;
+  box-shadow:0 8px 40px rgba(0,0,0,.5)}
+#lightbox-close{position:absolute;top:16px;right:16px;background:rgba(255,255,255,.18);
+  border:none;color:#fff;font-size:22px;width:40px;height:40px;border-radius:50%;
+  cursor:pointer;display:flex;align-items:center;justify-content:center}
+#lightbox-caption{color:rgba(255,255,255,.6);font-size:12px;margin-top:10px;text-align:center}
 </style>
 </head>
 <body>
@@ -752,22 +774,20 @@ async function _initApp(){
     DB.produccion=Array.isArray(r)?r:(r?.data??[]);
     cSet('produccion',DB.produccion);
     setSplash(60,'Cargando solicitudes externas…');
-    // Cargar solicitudes externas (hoja propia)
+    // Cargar solicitudes externas — el GAS combina AppSheet + hoja propia
     try{
       const rs=await GET_QA('getSolicitudesExternas');
       DB.solicitudes=Array.isArray(rs)?rs:(rs?.data??[]);
-    }catch(e){ DB.solicitudes=[]; }
+    }catch(e){ DB.solicitudes=[]; console.warn('getSolicitudesExternas:',e); }
     setSplash(75,'Cargando certificados…');
-    // Cargar conformidad desde Bienes y Servicios (hoja CONFORMIDAD en AppSheet / hoja propia)
     try{
       const rc=await GET_QA('getConformidades');
       DB.conformidades=Array.isArray(rc)?rc:(rc?.data??[]);
     }catch(e){ DB.conformidades=[]; }
-    setSplash(90,'Cargando servicios externos…');
-    try{
-      const rsv=await GET_QA('getSolicitudesExternas');
-      DB.servicios=Array.isArray(rsv)?rsv:(rsv?.data??[]);
-    }catch(e){ DB.servicios=[]; }
+    setSplash(90,'Preparando catálogo de servicios…');
+    // DB.servicios = lista única de TIPO DE SERVICIO extraída de DB.solicitudes
+    // (se usa para poblar el <select> del modal — sin segunda llamada al GAS)
+    DB.servicios = _extraerCatalogoServicios(DB.solicitudes);
     setSplash(100,'¡Listo!');
     _updateBadges();
     setTimeout(()=>{
@@ -778,6 +798,21 @@ async function _initApp(){
     toast('❌ Error cargando datos: '+e.message,'error');
     setSplash(100,'Error — reintenta');
   }
+}
+
+// ══════════════════════════════════════════════════════════════
+// CATÁLOGO DE SERVICIOS
+// Extrae tipos únicos de TIPO DE SERVICIO / SERVICIO de DB.solicitudes
+// para poblar el <select> del modal sin segunda llamada al GAS.
+// ══════════════════════════════════════════════════════════════
+function _extraerCatalogoServicios(solicitudes){
+  const set=new Set();
+  (solicitudes||[]).forEach(s=>{
+    const v=String(s.SERVICIO||s['TIPO DE SERVICIO']||'').trim();
+    if(v) set.add(v);
+  });
+  // Ordenar alfabéticamente y devolver como array de objetos {SERVICIO}
+  return [...set].sort().map(v=>({SERVICIO:v}));
 }
 
 function _updateBadges(){
@@ -1316,7 +1351,9 @@ function detailExterno(idqr){
   if(!op){ toast('OP no encontrada','error'); return; }
   _currentOp=op;
   // Buscar solicitud externa relacionada
-  const sol=(DB.solicitudes||[]).filter(s=>String(s.OP||s.IDQR||'')===String(op.OP||op.IDQR||''));
+  // Buscar solicitudes de esta OP — comparar siempre como string (AppSheet guarda OP como texto)
+  const opStr=String(op.OP||op.IDQR||'').trim();
+  const sol=(DB.solicitudes||[]).filter(s=>String(s.OP||'').trim()===opStr);
   const imgSrc=op.IMAGEN_B64&&op.IMAGEN_B64.length>50?(op.IMAGEN_B64.startsWith('http')?op.IMAGEN_B64:'data:image/jpeg;base64,'+op.IMAGEN_B64):(op.IMAGEN||'');
 
   let html=`
@@ -1468,36 +1505,46 @@ async function _accionLiberacion(idqr){
 // ══════════════════════════════════════════════════════════════
 // 4. SOLICITUDES EXTERNAS
 // ══════════════════════════════════════════════════════════════
+// Cada registro puede venir de dos fuentes:
+//   _fuente:'appsheet' → tiene ID (no ID_SOLICITUD), SERVICIO = TIPO DE SERVICIO normalizado
+//   _fuente:'calidad'  → tiene ID_SOLICITUD, SERVICIO, PROVEEDOR, ESTADO propios
+// La clave única que usamos en el HTML es _solKey(s):
+function _solKey(s){ return s.ID_SOLICITUD||s.ID||''; }
+
 function renderSolicitudes(){
   const sols=DB.solicitudes||[];
   let html=`
-    <div class="search-bar"><span>🔍</span><input type="text" placeholder="Buscar…" oninput="_filterRows(this.value,'sol-row')"></div>
+    <div class="search-bar"><span>🔍</span><input type="text" placeholder="Buscar OP, servicio, colaborador…" oninput="_filterRows(this.value,'sol-row')"></div>
     <div class="section-divider">${sols.length} solicitudes externas</div>
     ${_vistaToggleHtml()}`;
   if(!sols.length){
-    html+=`<div class="empty"><div class="empty-icon">📋</div><div class="empty-text">Sin solicitudes externas</div></div>`;
+    html+=`<div class="empty"><div class="empty-icon">📋</div><div class="empty-text">Sin solicitudes externas registradas</div></div>`;
   } else if(VISTA==='proyecto'){
     html+='<div class="proyecto-grid">';
-    sols.slice().reverse().forEach(s=>{
-      html+=`<div class="proyecto-card sol-row" style="border-top-color:var(--info)" onclick="detailSolicitud('${esc(s.ID_SOLICITUD||'')}')">
+    sols.forEach(s=>{
+      const key=_solKey(s);
+      const fuente=s._fuente==='appsheet'?'🔵':'🟢'; // azul=AppSheet, verde=Calidad
+      html+=`<div class="proyecto-card sol-row" style="border-top-color:var(--info)" onclick="detailSolicitud('${esc(key)}')">
         <div class="proyecto-thumb">📋</div>
         <div class="proyecto-body">
-          <div class="proyecto-badge" style="background:var(--info)">OP-${esc(String(s.OP||'—'))}</div>
-          <div class="proyecto-title">${esc(s.SERVICIO||s.TIPO||'Solicitud')}</div>
-          <div class="proyecto-sub">${esc(s.PROVEEDOR||'—')}</div>
-          <div class="proyecto-sub">${fmtDate(s.FECHA||s.FECHA_SOLICITUD)} · ${esc(s.ESTADO||'Pendiente')}</div>
+          <div class="proyecto-badge" style="background:var(--info)">OP-${esc(String(s.OP||'—'))} · Item ${esc(String(s.ITEM||'—'))}</div>
+          <div class="proyecto-title">${esc(s.SERVICIO||s['TIPO DE SERVICIO']||'Sin servicio')}</div>
+          <div class="proyecto-sub">${esc(s.COLABORADOR||s.SOLICITANTE||s.PROVEEDOR||'—')}</div>
+          <div class="proyecto-sub">${fmtDate(s.FECHA||s.FECHA_SOLICITUD)} · <span class="sem sem-ep">${esc(s.ESTADO||'REGISTRADO')}</span> ${fuente}</div>
         </div>
       </div>`;
     });
     html+='</div>';
   } else {
-    sols.slice().reverse().forEach(s=>{
-      html+=`<div class="op-row sol-row" onclick="detailSolicitud('${esc(s.ID_SOLICITUD||'')}')">
+    sols.forEach(s=>{
+      const key=_solKey(s);
+      const fuente=s._fuente==='appsheet'?'🔵':'🟢';
+      html+=`<div class="op-row sol-row" onclick="detailSolicitud('${esc(key)}')">
         <div class="op-badge" style="background:var(--info)">📋</div>
         <div class="op-info">
-          <div class="op-title">${esc(s.SERVICIO||s.TIPO||'Solicitud')}</div>
-          <div class="op-sub">OP-${esc(String(s.OP||'—'))} · ${esc(s.PROVEEDOR||'—')}</div>
-          <div class="op-sub">${fmtDate(s.FECHA||s.FECHA_SOLICITUD)} · ${esc(s.ESTADO||'Pendiente')}</div>
+          <div class="op-title">${esc(s.SERVICIO||s['TIPO DE SERVICIO']||'Sin servicio')}</div>
+          <div class="op-sub">OP-${esc(String(s.OP||'—'))} · Item ${esc(String(s.ITEM||'—'))} · ${esc(s.COLABORADOR||s.SOLICITANTE||'—')}</div>
+          <div class="op-sub">${fmtDate(s.FECHA||s.FECHA_SOLICITUD)} · <b>${esc(s.ESTADO||'REGISTRADO')}</b> ${fuente}</div>
         </div>
         <div style="font-size:20px">›</div>
       </div>`;
@@ -1508,7 +1555,8 @@ function renderSolicitudes(){
 
 function abrirModalSolicitud(idqr=''){
   const op=idqr?(DB.produccion||[]).find(o=>String(o.IDQR||o.OP)===String(idqr)):null;
-  const svcs=(DB.servicios||[]).map(s=>s['SERVICIO EXTERNO']||s.NOMBRE||'').filter(Boolean);
+  // DB.servicios ya tiene objetos {SERVICIO:...} generados por _extraerCatalogoServicios
+  const svcs=(DB.servicios||[]).map(s=>s.SERVICIO||s['SERVICIO EXTERNO']||s.NOMBRE||'').filter(Boolean);
   document.getElementById('modal-solicitud-title').textContent='📋 Nueva Solicitud de Servicio Externo';
   document.getElementById('modal-solicitud-body').innerHTML=`
     <div class="form-field">
@@ -1609,29 +1657,43 @@ async function _guardarSolicitud(){
 }
 
 function detailSolicitud(id){
-  const s=(DB.solicitudes||[]).find(x=>String(x.ID_SOLICITUD||'')===String(id));
+  // Buscar por ID_SOLICITUD (registros nuevos) o ID (registros AppSheet)
+  const s=(DB.solicitudes||[]).find(x=>String(x.ID_SOLICITUD||x.ID||'')===String(id));
   if(!s){ toast('Solicitud no encontrada','error'); return; }
   const op=(DB.produccion||[]).find(o=>String(o.OP||o.IDQR)===String(s.OP||''));
+  // Normalizar campos compatibles con ambas fuentes
+  const servicio   = s.SERVICIO||s['TIPO DE SERVICIO']||'—';
+  const colaborador= s.COLABORADOR||s.SOLICITANTE||'—';
+  const descripcion= s.DESCRIPCION||s.OBSERVACIONES||'—';
+  const fecha      = s.FECHA_SOLICITUD||s.FECHA||'';
+  const esFuente   = s._fuente==='appsheet'?'🔵 AppSheet':'🟢 Calidad';
+  // JSON seguro para el PDF (sin etiquetas HTML)
+  const sJson=JSON.stringify(s).replace(/</g,'&lt;').replace(/>/g,'&gt;');
   let html=`
     <div class="qa-actions">
-      <div class="qa-btn" onclick="_imprimirSolicitud(${JSON.stringify(s).replace(/</g,'&lt;')},null)">
+      <div class="qa-btn" onclick="_imprimirSolicitud(${sJson},null)">
         <div class="qa-btn-icon">📄</div><div class="qa-btn-label">PDF</div>
       </div>
     </div>
     <div class="fields-grid">
       <div class="field-group"><div class="field-label">OP</div><div class="field-value">OP-${esc(String(s.OP||'—'))}</div></div>
-      <div class="field-group"><div class="field-label">Servicio</div><div class="field-value">${esc(s.SERVICIO||'—')}</div></div>
-      <div class="field-group"><div class="field-label">Proveedor</div><div class="field-value">${esc(s.PROVEEDOR||'—')}</div></div>
-      <div class="field-group"><div class="field-label">Estado</div><div class="field-value">${esc(s.ESTADO||'—')}</div></div>
-      <div class="field-group"><div class="field-label">F. Envío</div><div class="field-value">${fmtDate(s.FECHA_ENVIO)}</div></div>
-      <div class="field-group"><div class="field-label">F. Retorno</div><div class="field-value">${fmtDate(s.FECHA_RETORNO)}</div></div>
+      <div class="field-group"><div class="field-label">Item</div><div class="field-value">${esc(String(s.ITEM||'—'))}</div></div>
+      <div class="field-group"><div class="field-label">Cotización</div><div class="field-value">${esc(String(s.COTIZACION||'—'))}</div></div>
+      <div class="field-group"><div class="field-label">Fecha</div><div class="field-value">${fmtDate(fecha)}</div></div>
+      <div class="field-group"><div class="field-label">Servicio</div><div class="field-value">${esc(servicio)}</div></div>
+      <div class="field-group"><div class="field-label">Estado</div><div class="field-value">${esc(s.ESTADO||'REGISTRADO')}</div></div>
+      <div class="field-group"><div class="field-label">Colaborador</div><div class="field-value">${esc(colaborador)}</div></div>
+      <div class="field-group"><div class="field-label">Fuente</div><div class="field-value">${esFuente}</div></div>
+      ${s.FECHA_ENVIO?`<div class="field-group"><div class="field-label">F. Envío</div><div class="field-value">${fmtDate(s.FECHA_ENVIO)}</div></div>`:''}
+      ${s.FECHA_RETORNO?`<div class="field-group"><div class="field-label">F. Retorno</div><div class="field-value">${fmtDate(s.FECHA_RETORNO)}</div></div>`:''}
+      ${s.PROVEEDOR?`<div class="field-group"><div class="field-label">Proveedor</div><div class="field-value">${esc(s.PROVEEDOR)}</div></div>`:''}
+      ${s.DUREZA?`<div class="field-group"><div class="field-label">Dureza / Trat.</div><div class="field-value">${esc(s.DUREZA)}</div></div>`:''}
+      ${s.DIAS?`<div class="field-group"><div class="field-label">Días estimados</div><div class="field-value">${esc(String(s.DIAS))}</div></div>`:''}
     </div>
-    <div class="field-group"><div class="field-label">Descripción</div><div class="field-value">${esc(s.DESCRIPCION||'—')}</div></div>
-    <div class="field-group"><div class="field-label">Dureza / Trat.</div><div class="field-value">${esc(s.DUREZA||'—')}</div></div>
-    <div class="field-group"><div class="field-label">Días</div><div class="field-value">${esc(String(s.DIAS||'—'))}</div></div>
-    <div class="field-group"><div class="field-label">Solicitante</div><div class="field-value">${esc(s.SOLICITANTE||'—')}</div></div>
+    <div class="field-group"><div class="field-label">Descripción / Observaciones</div><div class="field-value">${esc(descripcion)}</div></div>
+    ${s.PDF_SERV?`<div class="field-group"><div class="field-label">PDF Servicio</div><div class="field-value" style="font-size:11px;color:var(--accent)">${esc(s.PDF_SERV)}</div></div>`:''}
   `;
-  openDetail('Solicitud Externa',html);
+  openDetail(`Solicitud Externa — OP-${s.OP||'—'}`,html);
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -1692,8 +1754,8 @@ function detailConformidad(id){
 function abrirModalTemple(idqr){
   const op=(DB.produccion||[]).find(o=>String(o.IDQR||o.OP)===String(idqr));
   const svcs=(DB.servicios||[]).filter(s=>{
-    const n=String(s['SERVICIO EXTERNO']||s.NOMBRE||'').toUpperCase();
-    return n.includes('TEMPLE')||n.includes('TRATAMIENTO')||n.includes('CALOR');
+    const n=String(s.SERVICIO||s['SERVICIO EXTERNO']||s.NOMBRE||'').toUpperCase();
+    return n.includes('TEMPLE')||n.includes('TRATAMIENTO')||n.includes('CALOR')||n.includes('BONIFICADO')||n.includes('TEMPERATURA');
   });
 
   document.getElementById('modal-temple-body').innerHTML=`
@@ -1713,7 +1775,7 @@ function abrirModalTemple(idqr){
       <label class="form-label">Proveedor de Temple</label>
       <select class="form-select" id="tmp-proveedor">
         <option value="">— Seleccionar proveedor —</option>
-        ${svcs.map(s=>`<option value="${esc(s['SERVICIO EXTERNO']||s.NOMBRE||'')}">${esc(s['SERVICIO EXTERNO']||s.NOMBRE||'')}</option>`).join('')}
+        ${svcs.map(s=>`<option value="${esc(s.SERVICIO||s['SERVICIO EXTERNO']||s.NOMBRE||'')}">${esc(s.SERVICIO||s['SERVICIO EXTERNO']||s.NOMBRE||'')}</option>`).join('')}
         <option value="OTRO">Otro (escribir abajo)</option>
       </select>
       <input class="form-input" type="text" id="tmp-proveedor-otro" style="margin-top:6px" placeholder="Nombre del proveedor si no está en la lista">
@@ -1806,6 +1868,15 @@ function _abrirDocParaImprimir(html, nombre){
 
 // PDF SOLICITUD EXTERNA
 function _imprimirSolicitud(s, op){
+  // Normalizar campos — compatible con registros AppSheet y registros propios
+  const solId      = s.ID_SOLICITUD||s.ID||s.NUMERO||'—';
+  const solFecha   = s.FECHA_SOLICITUD||s.FECHA||'';
+  const solServicio= s.SERVICIO||s['TIPO DE SERVICIO']||'—';
+  const solColabor = s.COLABORADOR||s.SOLICITANTE||'—';
+  const solDesc    = s.DESCRIPCION||s.OBSERVACIONES||'—';
+  const solProv    = s.PROVEEDOR||'—';
+  const solDureza  = s.DUREZA||'—';
+  const solDias    = s.DIAS||'—';
   const html=`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
   <title>SOL-EXT-${s.OP||''}</title>
   <style>
@@ -1826,21 +1897,21 @@ function _imprimirSolicitud(s, op){
   <div class="sub">Metalmecánica Avanzada · NIT: 900763241-7 · Cali, Colombia</div>
   <h2>SOLICITUD DE SERVICIO EXTERNO</h2>
   <table class="hdr"><tr>
-    <td><b>N° Solicitud:</b> ${esc(s.ID_SOLICITUD||'—')}</td>
-    <td><b>Fecha:</b> ${fmtDate(s.FECHA_SOLICITUD)}</td>
+    <td><b>N° Solicitud:</b> ${esc(String(solId))}</td>
+    <td><b>Fecha:</b> ${fmtDate(solFecha)}</td>
     <td><b>OP:</b> OP-${esc(String(s.OP||'—'))}</td>
     <td><b>Item:</b> ${esc(String(s.ITEM||'—'))}</td>
   </tr></table>
   <table>
     <thead><tr><th colspan="2">DATOS DEL SERVICIO</th></tr></thead>
     <tbody>
-      <tr><td style="width:30%"><b>Servicio</b></td><td>${esc(s.SERVICIO||'—')}</td></tr>
-      <tr><td><b>Proveedor</b></td><td>${esc(s.PROVEEDOR||'—')}</td></tr>
-      <tr><td><b>Descripción</b></td><td>${esc(s.DESCRIPCION||'—')}</td></tr>
-      <tr><td><b>Dureza / Tratamiento</b></td><td>${esc(s.DUREZA||'—')}</td></tr>
-      <tr><td><b>Días estimados</b></td><td>${esc(String(s.DIAS||'—'))}</td></tr>
-      <tr><td><b>Fecha envío</b></td><td>${fmtDate(s.FECHA_ENVIO)}</td></tr>
-      <tr><td><b>Fecha retorno estimada</b></td><td>${fmtDate(s.FECHA_RETORNO)}</td></tr>
+      <tr><td style="width:30%"><b>Servicio</b></td><td>${esc(solServicio)}</td></tr>
+      <tr><td><b>Proveedor / Colaborador</b></td><td>${esc(solProv!=='—'?solProv:solColabor)}</td></tr>
+      <tr><td><b>Descripción</b></td><td>${esc(solDesc)}</td></tr>
+      <tr><td><b>Dureza / Tratamiento</b></td><td>${esc(solDureza)}</td></tr>
+      <tr><td><b>Días estimados</b></td><td>${esc(String(solDias))}</td></tr>
+      <tr><td><b>Fecha envío</b></td><td>${fmtDate(s.FECHA_ENVIO||s.FECHA||'')}</td></tr>
+      <tr><td><b>Fecha retorno estimada</b></td><td>${fmtDate(s.FECHA_RETORNO||'')}</td></tr>
     </tbody>
   </table>
   ${op?`<table>
@@ -1854,7 +1925,7 @@ function _imprimirSolicitud(s, op){
   </table>`:''}
   ${s.OBSERVACIONES?`<table><tr><td><b>Observaciones:</b> ${esc(s.OBSERVACIONES)}</td></tr></table>`:''}
   <div class="firm">
-    <div class="firm-line">Solicitado por: ${esc(s.SOLICITANTE||'—')}<br>Firma</div>
+    <div class="firm-line">Solicitado por: ${esc(solColabor)}<br>Firma</div>
     <div class="firm-line">Recibido por proveedor<br>Firma / Sello</div>
   </div>
   </body></html>`;
@@ -1970,14 +2041,143 @@ function _imprimirReproceso(r, op){
   _abrirDocParaImprimir(html,`REPROCESO-OP${r.OP||''}.pdf`);
 }
 
-// PDF CERTIFICADO CONFORMIDAD (reutiliza el del ERP)
+// PDF CERTIFICADO CONFORMIDAD
 function abrirPDFConformidad(idqr, confId, esConformidad=false){
   const op=idqr?(DB.produccion||[]).find(o=>String(o.IDQR||o.OP)===String(idqr)):null;
   const c=confId?(DB.conformidades||[]).find(x=>String(x.ID_CONFORMIDAD||x['CERTIFICADO NÚMERO']||'')===String(confId)):null;
-  const src=op||c||{};
-  toast('Abriendo PDF… (integra con tu GAS de conformidad)');
-  // En producción: llamar al mismo endpoint de PDF que usa el ERP
-  // window.open(`${API}?action=getPDFConformidad&id=${encodeURIComponent(confId||idqr)}`, '_blank');
+  const src=c||op||{};
+
+  // Normalizar campos (soporta nombres de AppSheet y nombres cortos)
+  const certNum  = esc(src['CERTIFICADO NÚMERO']||src.ID_CONFORMIDAD||confId||idqr||'—');
+  const opNum    = esc(String(src['#OP']||src.OP||'—'));
+  const cliente  = esc(src.CLIENTE||src.EMPRESA||'—');
+  const cotiz    = esc(String(src.COTIZACION||'—'));
+  const fEmision = fmtDate(src['FECHA DE EMISIÓN']||src.FECHA||'');
+  const fFabric  = fmtDate(src['FECHA DE FABRICACIÓN']||src['FECHA FABRICACION']||'');
+  const ref      = esc(src['REFERENCIA PRODUCTO']||src.REFERENCIA||'—');
+  const cant     = esc(String(src.CANTIDAD||'—'));
+  const obs      = esc(src.OBSERVACIONES||src.OBSERVACION||'');
+
+  if(esConformidad){
+    // ── CERTIFICADO DE CONFORMIDAD (verde, formal) ──────────────
+    const html=`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+    <title>CONFORMIDAD-${certNum}</title>
+    <style>
+      body{font-family:Arial,sans-serif;font-size:10px;color:#111;margin:28px}
+      .header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px}
+      .logo{font-weight:900;font-size:20px;color:#1a3a6b}
+      .sub{font-size:9px;color:#555;margin-top:2px}
+      .cert-box{border:2px solid #16a34a;border-radius:8px;padding:10px 16px;text-align:right}
+      .cert-label{font-size:8px;color:#16a34a;font-weight:700;text-transform:uppercase}
+      .cert-num{font-size:18px;font-weight:900;color:#16a34a}
+      h2{color:#16a34a;font-size:13px;text-align:center;border:2px solid #16a34a;
+        padding:8px;border-radius:6px;margin:0 0 16px;letter-spacing:.5px;background:#f0fdf4}
+      .grid{display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid #ccc;margin-bottom:14px}
+      .grid-cell{padding:8px 10px;border-bottom:1px solid #ccc;border-right:1px solid #ccc}
+      .grid-cell:nth-child(2n){border-right:none}
+      .grid-cell.full{grid-column:1/-1;border-right:none}
+      .grid-label{font-size:8px;color:#666;font-weight:700;text-transform:uppercase;margin-bottom:2px}
+      .grid-value{font-size:12px;font-weight:700;color:#1a3a6b}
+      .declare{background:#f0fdf4;border:1px solid #86efac;border-radius:6px;
+        padding:12px 14px;margin-bottom:14px;font-size:10px;line-height:1.6;color:#166534}
+      .firm{margin-top:44px;display:grid;grid-template-columns:1fr 1fr;gap:50px}
+      .firm-line{border-top:1px solid #333;padding-top:4px;text-align:center;font-size:9px;color:#555}
+      .seal{text-align:center;margin-top:24px;font-size:9px;color:#aaa}
+      @media print{body{margin:12px}}
+    </style></head><body>
+    <div class="header">
+      <div>
+        <div class="logo">✅ GRUPO WEDM</div>
+        <div class="sub">Metalmecánica Avanzada · NIT: 900763241-7 · Cali, Colombia</div>
+        <div class="sub">Tel. +57 310 000 0000 · grupowedm@gmail.com</div>
+      </div>
+      <div class="cert-box">
+        <div class="cert-label">Certificado N°</div>
+        <div class="cert-num">${certNum}</div>
+      </div>
+    </div>
+    <h2>CERTIFICADO DE CONFORMIDAD</h2>
+    <div class="grid">
+      <div class="grid-cell"><div class="grid-label">Orden de Producción</div><div class="grid-value">OP-${opNum}</div></div>
+      <div class="grid-cell"><div class="grid-label">Cliente</div><div class="grid-value">${cliente}</div></div>
+      <div class="grid-cell"><div class="grid-label">Cotización</div><div class="grid-value">${cotiz}</div></div>
+      <div class="grid-cell"><div class="grid-label">Fecha de Emisión</div><div class="grid-value">${fEmision}</div></div>
+      <div class="grid-cell full"><div class="grid-label">Referencia / Producto</div><div class="grid-value">${ref}</div></div>
+      <div class="grid-cell"><div class="grid-label">Cantidad</div><div class="grid-value">${cant} uds</div></div>
+      <div class="grid-cell"><div class="grid-label">Fecha de Fabricación</div><div class="grid-value">${fFabric}</div></div>
+    </div>
+    <div class="declare">
+      <b>GRUPO WEDM S.A.S.</b> certifica que los productos relacionados en el presente documento
+      fueron fabricados bajo los estándares de calidad establecidos por la empresa, cumpliendo con
+      las especificaciones técnicas requeridas por el cliente, los procesos internos de control y
+      los criterios de aceptación definidos para la orden de producción <b>OP-${opNum}</b>.
+      ${obs?`<br><br><b>Observaciones:</b> ${obs}`:''}
+    </div>
+    <div class="firm">
+      <div class="firm-line">Director de Calidad<br>GRUPO WEDM<br>Firma / Sello</div>
+      <div class="firm-line">Representante Legal<br>GRUPO WEDM<br>Firma</div>
+    </div>
+    <div class="seal">Documento generado el ${new Date().toLocaleDateString('es-CO',{day:'2-digit',month:'long',year:'numeric'})} · GRUPO WEDM · NIT 900763241-7</div>
+    </body></html>`;
+    _abrirDocParaImprimir(html,`CONFORMIDAD-${certNum}.pdf`);
+
+  } else {
+    // ── HOJA DE CALIDAD / RESUMEN (azul, operativo) ─────────────
+    const html=`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+    <title>CALIDAD-${certNum}</title>
+    <style>
+      body{font-family:Arial,sans-serif;font-size:10px;color:#111;margin:20px}
+      .logo{font-weight:900;font-size:18px;color:#1a3a6b}
+      .sub{font-size:9px;color:#555;margin-bottom:14px}
+      h2{color:#1a3a6b;font-size:13px;text-align:center;border-bottom:2px solid #1a3a6b;
+        padding-bottom:6px;margin:10px 0}
+      .grid{display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid #ccc;margin-bottom:12px}
+      .grid-cell{padding:8px 10px;border-bottom:1px solid #ccc;border-right:1px solid #ccc}
+      .grid-cell:nth-child(2n){border-right:none}
+      .grid-cell.full{grid-column:1/-1;border-right:none}
+      .grid-label{font-size:8px;color:#666;font-weight:700;text-transform:uppercase;margin-bottom:2px}
+      .grid-value{font-size:12px;font-weight:700;color:#1a3a6b}
+      .obs{border:1px solid #ccc;padding:10px;margin-bottom:12px;min-height:36px;border-radius:4px}
+      .check-table{width:100%;border-collapse:collapse;margin-bottom:12px}
+      .check-table th{background:#1a3a6b;color:#fff;padding:6px 8px;font-size:9px;text-align:left}
+      .check-table td{border:1px solid #ccc;padding:6px 8px;font-size:9px}
+      .check-table tr:nth-child(even) td{background:#f8fafc}
+      .firm{margin-top:40px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:30px}
+      .firm-line{border-top:1px solid #333;padding-top:4px;text-align:center;font-size:9px;color:#555}
+      @media print{body{margin:8px}}
+    </style></head><body>
+    <div class="logo">🏅 GRUPO WEDM</div>
+    <div class="sub">Metalmecánica Avanzada · NIT: 900763241-7 · Cali, Colombia</div>
+    <h2>CONTROL DE CALIDAD — REF. ${certNum}</h2>
+    <div class="grid">
+      <div class="grid-cell"><div class="grid-label">Certificado / Ref.</div><div class="grid-value">${certNum}</div></div>
+      <div class="grid-cell"><div class="grid-label">OP</div><div class="grid-value">OP-${opNum}</div></div>
+      <div class="grid-cell"><div class="grid-label">Cliente</div><div class="grid-value">${cliente}</div></div>
+      <div class="grid-cell"><div class="grid-label">Cotización</div><div class="grid-value">${cotiz}</div></div>
+      <div class="grid-cell full"><div class="grid-label">Referencia Producto</div><div class="grid-value">${ref}</div></div>
+      <div class="grid-cell"><div class="grid-label">Cantidad</div><div class="grid-value">${cant} uds</div></div>
+      <div class="grid-cell"><div class="grid-label">F. Emisión</div><div class="grid-value">${fEmision}</div></div>
+      <div class="grid-cell"><div class="grid-label">F. Fabricación</div><div class="grid-value">${fFabric}</div></div>
+    </div>
+    <table class="check-table">
+      <thead><tr><th>Criterio de Inspección</th><th>Resultado</th><th>Conforme</th><th>Inspector</th></tr></thead>
+      <tbody>
+        <tr><td>Dimensiones</td><td></td><td style="text-align:center">☐ Sí &nbsp; ☐ No</td><td></td></tr>
+        <tr><td>Acabado superficial</td><td></td><td style="text-align:center">☐ Sí &nbsp; ☐ No</td><td></td></tr>
+        <tr><td>Material / Acero</td><td></td><td style="text-align:center">☐ Sí &nbsp; ☐ No</td><td></td></tr>
+        <tr><td>Tolerancias</td><td></td><td style="text-align:center">☐ Sí &nbsp; ☐ No</td><td></td></tr>
+        <tr><td>Cantidad fabricada</td><td>${cant}</td><td style="text-align:center">☐ Sí &nbsp; ☐ No</td><td></td></tr>
+      </tbody>
+    </table>
+    ${obs?`<div><b>Observaciones:</b><div class="obs">${obs}</div></div>`:`<div><b>Observaciones:</b><div class="obs"></div></div>`}
+    <div class="firm">
+      <div class="firm-line">Inspector de Calidad<br>Firma</div>
+      <div class="firm-line">Producción<br>Firma</div>
+      <div class="firm-line">Aprobado por<br>Firma</div>
+    </div>
+    </body></html>`;
+    _abrirDocParaImprimir(html,`CALIDAD-${certNum}.pdf`);
+  }
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -1991,7 +2191,7 @@ async function refreshCurrent(){
     const r=await GET('getControlProduccion',{modo:'todo'});
     DB.produccion=Array.isArray(r)?r:(r?.data??[]);
     cSet('produccion',DB.produccion);
-    try{ const rs=await GET_QA('getSolicitudesExternas'); DB.solicitudes=Array.isArray(rs)?rs:(rs?.data??[]); }catch(e){}
+    try{ const rs=await GET_QA('getSolicitudesExternas'); DB.solicitudes=Array.isArray(rs)?rs:(rs?.data??[]); DB.servicios=_extraerCatalogoServicios(DB.solicitudes); }catch(e){}
     try{ const rc=await GET_QA('getConformidades'); DB.conformidades=Array.isArray(rc)?rc:(rc?.data??[]); }catch(e){}
     _updateBadges();
     toast('✅ Datos actualizados');
