@@ -1,0 +1,1851 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>CALIDAD — GRUPO WEDM</title>
+<style>
+:root{
+  --primary:#1a3a6b;--accent:#2563eb;--success:#16a34a;--danger:#dc2626;
+  --warn:#d97706;--info:#0891b2;--bg:#f1f5f9;--card:#fff;--card2:#f8fafc;
+  --border:#e2e8f0;--text:#1e293b;--muted:#64748b;--radius:10px;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+
+/* ── SPLASH ── */
+#splash{position:fixed;inset:0;background:var(--primary);display:flex;
+  flex-direction:column;align-items:center;justify-content:center;z-index:9999;
+  transition:opacity .4s}
+#splash.hide{opacity:0;pointer-events:none}
+.splash-logo{font-size:36px;font-weight:900;color:#fff;letter-spacing:-1px;margin-bottom:4px}
+.splash-sub{color:rgba(255,255,255,.6);font-size:13px;margin-bottom:32px;letter-spacing:1px}
+.splash-track{width:200px;height:4px;background:rgba(255,255,255,.2);border-radius:4px;overflow:hidden}
+.splash-bar{height:100%;background:#60a5fa;border-radius:4px;transition:width .3s;width:0}
+.splash-step{color:rgba(255,255,255,.5);font-size:11px;margin-top:10px;text-align:center}
+
+/* ── PIN ── */
+#pin-screen{position:fixed;inset:0;background:var(--primary);display:flex;
+  flex-direction:column;align-items:center;justify-content:center;z-index:9998}
+#pin-screen.hidden{display:none}
+.pin-title{color:#fff;font-size:20px;font-weight:700;margin-bottom:6px}
+.pin-sub{color:rgba(255,255,255,.5);font-size:13px;margin-bottom:28px}
+.pin-dots{display:flex;gap:12px;margin-bottom:28px}
+.pin-dot{width:14px;height:14px;border-radius:50%;background:rgba(255,255,255,.25);
+  transition:background .2s}
+.pin-dot.filled{background:#60a5fa}
+.pin-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;width:220px}
+.pin-btn{background:rgba(255,255,255,.12);color:#fff;border:none;border-radius:12px;
+  padding:18px;font-size:22px;font-weight:700;cursor:pointer;transition:background .15s}
+.pin-btn:active{background:rgba(255,255,255,.25)}
+.pin-roles{display:flex;flex-direction:column;gap:8px;margin-top:16px;width:220px}
+.pin-role-btn{background:rgba(255,255,255,.08);color:rgba(255,255,255,.7);border:1px solid rgba(255,255,255,.15);
+  border-radius:8px;padding:10px 14px;font-size:13px;cursor:pointer;text-align:left;transition:background .15s}
+.pin-role-btn:hover{background:rgba(255,255,255,.15)}
+
+/* ── HEADER ── */
+#header{background:var(--primary);color:#fff;padding:0 16px;height:56px;
+  display:flex;align-items:center;justify-content:space-between;
+  position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.15)}
+.header-title{font-size:16px;font-weight:700;display:flex;align-items:center;gap:8px}
+.header-actions{display:flex;gap:8px}
+.icon-btn{background:rgba(255,255,255,.12);border:none;color:#fff;
+  width:36px;height:36px;border-radius:8px;cursor:pointer;display:flex;
+  align-items:center;justify-content:center;font-size:16px;transition:background .15s}
+.icon-btn:active{background:rgba(255,255,255,.25)}
+.spinning{animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── NAV ── */
+#nav{background:#fff;border-bottom:1px solid var(--border);
+  display:flex;overflow-x:auto;position:sticky;top:56px;z-index:99;
+  scrollbar-width:none}
+#nav::-webkit-scrollbar{display:none}
+.nav-item{flex:none;padding:12px 16px;font-size:12px;font-weight:600;
+  color:var(--muted);border-bottom:2px solid transparent;cursor:pointer;
+  white-space:nowrap;transition:color .15s,border-color .15s}
+.nav-item.active{color:var(--primary);border-color:var(--primary)}
+
+/* ── CONTENT ── */
+#content{padding:16px;max-width:900px;margin:0 auto;padding-bottom:80px}
+
+/* ── CARDS ── */
+.card{background:var(--card);border-radius:var(--radius);box-shadow:0 1px 4px rgba(0,0,0,.06);
+  margin-bottom:12px;overflow:hidden;border:1px solid var(--border)}
+.card-header{padding:14px 16px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between}
+.card-title{font-size:14px;font-weight:700;color:var(--primary)}
+.card-body{padding:14px 16px}
+
+/* ── LISTA OPs ── */
+.op-row{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+  margin-bottom:10px;padding:14px 16px;cursor:pointer;transition:box-shadow .15s;
+  display:flex;align-items:center;gap:12px}
+.op-row:active{box-shadow:0 0 0 2px var(--accent)}
+.op-badge{background:var(--primary);color:#fff;border-radius:6px;
+  padding:4px 8px;font-size:11px;font-weight:700;white-space:nowrap}
+.op-info{flex:1;min-width:0}
+.op-title{font-size:13px;font-weight:700;color:var(--text);white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+.op-sub{font-size:11px;color:var(--muted);margin-top:2px}
+.op-status{font-size:18px}
+
+/* ── SEMÁFORO ── */
+.sem{display:inline-block;padding:3px 8px;border-radius:20px;font-size:10px;
+  font-weight:700;letter-spacing:.3px}
+.sem-ep{background:#dbeafe;color:#1d4ed8}
+.sem-te{background:#fef3c7;color:#92400e}
+.sem-ok{background:#dcfce7;color:#166534}
+.sem-pause{background:#fee2e2;color:#991b1b}
+
+/* ── DETAIL PANEL ── */
+#detail-panel{position:fixed;inset:0;background:#fff;z-index:200;
+  transform:translateX(100%);transition:transform .25s cubic-bezier(.4,0,.2,1);
+  display:flex;flex-direction:column;overflow:hidden}
+#detail-panel.open{transform:translateX(0)}
+.detail-header{background:var(--primary);color:#fff;padding:0 16px;height:56px;
+  display:flex;align-items:center;gap:12px;flex-shrink:0}
+.detail-back{background:rgba(255,255,255,.15);border:none;color:#fff;
+  width:36px;height:36px;border-radius:8px;cursor:pointer;font-size:18px;
+  display:flex;align-items:center;justify-content:center}
+.detail-title{font-size:15px;font-weight:700;flex:1}
+.detail-body{flex:1;overflow-y:auto;padding:16px;padding-bottom:80px}
+
+/* ── QUICK ACTIONS ── */
+.qa-actions{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+.qa-btn{display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;
+  background:var(--card2);border:1px solid var(--border);border-radius:10px;
+  padding:12px 14px;min-width:72px;transition:background .15s}
+.qa-btn:active{background:#e2e8f0}
+.qa-btn-icon{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center;font-size:18px;background:var(--primary);color:#fff}
+.qa-btn-label{font-size:10px;font-weight:600;color:var(--muted);text-align:center;line-height:1.2}
+
+/* ── FIELDS ── */
+.field-group{margin-bottom:16px}
+.field-label{font-size:10px;font-weight:700;color:var(--muted);
+  letter-spacing:.5px;text-transform:uppercase;margin-bottom:4px}
+.field-value{font-size:14px;color:var(--text);font-weight:500}
+.fields-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}
+
+/* ── FORM ── */
+.form-section{margin-bottom:20px}
+.form-section-title{font-size:12px;font-weight:700;color:var(--primary);
+  text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px;
+  padding-bottom:6px;border-bottom:2px solid var(--primary)}
+.form-field{margin-bottom:12px}
+.form-label{font-size:11px;font-weight:600;color:var(--muted);
+  display:block;margin-bottom:4px}
+.form-input{width:100%;border:1px solid var(--border);border-radius:8px;
+  padding:10px 12px;font-size:14px;color:var(--text);background:#fff;
+  outline:none;transition:border-color .15s}
+.form-input:focus{border-color:var(--accent)}
+.form-select{width:100%;border:1px solid var(--border);border-radius:8px;
+  padding:10px 12px;font-size:14px;color:var(--text);background:#fff;
+  outline:none;appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2364748b' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 12px center}
+textarea.form-input{resize:vertical;min-height:80px}
+
+/* ── SPIN ROW ── */
+.spin-row{display:flex;align-items:center;gap:8px}
+.spin-btn{width:36px;height:36px;border:1px solid var(--border);background:#fff;
+  border-radius:8px;font-size:18px;cursor:pointer;display:flex;align-items:center;
+  justify-content:center;color:var(--primary);font-weight:700}
+.spin-input{flex:1;border:1px solid var(--border);border-radius:8px;
+  padding:8px 12px;font-size:15px;text-align:center}
+
+/* ── KC TABLA ── */
+.kc-table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px}
+.kc-table th{background:var(--primary);color:#fff;padding:6px 8px;text-align:center;font-size:11px}
+.kc-table td{border:1px solid var(--border);padding:6px 8px;text-align:center}
+.kc-table tr:nth-child(even) td{background:var(--card2)}
+
+/* ── RESULTADO INSPECCION ── */
+.result-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+.result-btn{border:2px solid var(--border);border-radius:10px;padding:14px;
+  text-align:center;cursor:pointer;transition:all .15s;background:#fff}
+.result-btn.active-conforme{border-color:var(--success);background:#f0fdf4}
+.result-btn.active-noconforme{border-color:var(--danger);background:#fef2f2}
+.result-btn.active-reproceso{border-color:var(--warn);background:#fffbeb}
+.result-btn.active-derogado{border-color:var(--info);background:#f0f9ff}
+.result-icon{font-size:24px;margin-bottom:4px}
+.result-label{font-size:12px;font-weight:700;color:var(--text)}
+
+/* ── PROCESO ROW ── */
+.proc-row{display:flex;align-items:center;gap:10px;padding:10px 0;
+  border-bottom:1px solid var(--border)}
+.proc-num{width:24px;height:24px;border-radius:50%;background:var(--primary);
+  color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.proc-info{flex:1;min-width:0}
+.proc-maq{font-size:13px;font-weight:600}
+.proc-cota{font-size:11px;color:var(--muted)}
+.proc-vb{width:80px;flex-shrink:0}
+.vb-toggle{width:100%;padding:6px;border-radius:6px;border:1px solid var(--border);
+  background:#fff;font-size:11px;font-weight:700;cursor:pointer;text-align:center;
+  transition:all .15s}
+.vb-toggle.ok{background:var(--success);color:#fff;border-color:var(--success)}
+
+/* ── FOTO ── */
+.foto-box{width:100%;aspect-ratio:4/3;border:2px dashed var(--border);
+  border-radius:10px;display:flex;align-items:center;justify-content:center;
+  background:var(--card2);overflow:hidden;cursor:pointer;position:relative}
+.foto-box img{width:100%;height:100%;object-fit:cover}
+.foto-placeholder{display:flex;flex-direction:column;align-items:center;
+  gap:8px;color:var(--muted)}
+
+/* ── ETAPAS ── */
+.etapas-row{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;
+  scrollbar-width:none;margin-bottom:16px}
+.etapas-row::-webkit-scrollbar{display:none}
+.etapa-chip{flex:none;padding:5px 10px;border-radius:20px;font-size:10px;
+  font-weight:700;border:1.5px solid var(--border);background:#fff;color:var(--muted)}
+.etapa-chip.done{background:var(--success);color:#fff;border-color:var(--success)}
+.etapa-chip.pending{background:var(--warn);color:#fff;border-color:var(--warn)}
+.etapa-chip.current{background:var(--accent);color:#fff;border-color:var(--accent)}
+
+/* ── FAB ── */
+#fab{position:fixed;bottom:24px;right:24px;width:56px;height:56px;
+  background:var(--accent);color:#fff;border:none;border-radius:50%;
+  font-size:28px;cursor:pointer;box-shadow:0 4px 16px rgba(37,99,235,.4);
+  display:flex;align-items:center;justify-content:center;z-index:150;
+  transition:transform .15s}
+#fab:active{transform:scale(.93)}
+#fab.hidden{display:none}
+
+/* ── MODAL ── */
+.modal-ov{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:300;
+  display:none;align-items:flex-end}
+.modal-ov.open{display:flex}
+.modal-box{background:#fff;border-radius:20px 20px 0 0;width:100%;
+  max-height:90vh;overflow-y:auto;padding:20px 16px 32px}
+.modal-title{font-size:16px;font-weight:700;color:var(--primary);margin-bottom:16px}
+.modal-actions{display:flex;gap:10px;margin-top:16px}
+.btn{padding:12px 20px;border-radius:10px;font-size:14px;font-weight:700;
+  border:none;cursor:pointer;flex:1;transition:opacity .15s}
+.btn:active{opacity:.8}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-success{background:var(--success);color:#fff}
+.btn-danger{background:var(--danger);color:#fff}
+.btn-ghost{background:var(--card2);color:var(--text);border:1px solid var(--border)}
+
+/* ── TOAST ── */
+#toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);
+  background:#1e293b;color:#fff;padding:10px 20px;border-radius:30px;
+  font-size:13px;font-weight:600;z-index:999;display:none;
+  box-shadow:0 4px 16px rgba(0,0,0,.25);white-space:nowrap;max-width:90vw;
+  text-align:center}
+#toast.error{background:var(--danger)}
+#toast.ok{background:var(--success)}
+
+/* ── BUSY ── */
+#busy-ov{position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:500;
+  display:none;align-items:center;justify-content:center}
+#busy-ov.show{display:flex}
+.busy-box{background:#fff;border-radius:14px;padding:24px 32px;
+  display:flex;flex-direction:column;align-items:center;gap:12px}
+.busy-spinner{width:36px;height:36px;border:3px solid var(--border);
+  border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
+.busy-text{font-size:13px;font-weight:600;color:var(--muted)}
+
+/* ── EMPTY ── */
+.empty{text-align:center;padding:60px 20px;color:var(--muted)}
+.empty-icon{font-size:48px;margin-bottom:12px}
+.empty-text{font-size:14px}
+
+/* ── BADGE COUNT ── */
+.badge-count{background:var(--danger);color:#fff;border-radius:10px;
+  padding:1px 6px;font-size:10px;font-weight:700;margin-left:4px}
+
+/* ── SEARCH ── */
+.search-bar{display:flex;align-items:center;gap:8px;background:#fff;
+  border:1px solid var(--border);border-radius:10px;padding:0 12px;margin-bottom:12px}
+.search-bar input{flex:1;border:none;outline:none;padding:10px 0;font-size:14px}
+.search-bar span{color:var(--muted);font-size:16px}
+
+/* ── SECTION DIVIDER ── */
+.section-divider{font-size:11px;font-weight:700;color:var(--muted);
+  letter-spacing:.5px;text-transform:uppercase;margin:16px 0 8px;
+  display:flex;align-items:center;gap:8px}
+.section-divider::after{content:'';flex:1;height:1px;background:var(--border)}
+
+/* ── PRINT ── */
+@media print{
+  #header,#nav,#fab,#toast,#busy-ov,.modal-ov{display:none!important}
+  #print-area{display:block!important}
+}
+#print-area{display:none}
+
+/* ── TABLA SOLICITUD ── */
+.table-wrap{overflow-x:auto;margin-bottom:12px}
+table.data-table{width:100%;border-collapse:collapse;font-size:12px}
+table.data-table th{background:var(--primary);color:#fff;padding:8px 10px;text-align:left;font-size:11px}
+table.data-table td{border-bottom:1px solid var(--border);padding:8px 10px}
+table.data-table tr:nth-child(even) td{background:var(--card2)}
+table.data-table tr:active td{background:#dbeafe}
+
+/* ── FOTO EXT ── */
+.foto-ext-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+.foto-ext-item{border-radius:8px;overflow:hidden;aspect-ratio:1;
+  background:var(--card2);border:1px solid var(--border)}
+.foto-ext-item img{width:100%;height:100%;object-fit:cover}
+</style>
+</head>
+<body>
+
+<!-- SPLASH -->
+<div id="splash">
+  <div class="splash-logo">🔍 CALIDAD</div>
+  <div class="splash-sub">GRUPO WEDM</div>
+  <div class="splash-track"><div class="splash-bar" id="splash-bar"></div></div>
+  <div class="splash-step" id="splash-step">Iniciando…</div>
+</div>
+
+<!-- PIN -->
+<div id="pin-screen">
+  <div class="pin-title">🔍 Módulo Calidad</div>
+  <div class="pin-sub">Ingresa tu PIN o selecciona rol</div>
+  <div class="pin-dots" id="pin-dots">
+    <div class="pin-dot" id="pd0"></div><div class="pin-dot" id="pd1"></div>
+    <div class="pin-dot" id="pd2"></div><div class="pin-dot" id="pd3"></div>
+  </div>
+  <div class="pin-grid">
+    <button class="pin-btn" onclick="_pinKey('1')">1</button>
+    <button class="pin-btn" onclick="_pinKey('2')">2</button>
+    <button class="pin-btn" onclick="_pinKey('3')">3</button>
+    <button class="pin-btn" onclick="_pinKey('4')">4</button>
+    <button class="pin-btn" onclick="_pinKey('5')">5</button>
+    <button class="pin-btn" onclick="_pinKey('6')">6</button>
+    <button class="pin-btn" onclick="_pinKey('7')">7</button>
+    <button class="pin-btn" onclick="_pinKey('8')">8</button>
+    <button class="pin-btn" onclick="_pinKey('9')">9</button>
+    <button class="pin-btn" onclick="_pinKey('del')" style="font-size:16px">⌫</button>
+    <button class="pin-btn" onclick="_pinKey('0')">0</button>
+    <button class="pin-btn" onclick="_pinKey('ok')" style="font-size:14px;background:rgba(96,165,250,.25)">OK</button>
+  </div>
+  <div class="pin-roles">
+    <button class="pin-role-btn" onclick="_loginRol('inspector')">🔍 Inspector de Calidad</button>
+    <button class="pin-role-btn" onclick="_loginRol('jefe')">👑 Jefe de Calidad</button>
+    <button class="pin-role-btn" onclick="_loginRol('admin')">⚙️ Administrador</button>
+  </div>
+</div>
+
+<!-- BUSY -->
+<div id="busy-ov"><div class="busy-box">
+  <div class="busy-spinner"></div>
+  <div class="busy-text" id="busy-text">Procesando…</div>
+</div></div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<!-- HEADER -->
+<div id="header" style="display:none">
+  <div class="header-title">🔍 CALIDAD</div>
+  <div class="header-actions">
+    <button class="icon-btn" id="refresh-btn" onclick="refreshCurrent()" title="Actualizar">↻</button>
+    <button class="icon-btn" onclick="_logout()" title="Salir">🚪</button>
+  </div>
+</div>
+
+<!-- NAV -->
+<div id="nav" style="display:none">
+  <div class="nav-item" data-mod="pendiente" onclick="nav('pendiente')">⏳ Pendiente Calidad <span class="badge-count" id="badge-pendiente"></span></div>
+  <div class="nav-item" data-mod="externo" onclick="nav('externo')">🚚 Servicio Externo <span class="badge-count" id="badge-externo"></span></div>
+  <div class="nav-item" data-mod="despacho" onclick="nav('despacho')">📦 Pendiente Despacho <span class="badge-count" id="badge-despacho"></span></div>
+  <div class="nav-item" data-mod="solicitudes" onclick="nav('solicitudes')">📋 Solicitudes Externas</div>
+  <div class="nav-item" data-mod="conformidad" onclick="nav('conformidad')">🏅 Certificados</div>
+</div>
+
+<!-- CONTENT -->
+<div id="content" style="display:none"></div>
+
+<!-- FAB -->
+<button id="fab" class="hidden" onclick="fabAction()">+</button>
+
+<!-- DETAIL PANEL -->
+<div id="detail-panel">
+  <div class="detail-header">
+    <button class="detail-back" onclick="closeDetail()">←</button>
+    <div class="detail-title" id="detail-title">Detalle</div>
+    <div style="display:flex;gap:8px" id="detail-header-actions"></div>
+  </div>
+  <div class="detail-body" id="detail-body"></div>
+</div>
+
+<!-- MODALES -->
+<div class="modal-ov" id="modal-qa"><div class="modal-box">
+  <div class="modal-title" id="modal-qa-title">Formato QA</div>
+  <div id="modal-qa-body"></div>
+</div></div>
+
+<div class="modal-ov" id="modal-reproceso"><div class="modal-box">
+  <div class="modal-title">⚠️ Reportar Reproceso</div>
+  <div id="modal-reproceso-body"></div>
+</div></div>
+
+<div class="modal-ov" id="modal-temple"><div class="modal-box">
+  <div class="modal-title">🔥 Hoja de Envío a Temple</div>
+  <div id="modal-temple-body"></div>
+</div></div>
+
+<div class="modal-ov" id="modal-solicitud"><div class="modal-box">
+  <div class="modal-title" id="modal-solicitud-title">📋 Nueva Solicitud Externa</div>
+  <div id="modal-solicitud-body"></div>
+</div></div>
+
+<div class="modal-ov" id="modal-confirm"><div class="modal-box">
+  <div class="modal-title" id="modal-confirm-title">Confirmar</div>
+  <div id="modal-confirm-body" style="font-size:14px;color:var(--muted);margin-bottom:16px"></div>
+  <div class="modal-actions">
+    <button class="btn btn-ghost" onclick="closeModal('modal-confirm')">Cancelar</button>
+    <button class="btn btn-primary" id="modal-confirm-ok">Confirmar</button>
+  </div>
+</div></div>
+
+<!-- PRINT AREA -->
+<div id="print-area"></div>
+
+<script>
+'use strict';
+// ══════════════════════════════════════════════════════════════
+// CONFIG — ajusta estas URLs a tu despliegue
+// ══════════════════════════════════════════════════════════════
+const API         = 'TU_API_URL_GAS_AQUI'; // mismo GAS que el ERP
+const IMGBB_API_KEY = 'TU_IMGBB_KEY_AQUI';
+
+// ══════════════════════════════════════════════════════════════
+// DB EN MEMORIA
+// ══════════════════════════════════════════════════════════════
+const DB = {};
+const CACHE_TTL  = 30 * 60 * 1000;
+const CACHE_PFX  = 'cal_wedm_';
+
+// ══════════════════════════════════════════════════════════════
+// CACHÉ LOCAL
+// ══════════════════════════════════════════════════════════════
+function cSet(k,d){ try{ localStorage.setItem(CACHE_PFX+k,JSON.stringify({ts:Date.now(),data:d})); }catch(e){} }
+function cGet(k){
+  try{
+    const r=JSON.parse(localStorage.getItem(CACHE_PFX+k)||'null');
+    if(!r||Date.now()-r.ts>CACHE_TTL) return null;
+    return r.data;
+  }catch(e){ return null; }
+}
+function cGetStale(k){ try{ return JSON.parse(localStorage.getItem(CACHE_PFX+k)||'null')?.data||null; }catch(e){ return null; } }
+
+// ══════════════════════════════════════════════════════════════
+// AUTH / PIN
+// ══════════════════════════════════════════════════════════════
+const PINS = { '1234':'inspector', '5678':'jefe', '9999':'admin' };
+const ROLES_LABEL = { inspector:'Inspector Calidad', jefe:'Jefe Calidad', admin:'Administrador' };
+let _SESSION = null;
+let _pinBuffer = '';
+
+function _updatePinDots(){
+  for(let i=0;i<4;i++){
+    document.getElementById('pd'+i)?.classList.toggle('filled', i<_pinBuffer.length);
+  }
+}
+function _pinKey(k){
+  if(k==='del'){ _pinBuffer=_pinBuffer.slice(0,-1); _updatePinDots(); return; }
+  if(k==='ok'){ _pinCheck(); return; }
+  if(_pinBuffer.length>=4) return;
+  _pinBuffer+=k; _updatePinDots();
+  if(_pinBuffer.length===4) setTimeout(_pinCheck,200);
+}
+function _pinCheck(){
+  const rol=PINS[_pinBuffer];
+  if(rol){ _loginRol(rol); }
+  else{ _pinBuffer=''; _updatePinDots(); toast('PIN incorrecto','error'); }
+}
+function _loginRol(rol){
+  _SESSION={rol, nombre:ROLES_LABEL[rol]||rol};
+  try{ localStorage.setItem(CACHE_PFX+'session',JSON.stringify(_SESSION)); }catch(e){}
+  document.getElementById('pin-screen').classList.add('hidden');
+  _initApp();
+}
+function _logout(){
+  localStorage.removeItem(CACHE_PFX+'session');
+  location.reload();
+}
+function _esJefe(){ return _SESSION?.rol==='jefe'||_SESSION?.rol==='admin'; }
+
+// ══════════════════════════════════════════════════════════════
+// HTTP
+// ══════════════════════════════════════════════════════════════
+async function GET(action, params={}){
+  let url=`${API}?action=${action}&_t=${Date.now()}`;
+  Object.keys(params).forEach(k=>{ url+=`&${k}=${encodeURIComponent(params[k])}`; });
+  const r=await fetch(url);
+  const j=await r.json();
+  if(!j.ok) throw new Error(j.error||'Error GAS');
+  return j.data;
+}
+async function POST(action, data={}){
+  showBusy(action);
+  try{
+    const r=await fetch(API,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({action,data})});
+    const j=await r.json();
+    if(!j.ok) throw new Error(j.error||'Error GAS');
+    return j.data;
+  }finally{ hideBusy(); }
+}
+function POST_BG(action, data={}, onError=null){
+  const _send=(retry=false)=>{
+    fetch(API,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({action,data})})
+    .then(r=>r.json())
+    .then(j=>{ if(!j.ok){ if(!retry) setTimeout(()=>_send(true),4000);
+      else{ toast('⚠️ Error: '+j.error,'error'); if(onError) onError(j.error); } } })
+    .catch(e=>{ if(!retry) setTimeout(()=>_send(true),4000);
+      else{ toast('⚠️ Sin conexión','error'); if(onError) onError(e); } });
+  };
+  _send();
+}
+
+// ══════════════════════════════════════════════════════════════
+// BUSY / TOAST
+// ══════════════════════════════════════════════════════════════
+let _busyN=0;
+function showBusy(lbl='Procesando…'){ _busyN++; document.getElementById('busy-text').textContent=lbl; document.getElementById('busy-ov').classList.add('show'); }
+function hideBusy(){ _busyN=Math.max(0,_busyN-1); if(!_busyN) document.getElementById('busy-ov').classList.remove('show'); }
+function toast(msg,type='ok'){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.className=type||''; t.style.display='block';
+  clearTimeout(t._t); t._t=setTimeout(()=>{ t.style.display='none'; },3200);
+}
+
+// ══════════════════════════════════════════════════════════════
+// HELPERS
+// ══════════════════════════════════════════════════════════════
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function fmtDate(v){
+  if(!v) return '—';
+  const s=String(v);
+  if(s.startsWith('#')) return '—';
+  const n=Number(v);
+  if(!isNaN(n)&&n>1000&&n<100000){
+    const d=new Date((n-25569)*86400*1000);
+    return d.toLocaleDateString('es-CO',{day:'2-digit',month:'2-digit',year:'numeric'});
+  }
+  if(s.includes('T')||s.includes('-')){
+    try{ return new Date(s).toLocaleDateString('es-CO',{day:'2-digit',month:'2-digit',year:'numeric'}); }catch(e){}
+  }
+  return s;
+}
+function today(){ return new Date().toISOString().slice(0,10); }
+function normKey(s){ return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[\n\r]+/g,' ').trim().toUpperCase().replace(/\s+/g,' '); }
+function keyFor(op,candidates){
+  const w=candidates.map(normKey);
+  return Object.keys(op).find(k=>w.includes(normKey(k)))||candidates[0];
+}
+function truthy(v){
+  if(v===true||v===1) return true;
+  if(!v) return false;
+  const s=String(v).trim().toUpperCase();
+  return ['TRUE','Y','YES','SI','SÍ','1','X','✓'].includes(s);
+}
+function gv(id){ return document.getElementById(id)?.value?.trim()||''; }
+function gn(id){ return Number(document.getElementById(id)?.value||0); }
+
+// ══════════════════════════════════════════════════════════════
+// ETAPAS (igual que ERP)
+// ══════════════════════════════════════════════════════════════
+const ETAPAS=[
+  {id:'diseno',  doneKeys:['INGENIERIA Y PLANEACIÓN','ING_PLANEACION'], label:'Diseño',    icon:'📐', doneIcon:'✅'},
+  {id:'mp',      doneKeys:['MP\nINSUMOS','MP INSUMOS'],                 label:'MP/Insumos',icon:'🧱', doneIcon:'✅'},
+  {id:'servicio',doneKeys:['SERVICIO EXTERNO'],                         label:'Svc.Ext',   icon:'🚚', doneIcon:'✅'},
+  {id:'entrega', doneKeys:['ENTREGA DE PRODUCCIÓN','ENTREGA DE PRODUCCION'], label:'Entrega',icon:'📦',doneIcon:'✅'},
+  {id:'calidad', doneKeys:['CALIDAD'],                                  label:'Calidad',   icon:'🔍', doneIcon:'✅'},
+  {id:'liberacion',doneKeys:['LIBERACION'],                             label:'Liberación',icon:'🚀', doneIcon:'✅'},
+];
+function etapaDone(op,etapa){
+  if(etapa.doneKeys.some(k=>truthy(op[k]))) return true;
+  const w=etapa.doneKeys.map(normKey);
+  return Object.keys(op).some(rk=>w.includes(normKey(rk))&&truthy(op[rk]));
+}
+function renderEtapas(op){
+  return `<div class="etapas-row">${ETAPAS.map(e=>{
+    const done=etapaDone(op,e);
+    const cls=done?'done':'';
+    return `<div class="etapa-chip ${cls}">${done?e.doneIcon:e.icon} ${e.label}</div>`;
+  }).join('')}</div>`;
+}
+function enExterno(op){ return normKey(op['SEMAFORO AVANCE']||'')==='TRABAJO EXTERNO'; }
+
+// ══════════════════════════════════════════════════════════════
+// NAV / MÓDULOS
+// ══════════════════════════════════════════════════════════════
+let MOD='pendiente';
+function nav(m){
+  MOD=m;
+  document.querySelectorAll('.nav-item').forEach(el=>el.classList.toggle('active',el.dataset.mod===m));
+  const fab=document.getElementById('fab');
+  fab.classList.toggle('hidden', !['solicitudes','conformidad','temple'].includes(m));
+  switch(m){
+    case 'pendiente':  renderPendiente(); break;
+    case 'externo':    renderExterno(); break;
+    case 'despacho':   renderDespacho(); break;
+    case 'solicitudes':renderSolicitudes(); break;
+    case 'conformidad':renderConformidad(); break;
+    default: setContent(`<div class="empty"><div class="empty-icon">🚧</div><div class="empty-text">Módulo no disponible</div></div>`);
+  }
+}
+function setContent(html){ document.getElementById('content').innerHTML=html; }
+function fabAction(){
+  if(MOD==='solicitudes') abrirModalSolicitud();
+  else if(MOD==='conformidad') abrirModalConformidad();
+}
+
+// ══════════════════════════════════════════════════════════════
+// MODALES
+// ══════════════════════════════════════════════════════════════
+function openModal(id){ document.getElementById(id).classList.add('open'); }
+function closeModal(id){ document.getElementById(id).classList.remove('open'); }
+function confirm2(title,body,onOk){
+  document.getElementById('modal-confirm-title').textContent=title;
+  document.getElementById('modal-confirm-body').textContent=body;
+  const btn=document.getElementById('modal-confirm-ok');
+  btn.onclick=()=>{ closeModal('modal-confirm'); onOk(); };
+  openModal('modal-confirm');
+}
+
+// ══════════════════════════════════════════════════════════════
+// DETAIL PANEL
+// ══════════════════════════════════════════════════════════════
+let _currentOp=null;
+function openDetail(title,html,actions=''){
+  document.getElementById('detail-title').textContent=title;
+  document.getElementById('detail-body').innerHTML=html;
+  document.getElementById('detail-header-actions').innerHTML=actions;
+  document.getElementById('detail-panel').classList.add('open');
+}
+function closeDetail(){
+  document.getElementById('detail-panel').classList.remove('open');
+  _currentOp=null;
+}
+
+// ══════════════════════════════════════════════════════════════
+// SPLASH
+// ══════════════════════════════════════════════════════════════
+function setSplash(pct,txt){
+  document.getElementById('splash-bar').style.width=pct+'%';
+  document.getElementById('splash-step').textContent=txt;
+}
+
+// ══════════════════════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════════════════════
+async function _initApp(){
+  document.getElementById('header').style.display='flex';
+  document.getElementById('nav').style.display='flex';
+  document.getElementById('content').style.display='block';
+  setSplash(20,'Cargando órdenes de producción…');
+  try{
+    // Cargar producción
+    const cached=cGet('produccion');
+    if(cached){ DB.produccion=cached; setSplash(50,'Desde caché…'); }
+    else{
+      const r=await GET('getControlProduccion',{modo:'todo'});
+      DB.produccion=Array.isArray(r)?r:(r?.data??[]);
+      cSet('produccion',DB.produccion);
+    }
+    setSplash(60,'Cargando solicitudes externas…');
+    // Cargar solicitudes externas (hoja propia)
+    try{
+      const rs=await GET('getSolicitudesExternas');
+      DB.solicitudes=Array.isArray(rs)?rs:(rs?.data??[]);
+    }catch(e){ DB.solicitudes=[]; }
+    setSplash(75,'Cargando certificados…');
+    // Cargar conformidad desde Bienes y Servicios (hoja CONFORMIDAD en AppSheet / hoja propia)
+    try{
+      const rc=await GET('getConformidades');
+      DB.conformidades=Array.isArray(rc)?rc:(rc?.data??[]);
+    }catch(e){ DB.conformidades=[]; }
+    setSplash(90,'Cargando servicios externos…');
+    try{
+      const rsv=await GET('getServicios');
+      DB.servicios=Array.isArray(rsv)?rsv:(rsv?.data??[]);
+    }catch(e){ DB.servicios=[]; }
+    setSplash(100,'¡Listo!');
+    _updateBadges();
+    setTimeout(()=>{
+      document.getElementById('splash').classList.add('hide');
+      nav('pendiente');
+    },300);
+  }catch(e){
+    toast('❌ Error cargando datos: '+e.message,'error');
+    setSplash(100,'Error — reintenta');
+  }
+}
+
+function _updateBadges(){
+  const prod=DB.produccion||[];
+  // Pendiente calidad: entrega producción = TRUE, calidad = FALSE/vacío
+  const pend=prod.filter(op=>etapaDone(op,ETAPAS[3])&&!etapaDone(op,ETAPAS[4]));
+  const ext=prod.filter(op=>enExterno(op));
+  const desp=prod.filter(op=>etapaDone(op,ETAPAS[4])&&!etapaDone(op,ETAPAS[5]));
+  const b=(id,arr)=>{ const el=document.getElementById('badge-'+id); if(el){ el.textContent=arr.length||''; el.style.display=arr.length?'':'none'; } };
+  b('pendiente',pend); b('externo',ext); b('despacho',desp);
+}
+
+// ══════════════════════════════════════════════════════════════
+// 1. PENDIENTE CALIDAD
+// ══════════════════════════════════════════════════════════════
+function renderPendiente(){
+  const prod=DB.produccion||[];
+  const ops=prod.filter(op=>etapaDone(op,ETAPAS[3])&&!etapaDone(op,ETAPAS[4]));
+  let html=`
+    <div class="search-bar"><span>🔍</span><input type="text" placeholder="Buscar OP, cliente, referencia…" oninput="_filterRows(this.value,'op-row')"></div>
+    <div class="section-divider">${ops.length} OPs pendientes de calidad</div>`;
+  if(!ops.length){
+    html+=`<div class="empty"><div class="empty-icon">✅</div><div class="empty-text">Todo aprobado — sin pendientes de calidad</div></div>`;
+  } else {
+    ops.forEach(op=>{
+      const qaData=_parseQA(op);
+      const qaOk=qaData?.resultado;
+      html+=`<div class="op-row" onclick="detailCalidad('${esc(op.IDQR||op.OP)}')">
+        <div class="op-badge">OP-${esc(op.OP||op.IDQR)}</div>
+        <div class="op-info">
+          <div class="op-title">${esc(op['DESCRIPCION DEL PROYECTO']||op.REFERENCIA||op.DESCRIPCION||'Sin descripción')}</div>
+          <div class="op-sub">${esc(op.EMPRESA||op.CLIENTE||'—')} · Item ${esc(String(op.ITEM||''))} · ${fmtDate(op['FECHA ENTREGA PRODUCCION']||op['FECHA ENTREGA'])}</div>
+          <div class="op-sub" style="margin-top:4px">${renderEtapas(op)}</div>
+        </div>
+        <div class="op-status">${qaOk?'🟡':'⏳'}</div>
+      </div>`;
+    });
+  }
+  setContent(html);
+}
+
+function _parseQA(op){
+  try{ return JSON.parse(op.QA_JSON||'null'); }catch(e){ return null; }
+}
+
+function _filterRows(q,cls){
+  const ql=q.toLowerCase().trim();
+  document.querySelectorAll('.'+cls).forEach(el=>{
+    el.style.display=!ql||el.textContent.toLowerCase().includes(ql)?'':'none';
+  });
+}
+
+// ── DETALLE OP CALIDAD ──────────────────────────────────────
+function detailCalidad(idqr){
+  const op=(DB.produccion||[]).find(o=>String(o.IDQR||o.OP)===String(idqr));
+  if(!op){ toast('OP no encontrada','error'); return; }
+  _currentOp=op;
+  const qa=_parseQA(op);
+  const imgSrc=op.IMAGEN_B64&&op.IMAGEN_B64.length>50
+    ?( op.IMAGEN_B64.startsWith('http')?op.IMAGEN_B64:'data:image/jpeg;base64,'+op.IMAGEN_B64 )
+    :(op.IMAGEN||'');
+
+  // Botones de acción rápida
+  const actions=`
+    <button class="icon-btn" onclick="abrirFormatoQA('${esc(idqr)}')" title="Formato QA">📋</button>
+    <button class="icon-btn" onclick="abrirModalTemple('${esc(idqr)}')" title="Hoja Temple">🔥</button>
+    <button class="icon-btn" onclick="_accionReproceso('${esc(idqr)}')" title="Reproceso">⚠️</button>
+  `;
+
+  let html=`
+    <!-- Acciones rápidas -->
+    <div class="qa-actions">
+      <div class="qa-btn" onclick="abrirFormatoQA('${esc(idqr)}')">
+        <div class="qa-btn-icon">📋</div><div class="qa-btn-label">Formato QA</div>
+      </div>
+      <div class="qa-btn" onclick="_accionCalidadOK('${esc(idqr)}')">
+        <div class="qa-btn-icon" style="background:var(--success)">✅</div><div class="qa-btn-label">Aprobar Calidad</div>
+      </div>
+      <div class="qa-btn" onclick="_accionReproceso('${esc(idqr)}')">
+        <div class="qa-btn-icon" style="background:var(--warn)">⚠️</div><div class="qa-btn-label">Reproceso</div>
+      </div>
+      <div class="qa-btn" onclick="abrirModalTemple('${esc(idqr)}')">
+        <div class="qa-btn-icon" style="background:#dc4a18">🔥</div><div class="qa-btn-label">Hoja Temple</div>
+      </div>
+      <div class="qa-btn" onclick="_toggleExterno('${esc(idqr)}')">
+        <div class="qa-btn-icon" style="background:var(--info)">🚚</div><div class="qa-btn-label">Svc. Externo</div>
+      </div>
+    </div>
+
+    <!-- Etapas -->
+    ${renderEtapas(op)}
+
+    <!-- Foto -->
+    ${imgSrc?`<div class="foto-box" style="margin-bottom:16px;cursor:default"><img src="${esc(imgSrc)}" alt="foto"></div>`:''}
+
+    <!-- Datos -->
+    <div class="fields-grid">
+      <div class="field-group"><div class="field-label">OP</div><div class="field-value">${esc(String(op.OP||op.IDQR||'—'))}</div></div>
+      <div class="field-group"><div class="field-label">Item</div><div class="field-value">${esc(String(op.ITEM||'—'))}</div></div>
+      <div class="field-group"><div class="field-label">Cliente</div><div class="field-value">${esc(op.EMPRESA||op.CLIENTE||'—')}</div></div>
+      <div class="field-group"><div class="field-label">Cotización</div><div class="field-value">${esc(String(op.COTIZACION||op.COT||'—'))}</div></div>
+      <div class="field-group"><div class="field-label">F. Entrega</div><div class="field-value">${fmtDate(op['FECHA ENTREGA PRODUCCION']||op['FECHA ENTREGA'])}</div></div>
+      <div class="field-group"><div class="field-label">Cantidad</div><div class="field-value">${esc(String(op.CANTIDAD||op.CANT||'—'))}</div></div>
+    </div>
+    <div class="field-group"><div class="field-label">Descripción</div><div class="field-value">${esc(op['DESCRIPCION DEL PROYECTO']||op.DESCRIPCION||'—')}</div></div>
+    <div class="field-group"><div class="field-label">Material</div><div class="field-value">${esc(op.MATERIAL||op['MATERIAL 1']||'—')}</div></div>
+    <div class="field-group"><div class="field-label">Tratamiento</div><div class="field-value">${esc(op.TRATAMIENTO||'—')}</div></div>
+
+    <!-- Estado QA -->
+    ${qa?.resultado?`
+    <div class="card" style="margin-top:8px">
+      <div class="card-body">
+        <div class="field-label" style="margin-bottom:8px">Último resultado de inspección</div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="font-size:28px">${qa.resultado==='conforme'?'✅':qa.resultado==='reproceso'?'⚠️':qa.resultado==='derogado'?'⚡':'❌'}</div>
+          <div>
+            <div style="font-size:14px;font-weight:700;text-transform:capitalize">${esc(qa.resultado)}</div>
+            <div style="font-size:11px;color:var(--muted)">${esc(qa.inspector||'')} · ${fmtDate(qa.fecha)}</div>
+            ${qa.obs?`<div style="font-size:12px;color:var(--muted);margin-top:4px">${esc(qa.obs)}</div>`:''}
+          </div>
+        </div>
+      </div>
+    </div>`:''}
+  `;
+
+  openDetail(`OP-${op.OP||op.IDQR}`,html,actions);
+}
+
+// ══════════════════════════════════════════════════════════════
+// FORMATO QA (liberación pieza por pieza)
+// ══════════════════════════════════════════════════════════════
+function abrirFormatoQA(idqr){
+  const op=(DB.produccion||[]).find(o=>String(o.IDQR||o.OP)===String(idqr));
+  if(!op){ toast('OP no encontrada','error'); return; }
+  const qa=_parseQA(op)||{};
+  const procesos=_parseProcesos(op);
+  const kcs=_parseKCs(op);
+
+  // Render KC tabla
+  const cantPiezas=Number(op.CANTIDAD||op.CANT||1);
+  let kcHtml='';
+  if(kcs.length){
+    const piezaCols=Array.from({length:Math.min(cantPiezas,10)},(_,i)=>`<th>P${i+1}</th>`).join('');
+    kcHtml=`
+      <div class="form-section-title">Características Clave</div>
+      <div class="table-wrap">
+        <table class="kc-table">
+          <thead><tr><th>KC</th><th>Descripción</th><th>Tol.</th>${piezaCols}<th>VB</th></tr></thead>
+          <tbody>
+            ${kcs.map((kc,i)=>{
+              const piezaInputs=Array.from({length:Math.min(cantPiezas,10)},(_,j)=>
+                `<td><input type="text" value="${esc(qa.kcs?.[i]?.piezas?.[j]||'')}" 
+                  onchange="_qaSetKC(${i},${j},this.value)"
+                  style="width:42px;border:1px solid var(--border);border-radius:4px;padding:3px;font-size:11px;text-align:center"></td>`
+              ).join('');
+              return `<tr>
+                <td style="font-weight:700;color:var(--primary)">${esc(kc.nombre||'KC'+(i+1))}</td>
+                <td style="text-align:left">${esc(kc.descripcion||'')}</td>
+                <td>${esc(kc.tolerancia||'')}</td>
+                ${piezaInputs}
+                <td>
+                  <button onclick="_toggleKCVB(${i},'${esc(idqr)}')" 
+                    class="vb-toggle${qa.kcs?.[i]?.vb?'  ok':''}"
+                    id="kc-vb-${i}">
+                    ${qa.kcs?.[i]?.vb?'✓ OK':'—'}
+                  </button>
+                </td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  }
+
+  // Render procesos
+  let procHtml='';
+  if(procesos.length){
+    procHtml=`
+      <div class="form-section-title" style="margin-top:16px">Ruta de Procesos — VB Calidad</div>
+      ${procesos.map((p,i)=>`
+        <div class="proc-row">
+          <div class="proc-num">${i+1}</div>
+          <div class="proc-info">
+            <div class="proc-maq">${esc(p.maquina||'—')}</div>
+            <div class="proc-cota">Cota: ${esc(p.cota||'—')} · T.Est: ${esc(p.tEst||'—')}</div>
+            ${p.inst?`<div class="proc-cota">${esc(p.inst)}</div>`:''}
+          </div>
+          <div class="proc-vb">
+            <button class="vb-toggle${qa.procVB?.[i]?'  ok':''}" 
+              id="proc-vb-${i}"
+              onclick="_toggleProcVB(${i},'${esc(idqr)}')">
+              ${qa.procVB?.[i]?'✓ OK':'—'}
+            </button>
+          </div>
+        </div>`).join('')}
+    `;
+  }
+
+  // Resultado inspección
+  const res=qa.resultado||'';
+  const resultHtml=`
+    <div class="form-section-title" style="margin-top:16px">Resultado de la Inspección</div>
+    <div class="result-grid">
+      <div class="result-btn${res==='conforme'?' active-conforme':''}" id="rb-conforme" onclick="_setResultado('${esc(idqr)}','conforme')">
+        <div class="result-icon">✅</div><div class="result-label">Conforme</div>
+      </div>
+      <div class="result-btn${res==='noconforme'?' active-noconforme':''}" id="rb-noconforme" onclick="_setResultado('${esc(idqr)}','noconforme')">
+        <div class="result-icon">❌</div><div class="result-label">No conforme</div>
+      </div>
+      <div class="result-btn${res==='reproceso'?' active-reproceso':''}" id="rb-reproceso" onclick="_setResultado('${esc(idqr)}','reproceso')">
+        <div class="result-icon">🔄</div><div class="result-label">Reproceso</div>
+      </div>
+      <div class="result-btn${res==='derogado'?' active-derogado':''}" id="rb-derogado" onclick="_setResultado('${esc(idqr)}','derogado')">
+        <div class="result-icon">⚡</div><div class="result-label">Derogado (cliente aprueba)</div>
+      </div>
+    </div>
+    <div class="form-field">
+      <label class="form-label">Observaciones</label>
+      <textarea class="form-input" id="qa-obs" rows="3" placeholder="Observaciones del inspector…">${esc(qa.obs||'')}</textarea>
+    </div>
+    <div class="form-field">
+      <label class="form-label">Firma Inspector</label>
+      <select class="form-select" id="qa-inspector">
+        <option value="">— Seleccionar —</option>
+        ${['C.POSADA','F.GIRALDO','J.GARCIA'].map(n=>`<option value="${n}"${qa.inspector===n?' selected':''}>${n}</option>`).join('')}
+      </select>
+    </div>
+    <div class="modal-actions" style="margin-top:16px">
+      <button class="btn btn-ghost" onclick="closeModal('modal-qa')">Cerrar</button>
+      <button class="btn btn-primary" onclick="_guardarQA('${esc(idqr)}')">💾 Guardar</button>
+    </div>
+  `;
+
+  document.getElementById('modal-qa-title').textContent=`QA — OP ${op.OP||op.IDQR} / Item ${op.ITEM||''}`;
+  document.getElementById('modal-qa-body').innerHTML=kcHtml+procHtml+resultHtml;
+  // Guardar QA en window para manipulación
+  window._qaTemp=JSON.parse(JSON.stringify(qa));
+  window._qaTempIdqr=idqr;
+  openModal('modal-qa');
+}
+
+function _parseProcesos(op){
+  // Desde QA_JSON si existe, o desde columnas RUTA MQ1-MQ10
+  try{
+    const qa=_parseQA(op);
+    if(qa?.procesos?.length) return qa.procesos;
+  }catch(e){}
+  const procs=[];
+  for(let n=1;n<=10;n++){
+    const mq=op['RUTA MQ'+n]||op['MQ'+n]||'';
+    if(!mq) continue;
+    procs.push({maquina:mq, inst:op['INST'+n]||'', cota:op['COTA'+n]||'', tEst:op['TEST'+n]||''});
+  }
+  return procs;
+}
+function _parseKCs(op){
+  try{
+    const qa=_parseQA(op);
+    if(qa?.kcsConfig?.length) return qa.kcsConfig;
+  }catch(e){}
+  // Leer KC1-KC10 del op directamente (vienen del formato QA de Diseño)
+  const kcs=[];
+  for(let n=1;n<=10;n++){
+    const v=op['KC'+n]||op['KC_'+n]||'';
+    if(!v||v==='Sin definir'||v==='sin definir') continue;
+    kcs.push({nombre:'KC'+n, descripcion:String(v), tolerancia:''});
+  }
+  return kcs;
+}
+
+let _qaState={}; // estado en memoria del QA mientras se edita
+function _qaGetState(idqr){
+  if(!_qaState[idqr]){
+    const op=(DB.produccion||[]).find(o=>String(o.IDQR||o.OP)===String(idqr));
+    _qaState[idqr]=JSON.parse(JSON.stringify(_parseQA(op)||{}));
+  }
+  return _qaState[idqr];
+}
+function _qaSetKC(kcIdx,piezaIdx,val){
+  const st=_qaGetState(window._qaTempIdqr);
+  if(!st.kcs) st.kcs=[];
+  if(!st.kcs[kcIdx]) st.kcs[kcIdx]={vb:false,piezas:{}};
+  st.kcs[kcIdx].piezas[piezaIdx]=val;
+}
+function _toggleKCVB(kcIdx,idqr){
+  const st=_qaGetState(idqr);
+  if(!st.kcs) st.kcs=[];
+  if(!st.kcs[kcIdx]) st.kcs[kcIdx]={vb:false,piezas:{}};
+  st.kcs[kcIdx].vb=!st.kcs[kcIdx].vb;
+  const btn=document.getElementById('kc-vb-'+kcIdx);
+  if(btn){ btn.classList.toggle('ok',st.kcs[kcIdx].vb); btn.textContent=st.kcs[kcIdx].vb?'✓ OK':'—'; }
+}
+function _toggleProcVB(procIdx,idqr){
+  const st=_qaGetState(idqr);
+  if(!st.procVB) st.procVB={};
+  st.procVB[procIdx]=!st.procVB[procIdx];
+  const btn=document.getElementById('proc-vb-'+procIdx);
+  if(btn){ btn.classList.toggle('ok',st.procVB[procIdx]); btn.textContent=st.procVB[procIdx]?'✓ OK':'—'; }
+}
+function _setResultado(idqr,res){
+  const st=_qaGetState(idqr);
+  st.resultado=res;
+  ['conforme','noconforme','reproceso','derogado'].forEach(r=>{
+    const el=document.getElementById('rb-'+r);
+    if(el){ el.className='result-btn'+(r===res?' active-'+r:''); }
+  });
+  // Si reproceso → abrir modal reproceso también
+  if(res==='reproceso') _abrirReproceso(idqr);
+}
+
+async function _guardarQA(idqr){
+  const op=(DB.produccion||[]).find(o=>String(o.IDQR||o.OP)===String(idqr));
+  if(!op){ toast('OP no encontrada','error'); return; }
+  const st=_qaGetState(idqr);
+  st.obs=gv('qa-obs');
+  st.inspector=gv('qa-inspector');
+  st.fecha=today();
+  const json=JSON.stringify(st);
+  if(json.length>250000){ toast('QA demasiado grande','error'); return; }
+  try{
+    POST_BG('updateOP',{IDQR:op.IDQR||idqr, QA_JSON:json});
+    op.QA_JSON=json;
+    toast('✅ QA guardado');
+    closeModal('modal-qa');
+    // Si resultado conforme → preguntar si aprobar calidad
+    if(st.resultado==='conforme'){
+      setTimeout(()=>confirm2('¿Aprobar Calidad?',
+        `OP-${op.OP}: resultado Conforme. ¿Marcar CALIDAD como aprobada?`,
+        ()=>_accionCalidadOK(idqr)),400);
+    }
+  }catch(e){ toast('❌ '+e.message,'error'); }
+}
+
+// ══════════════════════════════════════════════════════════════
+// ACCIONES CALIDAD
+// ══════════════════════════════════════════════════════════════
+async function _accionCalidadOK(idqr){
+  const op=(DB.produccion||[]).find(o=>String(o.IDQR||o.OP)===String(idqr));
+  if(!op){ toast('OP no encontrada','error'); return; }
+  const kCal=keyFor(op,['CALIDAD']);
+  const kFec=keyFor(op,['FECHA CALIDAD','FECHA \nCALIDAD\nDD/MM/AA']);
+  const payload={IDQR:op.IDQR||idqr};
+  payload[kCal]='TRUE'; payload[kFec]=today();
+  POST_BG('updateOP',payload);
+  Object.assign(op,payload);
+  toast('✅ Calidad aprobada — pasa a Pendiente Despacho');
+  closeDetail();
+  _updateBadges();
+  renderPendiente();
+}
+
+async function _toggleExterno(idqr){
+  const op=(DB.produccion||[]).find(o=>String(o.IDQR||o.OP)===String(idqr));
+  if(!op){ toast('OP no encontrada','error'); return; }
+  const estaExt=enExterno(op);
+  const nuevo=estaExt?'EN PROCESO':'TRABAJO EXTERNO';
+  const kSem=keyFor(op,['SEMAFORO AVANCE']);
+  const payload={IDQR:op.IDQR||idqr};
+  payload[kSem]=nuevo;
+  POST_BG('updateOP',payload);
+  Object.assign(op,payload);
+  toast(estaExt?'✅ Recibido de servicio externo':'🚚 Enviado a servicio externo');
+  closeDetail();
+  _updateBadges();
+  renderPendiente();
+}
+
+// ══════════════════════════════════════════════════════════════
+// REPROCESO
+// ══════════════════════════════════════════════════════════════
+function _accionReproceso(idqr){
+  const op=(DB.produccion||[]).find(o=>String(o.IDQR||o.OP)===String(idqr));
+  if(!op) return;
+  _abrirReproceso(idqr);
+}
+function _abrirReproceso(idqr){
+  const op=(DB.produccion||[]).find(o=>String(o.IDQR||o.OP)===String(idqr));
+  document.getElementById('modal-reproceso-body').innerHTML=`
+    <div class="form-field">
+      <label class="form-label">OP — Item</label>
+      <div style="font-size:14px;font-weight:700;margin-bottom:12px">OP-${esc(String(op?.OP||idqr))} / Item ${esc(String(op?.ITEM||''))}</div>
+    </div>
+    <div class="form-field">
+      <label class="form-label">Proceso con problema</label>
+      <select class="form-select" id="rep-proceso">
+        <option value="">— Seleccionar proceso —</option>
+        ${_parseProcesos(op||{}).map((p,i)=>`<option value="${i+1}">${i+1}. ${esc(p.maquina)}</option>`).join('')}
+        <option value="otro">Otro</option>
+      </select>
+    </div>
+    <div class="form-field">
+      <label class="form-label">Tipo de no conformidad</label>
+      <select class="form-select" id="rep-tipo">
+        <option value="">— Seleccionar —</option>
+        <option>Medida fuera de tolerancia</option>
+        <option>Acabado superficial</option>
+        <option>Material incorrecto</option>
+        <option>Geometría incorrecta</option>
+        <option>Daño en pieza</option>
+        <option>Otro</option>
+      </select>
+    </div>
+    <div class="form-field">
+      <label class="form-label">Descripción del problema</label>
+      <textarea class="form-input" id="rep-desc" rows="3" placeholder="Describe el problema encontrado…"></textarea>
+    </div>
+    <div class="form-field">
+      <label class="form-label">Acción correctiva propuesta</label>
+      <textarea class="form-input" id="rep-accion" rows="2" placeholder="Acción a tomar…"></textarea>
+    </div>
+    <div class="form-field">
+      <label class="form-label">Piezas afectadas</label>
+      <div class="spin-row">
+        <button class="spin-btn" onclick="_spin('rep-piezas',-1)">−</button>
+        <input class="spin-input" type="number" id="rep-piezas" value="1" min="1">
+        <button class="spin-btn" onclick="_spin('rep-piezas',1)">+</button>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modal-reproceso')">Cancelar</button>
+      <button class="btn btn-danger" onclick="_guardarReproceso('${esc(idqr)}')">⚠️ Registrar Reproceso</button>
+    </div>
+  `;
+  openModal('modal-reproceso');
+}
+
+async function _guardarReproceso(idqr){
+  const op=(DB.produccion||[]).find(o=>String(o.IDQR||o.OP)===String(idqr));
+  if(!op){ toast('OP no encontrada','error'); return; }
+  const proceso=gv('rep-proceso'), tipo=gv('rep-tipo'), desc=gv('rep-desc');
+  if(!tipo||!desc){ toast('Completa tipo y descripción','error'); return; }
+  const data={
+    ID_REPROCESO: crypto.randomUUID?.()|| Math.random().toString(36).slice(2),
+    IDQR: op.IDQR||idqr,
+    OP: op.OP||idqr,
+    ITEM: op.ITEM||'',
+    CLIENTE: op.EMPRESA||op.CLIENTE||'',
+    PROCESO: proceso,
+    TIPO: tipo,
+    DESCRIPCION: desc,
+    ACCION_CORRECTIVA: gv('rep-accion'),
+    PIEZAS_AFECTADAS: gn('rep-piezas'),
+    INSPECTOR: _SESSION?.nombre||'',
+    FECHA: today(),
+  };
+  try{
+    POST_BG('createReproceso', data);
+    // Marcar REPROCESO en la OP
+    POST_BG('updateOP',{IDQR:op.IDQR||idqr, REPROCESO:'TRUE', FECHA_REPROCESO:today()});
+    op.REPROCESO='TRUE';
+    toast('⚠️ Reproceso registrado');
+    closeModal('modal-reproceso');
+    _imprimirReproceso(data, op);
+  }catch(e){ toast('❌ '+e.message,'error'); }
+}
+
+function _spin(id,d){
+  const el=document.getElementById(id);
+  if(el) el.value=Math.max(0,Number(el.value||0)+d);
+}
+
+// ══════════════════════════════════════════════════════════════
+// 2. SERVICIO EXTERNO
+// ══════════════════════════════════════════════════════════════
+function renderExterno(){
+  const prod=DB.produccion||[];
+  const ops=prod.filter(op=>enExterno(op));
+  let html=`
+    <div class="search-bar"><span>🔍</span><input type="text" placeholder="Buscar…" oninput="_filterRows(this.value,'op-row')"></div>
+    <div class="section-divider">${ops.length} OPs en servicio externo</div>`;
+  if(!ops.length){
+    html+=`<div class="empty"><div class="empty-icon">🚚</div><div class="empty-text">Sin OPs en servicio externo</div></div>`;
+  } else {
+    ops.forEach(op=>{
+      const imgSrc=op.IMAGEN_B64&&op.IMAGEN_B64.length>50?(op.IMAGEN_B64.startsWith('http')?op.IMAGEN_B64:'data:image/jpeg;base64,'+op.IMAGEN_B64):(op.IMAGEN||'');
+      html+=`<div class="op-row" onclick="detailExterno('${esc(op.IDQR||op.OP)}')">
+        ${imgSrc?`<img src="${esc(imgSrc)}" style="width:56px;height:56px;object-fit:cover;border-radius:8px;flex-shrink:0">`:
+          `<div style="width:56px;height:56px;background:var(--card2);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0">🏭</div>`}
+        <div class="op-info">
+          <div class="op-title">${esc(op['DESCRIPCION DEL PROYECTO']||op.DESCRIPCION||'Sin descripción')}</div>
+          <div class="op-sub">OP-${esc(String(op.OP||op.IDQR))} · ${esc(op.EMPRESA||op.CLIENTE||'—')}</div>
+          <div class="op-sub" style="margin-top:2px">
+            <span class="sem sem-te">🚚 TRABAJO EXTERNO</span>
+          </div>
+        </div>
+        <div style="font-size:20px">›</div>
+      </div>`;
+    });
+  }
+  setContent(html);
+}
+
+function detailExterno(idqr){
+  const op=(DB.produccion||[]).find(o=>String(o.IDQR||o.OP)===String(idqr));
+  if(!op){ toast('OP no encontrada','error'); return; }
+  _currentOp=op;
+  // Buscar solicitud externa relacionada
+  const sol=(DB.solicitudes||[]).filter(s=>String(s.OP||s.IDQR||'')===String(op.OP||op.IDQR||''));
+  const imgSrc=op.IMAGEN_B64&&op.IMAGEN_B64.length>50?(op.IMAGEN_B64.startsWith('http')?op.IMAGEN_B64:'data:image/jpeg;base64,'+op.IMAGEN_B64):(op.IMAGEN||'');
+
+  let html=`
+    <div class="qa-actions">
+      <div class="qa-btn" onclick="_recibirExterno('${esc(idqr)}')">
+        <div class="qa-btn-icon" style="background:var(--success)">📥</div><div class="qa-btn-label">Recibir</div>
+      </div>
+      <div class="qa-btn" onclick="abrirModalSolicitud('${esc(idqr)}')">
+        <div class="qa-btn-icon" style="background:var(--accent)">📋</div><div class="qa-btn-label">Nueva Solicitud</div>
+      </div>
+    </div>
+    ${imgSrc?`<div class="foto-box" style="margin-bottom:16px;cursor:default"><img src="${esc(imgSrc)}" alt="foto"></div>`:''}
+    <div class="fields-grid">
+      <div class="field-group"><div class="field-label">OP</div><div class="field-value">OP-${esc(String(op.OP||op.IDQR))}</div></div>
+      <div class="field-group"><div class="field-label">Item</div><div class="field-value">${esc(String(op.ITEM||'—'))}</div></div>
+      <div class="field-group"><div class="field-label">Cliente</div><div class="field-value">${esc(op.EMPRESA||op.CLIENTE||'—')}</div></div>
+      <div class="field-group"><div class="field-label">Material</div><div class="field-value">${esc(op.MATERIAL||op['MATERIAL 1']||'—')}</div></div>
+      <div class="field-group"><div class="field-label">Tratamiento</div><div class="field-value">${esc(op.TRATAMIENTO||'—')}</div></div>
+      <div class="field-group"><div class="field-label">Cantidad</div><div class="field-value">${esc(String(op.CANTIDAD||op.CANT||'—'))}</div></div>
+    </div>
+    ${sol.length?`
+      <div class="section-divider">Solicitudes externas de esta OP</div>
+      ${sol.map(s=>`
+        <div class="card" style="margin-bottom:8px">
+          <div class="card-body">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+              <div style="font-size:13px;font-weight:700">${esc(s.SERVICIO||s.TIPO||'Solicitud')}</div>
+              <div style="font-size:11px;color:var(--muted)">${fmtDate(s.FECHA||s.FECHA_SOLICITUD)}</div>
+            </div>
+            <div style="font-size:12px;color:var(--muted)">${esc(s.PROVEEDOR||'—')} · ${esc(s.DESCRIPCION||'')}</div>
+            ${s.ESTADO?`<div style="margin-top:6px"><span class="sem sem-ep">${esc(s.ESTADO)}</span></div>`:''}
+          </div>
+        </div>`).join('')}
+    `:'<div class="empty" style="padding:20px"><div class="empty-icon">📋</div><div class="empty-text">Sin solicitudes externas para esta OP</div></div>'}
+  `;
+  openDetail(`OP-${op.OP||op.IDQR} — Ext.`,html);
+}
+
+async function _recibirExterno(idqr){
+  const op=(DB.produccion||[]).find(o=>String(o.IDQR||o.OP)===String(idqr));
+  if(!op) return;
+  confirm2('Recibir de Servicio Externo',
+    `¿Confirmar recepción de OP-${op.OP||idqr} del servicio externo?`,
+    async()=>{
+      const kSem=keyFor(op,['SEMAFORO AVANCE']);
+      const payload={IDQR:op.IDQR||idqr};
+      payload[kSem]='EN PROCESO';
+      POST_BG('updateOP',payload);
+      Object.assign(op,payload);
+      toast('✅ Recibido de servicio externo');
+      closeDetail();
+      _updateBadges();
+      renderExterno();
+    });
+}
+
+// ══════════════════════════════════════════════════════════════
+// 3. PENDIENTE DESPACHO
+// ══════════════════════════════════════════════════════════════
+function renderDespacho(){
+  const prod=DB.produccion||[];
+  // Calidad aprobada pero LIBERACION no TRUE
+  const ops=prod.filter(op=>etapaDone(op,ETAPAS[4])&&!etapaDone(op,ETAPAS[5]));
+  let html=`
+    <div class="search-bar"><span>🔍</span><input type="text" placeholder="Buscar…" oninput="_filterRows(this.value,'op-row')"></div>
+    <div class="section-divider">${ops.length} OPs pendientes de despacho</div>`;
+  if(!ops.length){
+    html+=`<div class="empty"><div class="empty-icon">📦</div><div class="empty-text">Sin OPs pendientes de despacho</div></div>`;
+  } else {
+    ops.forEach(op=>{
+      const fCal=op['FECHA CALIDAD']||op['FECHA \nCALIDAD\nDD/MM/AA']||'';
+      html+=`<div class="op-row" onclick="detailDespacho('${esc(op.IDQR||op.OP)}')">
+        <div class="op-badge" style="background:var(--success)">✅</div>
+        <div class="op-info">
+          <div class="op-title">${esc(op['DESCRIPCION DEL PROYECTO']||op.DESCRIPCION||'Sin descripción')}</div>
+          <div class="op-sub">OP-${esc(String(op.OP||op.IDQR))} · ${esc(op.EMPRESA||op.CLIENTE||'—')}</div>
+          <div class="op-sub">Calidad: ${fmtDate(fCal)} · Cant: ${esc(String(op.CANTIDAD||op.CANT||'—'))}</div>
+        </div>
+        <div style="font-size:20px">›</div>
+      </div>`;
+    });
+  }
+  setContent(html);
+}
+
+function detailDespacho(idqr){
+  const op=(DB.produccion||[]).find(o=>String(o.IDQR||o.OP)===String(idqr));
+  if(!op){ toast('OP no encontrada','error'); return; }
+  _currentOp=op;
+  let html=`
+    <div class="qa-actions">
+      <div class="qa-btn" onclick="_accionLiberacion('${esc(idqr)}')">
+        <div class="qa-btn-icon" style="background:var(--success)">🚀</div><div class="qa-btn-label">Marcar Liberado</div>
+      </div>
+      <div class="qa-btn" onclick="abrirPDFConformidad('${esc(idqr)}')">
+        <div class="qa-btn-icon">📄</div><div class="qa-btn-label">Certificado PDF</div>
+      </div>
+    </div>
+    ${renderEtapas(op)}
+    <div class="fields-grid">
+      <div class="field-group"><div class="field-label">OP</div><div class="field-value">OP-${esc(String(op.OP||op.IDQR))}</div></div>
+      <div class="field-group"><div class="field-label">Item</div><div class="field-value">${esc(String(op.ITEM||'—'))}</div></div>
+      <div class="field-group"><div class="field-label">Cliente</div><div class="field-value">${esc(op.EMPRESA||op.CLIENTE||'—')}</div></div>
+      <div class="field-group"><div class="field-label">Cotización</div><div class="field-value">${esc(String(op.COTIZACION||op.COT||'—'))}</div></div>
+      <div class="field-group"><div class="field-label">F. Calidad</div><div class="field-value">${fmtDate(op['FECHA CALIDAD']||op['FECHA \nCALIDAD\nDD/MM/AA'])}</div></div>
+      <div class="field-group"><div class="field-label">Cantidad</div><div class="field-value">${esc(String(op.CANTIDAD||op.CANT||'—'))}</div></div>
+    </div>
+    <div class="field-group"><div class="field-label">Descripción</div><div class="field-value">${esc(op['DESCRIPCION DEL PROYECTO']||op.DESCRIPCION||'—')}</div></div>
+  `;
+  openDetail(`Despacho OP-${op.OP||op.IDQR}`,html);
+}
+
+async function _accionLiberacion(idqr){
+  const op=(DB.produccion||[]).find(o=>String(o.IDQR||o.OP)===String(idqr));
+  if(!op){ toast('OP no encontrada','error'); return; }
+  confirm2('Marcar como Liberado',
+    `¿Confirmar liberación / despacho de OP-${op.OP||idqr}?`,
+    ()=>{
+      const kLib=keyFor(op,['LIBERACION']);
+      const kFec=keyFor(op,['FECHA DE DESPACHO']);
+      const payload={IDQR:op.IDQR||idqr};
+      payload[kLib]='TRUE'; payload[kFec]=today();
+      POST_BG('updateOP',payload);
+      Object.assign(op,payload);
+      toast('🚀 Liberado — listo para despacho');
+      closeDetail();
+      _updateBadges();
+      renderDespacho();
+    });
+}
+
+// ══════════════════════════════════════════════════════════════
+// 4. SOLICITUDES EXTERNAS
+// ══════════════════════════════════════════════════════════════
+function renderSolicitudes(){
+  const sols=DB.solicitudes||[];
+  let html=`
+    <div class="search-bar"><span>🔍</span><input type="text" placeholder="Buscar…" oninput="_filterRows(this.value,'sol-row')"></div>
+    <div class="section-divider">${sols.length} solicitudes externas</div>`;
+  if(!sols.length){
+    html+=`<div class="empty"><div class="empty-icon">📋</div><div class="empty-text">Sin solicitudes externas</div></div>`;
+  } else {
+    sols.slice().reverse().forEach(s=>{
+      html+=`<div class="op-row sol-row" onclick="detailSolicitud('${esc(s.ID_SOLICITUD||'')}')">
+        <div class="op-badge" style="background:var(--info)">📋</div>
+        <div class="op-info">
+          <div class="op-title">${esc(s.SERVICIO||s.TIPO||'Solicitud')}</div>
+          <div class="op-sub">OP-${esc(String(s.OP||'—'))} · ${esc(s.PROVEEDOR||'—')}</div>
+          <div class="op-sub">${fmtDate(s.FECHA||s.FECHA_SOLICITUD)} · ${esc(s.ESTADO||'Pendiente')}</div>
+        </div>
+        <div style="font-size:20px">›</div>
+      </div>`;
+    });
+  }
+  setContent(html);
+}
+
+function abrirModalSolicitud(idqr=''){
+  const op=idqr?(DB.produccion||[]).find(o=>String(o.IDQR||o.OP)===String(idqr)):null;
+  const svcs=(DB.servicios||[]).map(s=>s['SERVICIO EXTERNO']||s.NOMBRE||'').filter(Boolean);
+  document.getElementById('modal-solicitud-title').textContent='📋 Nueva Solicitud de Servicio Externo';
+  document.getElementById('modal-solicitud-body').innerHTML=`
+    <div class="form-field">
+      <label class="form-label">OP</label>
+      <select class="form-select" id="sol-op">
+        <option value="">— Sin OP específica —</option>
+        ${(DB.produccion||[]).filter(o=>!truthy(o.LIBERACION)).map(o=>
+          `<option value="${esc(String(o.OP||o.IDQR))}"${op&&String(o.OP||o.IDQR)===String(op.OP||idqr)?' selected':''}>${esc('OP-'+String(o.OP||o.IDQR)+' · '+String(o.ITEM||''))}</option>`
+        ).join('')}
+      </select>
+    </div>
+    <div class="form-field">
+      <label class="form-label">Servicio</label>
+      <select class="form-select" id="sol-servicio">
+        <option value="">— Seleccionar servicio —</option>
+        ${svcs.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('')}
+        <option value="OTRO">Otro (especificar)</option>
+      </select>
+    </div>
+    <div class="form-field">
+      <label class="form-label">Proveedor</label>
+      <input class="form-input" type="text" id="sol-proveedor" placeholder="Nombre del proveedor">
+    </div>
+    <div class="form-field">
+      <label class="form-label">Descripción / Especificación</label>
+      <textarea class="form-input" id="sol-desc" rows="3" placeholder="Detalle del servicio a realizar…"></textarea>
+    </div>
+    <div class="fields-grid">
+      <div class="form-field">
+        <label class="form-label">Dureza / Tratamiento</label>
+        <input class="form-input" type="text" id="sol-dureza" placeholder="ej. 55 HRC">
+      </div>
+      <div class="form-field">
+        <label class="form-label">Días estimados</label>
+        <div class="spin-row">
+          <button class="spin-btn" onclick="_spin('sol-dias',-1)">−</button>
+          <input class="spin-input" type="number" id="sol-dias" value="3" min="1">
+          <button class="spin-btn" onclick="_spin('sol-dias',1)">+</button>
+        </div>
+      </div>
+    </div>
+    <div class="form-field">
+      <label class="form-label">Fecha de envío</label>
+      <input class="form-input" type="date" id="sol-fecha-envio" value="${today()}">
+    </div>
+    <div class="form-field">
+      <label class="form-label">Fecha estimada retorno</label>
+      <input class="form-input" type="date" id="sol-fecha-retorno">
+    </div>
+    <div class="form-field">
+      <label class="form-label">Observaciones</label>
+      <textarea class="form-input" id="sol-obs" rows="2" placeholder="Notas adicionales…"></textarea>
+    </div>
+    <div class="form-field">
+      <label class="form-label">Solicitado por</label>
+      <select class="form-select" id="sol-solicitante">
+        ${['C.POSADA','F.GIRALDO','J.GARCIA'].map(n=>`<option value="${n}">${n}</option>`).join('')}
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modal-solicitud')">Cancelar</button>
+      <button class="btn btn-primary" onclick="_guardarSolicitud()">📋 Crear & PDF</button>
+    </div>
+  `;
+  openModal('modal-solicitud');
+}
+
+async function _guardarSolicitud(){
+  const opVal=gv('sol-op'), servicio=gv('sol-servicio');
+  if(!servicio){ toast('Selecciona el servicio','error'); return; }
+  const op=(DB.produccion||[]).find(o=>String(o.OP||o.IDQR)===opVal)||null;
+  const data={
+    ID_SOLICITUD: crypto.randomUUID?.()|| Math.random().toString(36).slice(2),
+    OP: opVal||'',
+    IDQR: op?.IDQR||opVal||'',
+    ITEM: op?.ITEM||'',
+    CLIENTE: op?.EMPRESA||op?.CLIENTE||'',
+    SERVICIO: servicio,
+    PROVEEDOR: gv('sol-proveedor'),
+    DESCRIPCION: gv('sol-desc'),
+    DUREZA: gv('sol-dureza'),
+    DIAS: gn('sol-dias'),
+    FECHA_SOLICITUD: today(),
+    FECHA_ENVIO: gv('sol-fecha-envio'),
+    FECHA_RETORNO: gv('sol-fecha-retorno'),
+    OBSERVACIONES: gv('sol-obs'),
+    SOLICITANTE: gv('sol-solicitante'),
+    ESTADO: 'ENVIADO',
+  };
+  try{
+    POST_BG('createSolicitudExterna', data);
+    if(!DB.solicitudes) DB.solicitudes=[];
+    DB.solicitudes.push(data);
+    toast('✅ Solicitud creada');
+    closeModal('modal-solicitud');
+    _imprimirSolicitud(data, op);
+  }catch(e){ toast('❌ '+e.message,'error'); }
+}
+
+function detailSolicitud(id){
+  const s=(DB.solicitudes||[]).find(x=>String(x.ID_SOLICITUD||'')===String(id));
+  if(!s){ toast('Solicitud no encontrada','error'); return; }
+  const op=(DB.produccion||[]).find(o=>String(o.OP||o.IDQR)===String(s.OP||''));
+  let html=`
+    <div class="qa-actions">
+      <div class="qa-btn" onclick="_imprimirSolicitud(${JSON.stringify(s).replace(/</g,'&lt;')},null)">
+        <div class="qa-btn-icon">📄</div><div class="qa-btn-label">PDF</div>
+      </div>
+    </div>
+    <div class="fields-grid">
+      <div class="field-group"><div class="field-label">OP</div><div class="field-value">OP-${esc(String(s.OP||'—'))}</div></div>
+      <div class="field-group"><div class="field-label">Servicio</div><div class="field-value">${esc(s.SERVICIO||'—')}</div></div>
+      <div class="field-group"><div class="field-label">Proveedor</div><div class="field-value">${esc(s.PROVEEDOR||'—')}</div></div>
+      <div class="field-group"><div class="field-label">Estado</div><div class="field-value">${esc(s.ESTADO||'—')}</div></div>
+      <div class="field-group"><div class="field-label">F. Envío</div><div class="field-value">${fmtDate(s.FECHA_ENVIO)}</div></div>
+      <div class="field-group"><div class="field-label">F. Retorno</div><div class="field-value">${fmtDate(s.FECHA_RETORNO)}</div></div>
+    </div>
+    <div class="field-group"><div class="field-label">Descripción</div><div class="field-value">${esc(s.DESCRIPCION||'—')}</div></div>
+    <div class="field-group"><div class="field-label">Dureza / Trat.</div><div class="field-value">${esc(s.DUREZA||'—')}</div></div>
+    <div class="field-group"><div class="field-label">Días</div><div class="field-value">${esc(String(s.DIAS||'—'))}</div></div>
+    <div class="field-group"><div class="field-label">Solicitante</div><div class="field-value">${esc(s.SOLICITANTE||'—')}</div></div>
+  `;
+  openDetail('Solicitud Externa',html);
+}
+
+// ══════════════════════════════════════════════════════════════
+// 5. CERTIFICADOS DE CONFORMIDAD
+// ══════════════════════════════════════════════════════════════
+function renderConformidad(){
+  const confs=DB.conformidades||[];
+  let html=`
+    <div class="search-bar"><span>🔍</span><input type="text" placeholder="Buscar certificado…" oninput="_filterRows(this.value,'conf-row')"></div>
+    <div class="section-divider">${confs.length} certificados</div>`;
+  if(!confs.length){
+    html+=`<div class="empty"><div class="empty-icon">🏅</div><div class="empty-text">Sin certificados registrados</div></div>`;
+  } else {
+    confs.slice().reverse().forEach(c=>{
+      html+=`<div class="op-row conf-row" onclick="detailConformidad('${esc(c.ID_CONFORMIDAD||c['CERTIFICADO NÚMERO']||'')}')">
+        <div class="op-badge" style="background:var(--success)">🏅</div>
+        <div class="op-info">
+          <div class="op-title">${esc(c['CERTIFICADO NÚMERO']||c.ID_CONFORMIDAD||'—')}</div>
+          <div class="op-sub">OP ${esc(String(c['#OP']||c.OP||'—'))} · ${esc(c.CLIENTE||c.EMPRESA||'—')}</div>
+          <div class="op-sub">${fmtDate(c['FECHA DE EMISIÓN']||c.FECHA)}</div>
+        </div>
+        <div style="font-size:20px">›</div>
+      </div>`;
+    });
+  }
+  setContent(html);
+}
+
+function detailConformidad(id){
+  const c=(DB.conformidades||[]).find(x=>String(x.ID_CONFORMIDAD||x['CERTIFICADO NÚMERO']||'')===String(id));
+  if(!c){ toast('Certificado no encontrado','error'); return; }
+  let html=`
+    <div class="qa-actions">
+      <div class="qa-btn" onclick="abrirPDFConformidad(null,'${esc(id)}')">
+        <div class="qa-btn-icon">📄</div><div class="qa-btn-label">PDF</div>
+      </div>
+      <div class="qa-btn" onclick="abrirPDFConformidad(null,'${esc(id)}',true)">
+        <div class="qa-btn-icon" style="background:var(--success)">✅</div><div class="qa-btn-label">Conformidad PDF</div>
+      </div>
+    </div>
+    <div class="fields-grid">
+      <div class="field-group"><div class="field-label">Certificado N°</div><div class="field-value">${esc(c['CERTIFICADO NÚMERO']||c.ID_CONFORMIDAD||'—')}</div></div>
+      <div class="field-group"><div class="field-label">OP</div><div class="field-value">${esc(String(c['#OP']||c.OP||'—'))}</div></div>
+      <div class="field-group"><div class="field-label">Cliente</div><div class="field-value">${esc(c.CLIENTE||c.EMPRESA||'—')}</div></div>
+      <div class="field-group"><div class="field-label">Cotización</div><div class="field-value">${esc(String(c.COTIZACION||'—'))}</div></div>
+      <div class="field-group"><div class="field-label">F. Emisión</div><div class="field-value">${fmtDate(c['FECHA DE EMISIÓN']||c.FECHA)}</div></div>
+      <div class="field-group"><div class="field-label">F. Fabricación</div><div class="field-value">${fmtDate(c['FECHA DE FABRICACIÓN']||c['FECHA FABRICACION'])}</div></div>
+    </div>
+    <div class="field-group"><div class="field-label">Referencia Producto</div><div class="field-value">${esc(c['REFERENCIA PRODUCTO']||'—')}</div></div>
+    <div class="field-group"><div class="field-label">Cantidad</div><div class="field-value">${esc(String(c.CANTIDAD||'—'))}</div></div>
+  `;
+  openDetail('Certificado '+( c['CERTIFICADO NÚMERO']||''),html);
+}
+
+// ══════════════════════════════════════════════════════════════
+// HOJA DE ENVÍO A TEMPLE
+// ══════════════════════════════════════════════════════════════
+function abrirModalTemple(idqr){
+  const op=(DB.produccion||[]).find(o=>String(o.IDQR||o.OP)===String(idqr));
+  const svcs=(DB.servicios||[]).filter(s=>{
+    const n=String(s['SERVICIO EXTERNO']||s.NOMBRE||'').toUpperCase();
+    return n.includes('TEMPLE')||n.includes('TRATAMIENTO')||n.includes('CALOR');
+  });
+
+  document.getElementById('modal-temple-body').innerHTML=`
+    <div class="form-field">
+      <label class="form-label">OP</label>
+      <div style="font-size:15px;font-weight:700;margin-bottom:12px">OP-${esc(String(op?.OP||idqr))} / Item ${esc(String(op?.ITEM||''))}</div>
+    </div>
+    <div class="form-field">
+      <label class="form-label">Referencia / Producto</label>
+      <input class="form-input" type="text" id="tmp-ref" value="${esc(op?.['DESCRIPCION DEL PROYECTO']||op?.DESCRIPCION||'')}">
+    </div>
+    <div class="form-field">
+      <label class="form-label">Material / Tipo de Acero</label>
+      <input class="form-input" type="text" id="tmp-material" value="${esc(op?.MATERIAL||op?.['MATERIAL 1']||'')}" placeholder="ej. D2, H13, AISI 4140…">
+    </div>
+    <div class="form-field">
+      <label class="form-label">Proveedor de Temple</label>
+      <select class="form-select" id="tmp-proveedor">
+        <option value="">— Seleccionar proveedor —</option>
+        ${svcs.map(s=>`<option value="${esc(s['SERVICIO EXTERNO']||s.NOMBRE||'')}">${esc(s['SERVICIO EXTERNO']||s.NOMBRE||'')}</option>`).join('')}
+        <option value="OTRO">Otro (escribir abajo)</option>
+      </select>
+      <input class="form-input" type="text" id="tmp-proveedor-otro" style="margin-top:6px" placeholder="Nombre del proveedor si no está en la lista">
+    </div>
+    <div class="form-field">
+      <label class="form-label">Temperatura de Temple (°C)</label>
+      <div class="spin-row">
+        <button class="spin-btn" onclick="_spin('tmp-temp',-10)">−</button>
+        <input class="spin-input" type="number" id="tmp-temp" value="${esc(String(op?.TEMPERATURA||''))||1020}" step="10">
+        <button class="spin-btn" onclick="_spin('tmp-temp',10)">+</button>
+      </div>
+    </div>
+    <div class="form-field">
+      <label class="form-label">Tiempo de Temple (minutos)</label>
+      <div class="spin-row">
+        <button class="spin-btn" onclick="_spin('tmp-tiempo',-5)">−</button>
+        <input class="spin-input" type="number" id="tmp-tiempo" value="${esc(String(op?.TIEMPO_TEMPLE||''))||30}" step="5">
+        <button class="spin-btn" onclick="_spin('tmp-tiempo',5)">+</button>
+      </div>
+    </div>
+    <div class="form-field">
+      <label class="form-label">Dureza requerida (HRC)</label>
+      <input class="form-input" type="text" id="tmp-dureza" value="${esc(op?.TRATAMIENTO||'')}" placeholder="ej. 58-62 HRC">
+    </div>
+    <div class="form-field">
+      <label class="form-label">Cantidad de piezas</label>
+      <div class="spin-row">
+        <button class="spin-btn" onclick="_spin('tmp-cant',-1)">−</button>
+        <input class="spin-input" type="number" id="tmp-cant" value="${esc(String(op?.CANTIDAD||op?.CANT||1))}" min="1">
+        <button class="spin-btn" onclick="_spin('tmp-cant',1)">+</button>
+      </div>
+    </div>
+    <div class="form-field">
+      <label class="form-label">Fecha de envío</label>
+      <input class="form-input" type="date" id="tmp-fecha" value="${today()}">
+    </div>
+    <div class="form-field">
+      <label class="form-label">Observaciones especiales</label>
+      <textarea class="form-input" id="tmp-obs" rows="2" placeholder="Instrucciones adicionales…"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modal-temple')">Cancelar</button>
+      <button class="btn btn-danger" onclick="_guardarTemple('${esc(idqr)}')">🔥 Guardar & PDF</button>
+    </div>
+  `;
+  openModal('modal-temple');
+}
+
+async function _guardarTemple(idqr){
+  const op=(DB.produccion||[]).find(o=>String(o.IDQR||o.OP)===String(idqr));
+  const proveedor=gv('tmp-proveedor')==='OTRO'?gv('tmp-proveedor-otro'):gv('tmp-proveedor');
+  const data={
+    ID_TEMPLE: crypto.randomUUID?.()|| Math.random().toString(36).slice(2),
+    OP: op?.OP||idqr,
+    IDQR: op?.IDQR||idqr,
+    ITEM: op?.ITEM||'',
+    CLIENTE: op?.EMPRESA||op?.CLIENTE||'',
+    REFERENCIA: gv('tmp-ref'),
+    MATERIAL: gv('tmp-material'),
+    PROVEEDOR: proveedor,
+    TEMPERATURA: gn('tmp-temp'),
+    TIEMPO: gn('tmp-tiempo'),
+    DUREZA: gv('tmp-dureza'),
+    CANTIDAD: gn('tmp-cant'),
+    FECHA_ENVIO: gv('tmp-fecha'),
+    OBSERVACIONES: gv('tmp-obs'),
+    SOLICITANTE: _SESSION?.nombre||'',
+  };
+  POST_BG('createHojaTemple', data);
+  toast('🔥 Hoja de temple guardada');
+  closeModal('modal-temple');
+  // Marcar externo en producción
+  const kSem=keyFor(op||{},['SEMAFORO AVANCE']);
+  if(op&&kSem){ POST_BG('updateOP',{IDQR:op.IDQR||idqr,[kSem]:'TRABAJO EXTERNO'}); op[kSem]='TRABAJO EXTERNO'; }
+  _imprimirTemple(data, op);
+  _updateBadges();
+}
+
+// ══════════════════════════════════════════════════════════════
+// PDF — IMPRIMIR DOCUMENTOS
+// ══════════════════════════════════════════════════════════════
+function _abrirDocParaImprimir(html, nombre){
+  const w=window.open('','_blank','width=900,height=700');
+  if(!w){ toast('Permite ventanas emergentes para imprimir','error'); return; }
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
+  w.onload=()=>{ w.focus(); setTimeout(()=>w.print(),400); };
+}
+
+// PDF SOLICITUD EXTERNA
+function _imprimirSolicitud(s, op){
+  const html=`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+  <title>SOL-EXT-${s.OP||''}</title>
+  <style>
+    body{font-family:Arial,sans-serif;font-size:10px;color:#111;margin:20px}
+    .logo{font-weight:900;font-size:18px;color:#1a3a6b}
+    .sub{font-size:9px;color:#555;margin-bottom:20px}
+    h2{color:#1a3a6b;font-size:13px;text-align:center;margin:12px 0;
+      border-bottom:2px solid #1a3a6b;padding-bottom:6px}
+    table{width:100%;border-collapse:collapse;margin-bottom:12px}
+    th{background:#1a3a6b;color:#fff;padding:6px 8px;font-size:9px;text-align:left}
+    td{border:1px solid #ccc;padding:6px 8px}
+    .hdr td{border:none;font-size:10px}
+    .firm{margin-top:40px;display:grid;grid-template-columns:1fr 1fr;gap:40px}
+    .firm-line{border-top:1px solid #333;padding-top:4px;text-align:center;font-size:9px;color:#555}
+    @media print{body{margin:8px}}
+  </style></head><body>
+  <div class="logo">GRUPO WEDM</div>
+  <div class="sub">Metalmecánica Avanzada · NIT: 900763241-7 · Cali, Colombia</div>
+  <h2>SOLICITUD DE SERVICIO EXTERNO</h2>
+  <table class="hdr"><tr>
+    <td><b>N° Solicitud:</b> ${esc(s.ID_SOLICITUD||'—')}</td>
+    <td><b>Fecha:</b> ${fmtDate(s.FECHA_SOLICITUD)}</td>
+    <td><b>OP:</b> OP-${esc(String(s.OP||'—'))}</td>
+    <td><b>Item:</b> ${esc(String(s.ITEM||'—'))}</td>
+  </tr></table>
+  <table>
+    <thead><tr><th colspan="2">DATOS DEL SERVICIO</th></tr></thead>
+    <tbody>
+      <tr><td style="width:30%"><b>Servicio</b></td><td>${esc(s.SERVICIO||'—')}</td></tr>
+      <tr><td><b>Proveedor</b></td><td>${esc(s.PROVEEDOR||'—')}</td></tr>
+      <tr><td><b>Descripción</b></td><td>${esc(s.DESCRIPCION||'—')}</td></tr>
+      <tr><td><b>Dureza / Tratamiento</b></td><td>${esc(s.DUREZA||'—')}</td></tr>
+      <tr><td><b>Días estimados</b></td><td>${esc(String(s.DIAS||'—'))}</td></tr>
+      <tr><td><b>Fecha envío</b></td><td>${fmtDate(s.FECHA_ENVIO)}</td></tr>
+      <tr><td><b>Fecha retorno estimada</b></td><td>${fmtDate(s.FECHA_RETORNO)}</td></tr>
+    </tbody>
+  </table>
+  ${op?`<table>
+    <thead><tr><th colspan="2">DATOS DE LA PIEZA</th></tr></thead>
+    <tbody>
+      <tr><td style="width:30%"><b>Cliente</b></td><td>${esc(op.EMPRESA||op.CLIENTE||'—')}</td></tr>
+      <tr><td><b>Descripción</b></td><td>${esc(op['DESCRIPCION DEL PROYECTO']||op.DESCRIPCION||'—')}</td></tr>
+      <tr><td><b>Material</b></td><td>${esc(op.MATERIAL||op['MATERIAL 1']||'—')}</td></tr>
+      <tr><td><b>Cantidad</b></td><td>${esc(String(op.CANTIDAD||op.CANT||'—'))}</td></tr>
+    </tbody>
+  </table>`:''}
+  ${s.OBSERVACIONES?`<table><tr><td><b>Observaciones:</b> ${esc(s.OBSERVACIONES)}</td></tr></table>`:''}
+  <div class="firm">
+    <div class="firm-line">Solicitado por: ${esc(s.SOLICITANTE||'—')}<br>Firma</div>
+    <div class="firm-line">Recibido por proveedor<br>Firma / Sello</div>
+  </div>
+  </body></html>`;
+  _abrirDocParaImprimir(html,`SOL-EXT-OP${s.OP||''}.pdf`);
+}
+
+// PDF HOJA DE TEMPLE
+function _imprimirTemple(t, op){
+  const html=`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+  <title>TEMPLE-OP${t.OP||''}</title>
+  <style>
+    body{font-family:Arial,sans-serif;font-size:10px;color:#111;margin:20px}
+    .logo{font-weight:900;font-size:18px;color:#1a3a6b}
+    .sub{font-size:9px;color:#555;margin-bottom:16px}
+    h2{color:#dc4a18;font-size:14px;text-align:center;margin:10px 0;
+      border-bottom:2px solid #dc4a18;padding-bottom:6px}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid #ccc;margin-bottom:12px}
+    .grid-cell{padding:8px 10px;border-bottom:1px solid #ccc;border-right:1px solid #ccc}
+    .grid-cell:nth-child(2n){border-right:none}
+    .grid-label{font-size:8px;color:#666;font-weight:700;text-transform:uppercase;margin-bottom:2px}
+    .grid-value{font-size:13px;font-weight:700;color:#1a3a6b}
+    .highlight{background:#fff7ed;border:2px solid #dc4a18;border-radius:6px;
+      padding:12px;margin-bottom:12px;text-align:center}
+    .highlight-label{font-size:9px;color:#dc4a18;font-weight:700;text-transform:uppercase}
+    .highlight-value{font-size:24px;font-weight:900;color:#dc4a18}
+    .firm{margin-top:40px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:30px}
+    .firm-line{border-top:1px solid #333;padding-top:4px;text-align:center;font-size:9px;color:#555}
+    @media print{body{margin:8px}}
+  </style></head><body>
+  <div class="logo">🔥 GRUPO WEDM</div>
+  <div class="sub">Metalmecánica Avanzada · NIT: 900763241-7 · Cali, Colombia</div>
+  <h2>HOJA DE ENVÍO A TEMPLE</h2>
+  <!-- Destacado temperatura y tiempo -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+    <div class="highlight">
+      <div class="highlight-label">🌡 Temperatura</div>
+      <div class="highlight-value">${esc(String(t.TEMPERATURA||'—'))}°C</div>
+    </div>
+    <div class="highlight">
+      <div class="highlight-label">⏱ Tiempo</div>
+      <div class="highlight-value">${esc(String(t.TIEMPO||'—'))} min</div>
+    </div>
+  </div>
+  <div class="grid">
+    <div class="grid-cell"><div class="grid-label">OP</div><div class="grid-value">OP-${esc(String(t.OP||'—'))}</div></div>
+    <div class="grid-cell"><div class="grid-label">Item</div><div class="grid-value">${esc(String(t.ITEM||'—'))}</div></div>
+    <div class="grid-cell"><div class="grid-label">Referencia / Producto</div><div class="grid-value">${esc(t.REFERENCIA||'—')}</div></div>
+    <div class="grid-cell"><div class="grid-label">Cantidad</div><div class="grid-value">${esc(String(t.CANTIDAD||'—'))} uds</div></div>
+    <div class="grid-cell"><div class="grid-label">Material / Acero</div><div class="grid-value">${esc(t.MATERIAL||'—')}</div></div>
+    <div class="grid-cell"><div class="grid-label">Dureza Requerida</div><div class="grid-value">${esc(t.DUREZA||'—')}</div></div>
+    <div class="grid-cell"><div class="grid-label">Proveedor Temple</div><div class="grid-value">${esc(t.PROVEEDOR||'—')}</div></div>
+    <div class="grid-cell"><div class="grid-label">Fecha Envío</div><div class="grid-value">${fmtDate(t.FECHA_ENVIO)}</div></div>
+    <div class="grid-cell"><div class="grid-label">Cliente</div><div class="grid-value">${esc(t.CLIENTE||'—')}</div></div>
+    <div class="grid-cell"><div class="grid-label">Solicitado por</div><div class="grid-value">${esc(t.SOLICITANTE||'—')}</div></div>
+  </div>
+  ${t.OBSERVACIONES?`<table style="width:100%;border:1px solid #ccc;margin-bottom:12px"><tr><td style="padding:8px"><b>Observaciones:</b> ${esc(t.OBSERVACIONES)}</td></tr></table>`:''}
+  <!-- Resultados a llenar por el proveedor -->
+  <table style="width:100%;border-collapse:collapse;margin-bottom:12px">
+    <thead><tr style="background:#1a3a6b;color:#fff"><th colspan="3" style="padding:6px 8px;font-size:9px">RESULTADOS (A LLENAR POR EL PROVEEDOR)</th></tr>
+    <tr style="background:#dde6f0"><th style="border:1px solid #ccc;padding:5px 8px;font-size:9px">Dureza Obtenida (HRC)</th><th style="border:1px solid #ccc;padding:5px 8px;font-size:9px">Firma Proveedor</th><th style="border:1px solid #ccc;padding:5px 8px;font-size:9px">Fecha Entrega</th></tr>
+    </thead>
+    <tbody><tr><td style="border:1px solid #ccc;height:28px"></td><td style="border:1px solid #ccc"></td><td style="border:1px solid #ccc"></td></tr></tbody>
+  </table>
+  <div class="firm">
+    <div class="firm-line">Entregado por<br>${esc(t.SOLICITANTE||'—')}<br>Firma</div>
+    <div class="firm-line">Recibido por proveedor<br>Firma / Sello</div>
+    <div class="firm-line">Recibido por WEDM<br>Firma</div>
+  </div>
+  </body></html>`;
+  _abrirDocParaImprimir(html,`TEMPLE-OP${t.OP||''}.pdf`);
+}
+
+// PDF REPROCESO
+function _imprimirReproceso(r, op){
+  const html=`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+  <title>REPROCESO-OP${r.OP||''}</title>
+  <style>
+    body{font-family:Arial,sans-serif;font-size:10px;color:#111;margin:20px}
+    .logo{font-weight:900;font-size:18px;color:#1a3a6b}
+    h2{color:#d97706;font-size:13px;text-align:center;border-bottom:2px solid #d97706;padding-bottom:6px;margin:10px 0}
+    table{width:100%;border-collapse:collapse;margin-bottom:12px}
+    th{background:#d97706;color:#fff;padding:6px 8px;font-size:9px}
+    td{border:1px solid #ccc;padding:6px 8px}
+    .firm{margin-top:40px;display:grid;grid-template-columns:1fr 1fr;gap:40px}
+    .firm-line{border-top:1px solid #333;padding-top:4px;text-align:center;font-size:9px;color:#555}
+    @media print{body{margin:8px}}
+  </style></head><body>
+  <div class="logo">⚠️ GRUPO WEDM — REPORTE DE REPROCESO</div>
+  <h2>NO CONFORMIDAD / REPROCESO</h2>
+  <table>
+    <tr><td style="width:25%"><b>N° Reproceso</b></td><td>${esc(String(r.ID_REPROCESO||'').slice(0,8).toUpperCase())}</td>
+        <td style="width:25%"><b>Fecha</b></td><td>${fmtDate(r.FECHA)}</td></tr>
+    <tr><td><b>OP</b></td><td>OP-${esc(String(r.OP||'—'))}</td>
+        <td><b>Item</b></td><td>${esc(String(r.ITEM||'—'))}</td></tr>
+    <tr><td><b>Cliente</b></td><td>${esc(r.CLIENTE||'—')}</td>
+        <td><b>Piezas afectadas</b></td><td>${esc(String(r.PIEZAS_AFECTADAS||'—'))}</td></tr>
+    <tr><td><b>Proceso</b></td><td>${esc(r.PROCESO||'—')}</td>
+        <td><b>Tipo NC</b></td><td>${esc(r.TIPO||'—')}</td></tr>
+  </table>
+  <table>
+    <tr style="background:#fff7ed"><th>DESCRIPCIÓN DEL PROBLEMA</th></tr>
+    <tr><td style="min-height:50px;padding:10px">${esc(r.DESCRIPCION||'—')}</td></tr>
+  </table>
+  <table>
+    <tr style="background:#fff7ed"><th>ACCIÓN CORRECTIVA</th></tr>
+    <tr><td style="min-height:40px;padding:10px">${esc(r.ACCION_CORRECTIVA||'—')}</td></tr>
+  </table>
+  <div class="firm">
+    <div class="firm-line">Inspector: ${esc(r.INSPECTOR||'—')}<br>Firma</div>
+    <div class="firm-line">Aprobado por<br>Firma</div>
+  </div>
+  </body></html>`;
+  _abrirDocParaImprimir(html,`REPROCESO-OP${r.OP||''}.pdf`);
+}
+
+// PDF CERTIFICADO CONFORMIDAD (reutiliza el del ERP)
+function abrirPDFConformidad(idqr, confId, esConformidad=false){
+  const op=idqr?(DB.produccion||[]).find(o=>String(o.IDQR||o.OP)===String(idqr)):null;
+  const c=confId?(DB.conformidades||[]).find(x=>String(x.ID_CONFORMIDAD||x['CERTIFICADO NÚMERO']||'')===String(confId)):null;
+  const src=op||c||{};
+  toast('Abriendo PDF… (integra con tu GAS de conformidad)');
+  // En producción: llamar al mismo endpoint de PDF que usa el ERP
+  // window.open(`${API}?action=getPDFConformidad&id=${encodeURIComponent(confId||idqr)}`, '_blank');
+}
+
+// ══════════════════════════════════════════════════════════════
+// REFRESH
+// ══════════════════════════════════════════════════════════════
+async function refreshCurrent(){
+  const btn=document.getElementById('refresh-btn');
+  if(btn.classList.contains('spinning')) return;
+  btn.classList.add('spinning');
+  try{
+    const r=await GET('getControlProduccion',{modo:'todo'});
+    DB.produccion=Array.isArray(r)?r:(r?.data??[]);
+    cSet('produccion',DB.produccion);
+    try{ const rs=await GET('getSolicitudesExternas'); DB.solicitudes=Array.isArray(rs)?rs:(rs?.data??[]); }catch(e){}
+    try{ const rc=await GET('getConformidades'); DB.conformidades=Array.isArray(rc)?rc:(rc?.data??[]); }catch(e){}
+    _updateBadges();
+    toast('✅ Datos actualizados');
+    nav(MOD);
+  }catch(e){ toast('❌ '+e.message,'error'); }
+  finally{ setTimeout(()=>btn.classList.remove('spinning'),800); }
+}
+
+// ══════════════════════════════════════════════════════════════
+// ARRANQUE
+// ══════════════════════════════════════════════════════════════
+(function(){
+  // Restaurar sesión
+  try{
+    const s=JSON.parse(localStorage.getItem(CACHE_PFX+'session')||'null');
+    if(s?.rol){ _SESSION=s; document.getElementById('pin-screen').classList.add('hidden'); _initApp(); }
+    else{ document.getElementById('splash').classList.add('hide'); }
+  }catch(e){ document.getElementById('splash').classList.add('hide'); }
+
+  // Back button
+  window.addEventListener('popstate',()=>{
+    if(document.getElementById('detail-panel').classList.contains('open')){ closeDetail(); return; }
+    const mods=['pendiente','externo','despacho','solicitudes','conformidad'];
+    const idx=mods.indexOf(MOD);
+    if(idx>0) nav(mods[idx-1]);
+  });
+})();
+</script>
+</body>
+</html>
