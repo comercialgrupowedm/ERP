@@ -473,6 +473,7 @@ table.data-table tr:active td{background:#dbeafe}
   <div class="nav-item" data-mod="despacho" onclick="nav('despacho')">📦 Pendiente Despacho <span class="badge-count" id="badge-despacho"></span></div>
   <div class="nav-item" data-mod="solicitudes" onclick="nav('solicitudes')">📋 Solicitudes Externas</div>
   <div class="nav-item" data-mod="conformidad" onclick="nav('conformidad')">🏅 Certificados</div>
+  <div class="nav-item" data-mod="remisiones" onclick="nav('remisiones')">📄 Remisiones</div>
 </div>
 
 <!-- CONTENT -->
@@ -765,13 +766,14 @@ function nav(m){
   MOD=m;
   document.querySelectorAll('.nav-item').forEach(el=>el.classList.toggle('active',el.dataset.mod===m));
   const fab=document.getElementById('fab');
-  fab.classList.toggle('hidden', !['solicitudes','conformidad','temple'].includes(m));
+  fab.classList.toggle('hidden', !['solicitudes','conformidad','temple','remisiones'].includes(m));
   switch(m){
     case 'pendiente':  renderPendiente(); break;
     case 'externo':    renderExterno(); break;
     case 'despacho':   renderDespacho(); break;
     case 'solicitudes':renderSolicitudes(); break;
     case 'conformidad':renderConformidad(); break;
+    case 'remisiones':renderRemisiones(); break;
     default: setContent(`<div class="empty"><div class="empty-icon">🚧</div><div class="empty-text">Módulo no disponible</div></div>`);
   }
 }
@@ -779,6 +781,7 @@ function setContent(html){ document.getElementById('content').innerHTML=html; }
 function fabAction(){
   if(MOD==='solicitudes') _abrirEditorPDFSolicitud(null, null);
   else if(MOD==='conformidad') abrirEditorConformidad(null);
+  else if(MOD==='remisiones') abrirEditorRemision(null);
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -843,6 +846,10 @@ async function _initApp(){
       const rc=await GET_QA('getConformidades');
       DB.conformidades=Array.isArray(rc)?rc:(rc?.data??[]);
     }catch(e){ DB.conformidades=[]; }
+    try{
+      const rr=await GET_QA('getRemisiones');
+      DB.remisiones=Array.isArray(rr)?rr:(rr?.data??[]);
+    }catch(e){ DB.remisiones=[]; }
     setSplash(90,'Preparando catálogo de servicios…');
     // DB.servicios = lista única de TIPO DE SERVICIO extraída de DB.solicitudes
     // (se usa para poblar el combo del modal — sin segunda llamada al GAS)
@@ -3453,6 +3460,690 @@ function abrirEditorConformidad(confId){
   if(!win){ toast('Permite ventanas emergentes para editar','error'); return; }
   win.document.write(html);
   win.document.close();
+}
+
+
+// ══════════════════════════════════════════════════════════════
+// 6. MÓDULO REMISIONES — Acta de Entrega + Remisión AMCOR
+// ══════════════════════════════════════════════════════════════
+function renderRemisiones(){
+  const rems=DB.remisiones||[];
+  let html=`
+    <div class="search-bar"><span>🔍</span><input type="text" placeholder="Buscar remisión…" oninput="_filterRows(this.value,'rem-row')"></div>
+    <div class="section-divider">${rems.length} remisiones</div>`;
+  if(!rems.length){
+    html+=`<div class="empty"><div class="empty-icon">📄</div><div class="empty-text">Sin remisiones registradas</div></div>`;
+  } else {
+    rems.slice().reverse().forEach(r=>{
+      const estado=r.ESTADO||'BORRADOR';
+      const color=estado==='ENVIADA'?'var(--success)':estado==='ANULADA'?'#dc2626':'var(--primary)';
+      html+=`<div class="op-row rem-row" onclick="detailRemision('${esc(r.ID_REMISION||'')}')">
+        <div class="op-badge" style="background:${color}">📄</div>
+        <div class="op-info">
+          <div class="op-title">Rem. N° ${esc(String(r.NUMERO_REMISION||r.ID_REMISION||'—'))} · ${esc(r.PROYECTO||'—')}</div>
+          <div class="op-sub">OP ${esc(String(r.OP||'—'))} · ${esc(r.SEÑORES||r.CLIENTE||'—')}</div>
+          <div class="op-sub">${fmtDate(r.FECHA)} · <b style="color:${color}">${esc(estado)}</b></div>
+        </div>
+        <div style="font-size:20px">›</div>
+      </div>`;
+    });
+  }
+  setContent(html);
+}
+
+function detailRemision(id){
+  const r=(DB.remisiones||[]).find(x=>String(x.ID_REMISION||'')===String(id));
+  if(!r){ toast('Remisión no encontrada','error'); return; }
+  let html=`
+    <div class="qa-actions">
+      <div class="qa-btn qa-btn-pdf" onclick="abrirEditorRemision('${esc(id)}')">
+        <div class="qa-btn-icon">✏️</div><div class="qa-btn-label">Editar</div>
+      </div>
+      <div class="qa-btn" onclick="abrirPDFRemision('${esc(id)}','acta')">
+        <div class="qa-btn-icon">📋</div><div class="qa-btn-label">Acta Entrega</div>
+      </div>
+      <div class="qa-btn" onclick="abrirPDFRemision('${esc(id)}','remision')">
+        <div class="qa-btn-icon">📄</div><div class="qa-btn-label">Remisión</div>
+      </div>
+      <div class="qa-btn" onclick="abrirPDFRemision('${esc(id)}','ambos')">
+        <div class="qa-btn-icon" style="background:var(--success)">🖨️</div><div class="qa-btn-label">Imprimir Todo</div>
+      </div>
+    </div>
+    <div class="fields-grid">
+      <div class="field-group"><div class="field-label">Remisión N°</div><div class="field-value">${esc(String(r.NUMERO_REMISION||'—'))}</div></div>
+      <div class="field-group"><div class="field-label">OP</div><div class="field-value">${esc(String(r.OP||'—'))}</div></div>
+      <div class="field-group"><div class="field-label">Cotización</div><div class="field-value">${esc(String(r.COTIZACION||'—'))}</div></div>
+      <div class="field-group"><div class="field-label">Fecha</div><div class="field-value">${fmtDate(r.FECHA)}</div></div>
+      <div class="field-group"><div class="field-label">Estado</div><div class="field-value">${esc(r.ESTADO||'—')}</div></div>
+    </div>
+    <div class="field-group"><div class="field-label">Señores / Cliente</div><div class="field-value">${esc(r.SEÑORES||'—')}</div></div>
+    <div class="field-group"><div class="field-label">Proyecto</div><div class="field-value">${esc(r.PROYECTO||'—')}</div></div>
+    <div class="field-group"><div class="field-label">Descripción</div><div class="field-value">${esc(r.DESCRIPCION||'—')}</div></div>
+  `;
+  openDetail('Remisión N° '+(r.NUMERO_REMISION||''), html);
+}
+
+// ── Abrir PDF de remisión ya guardada ────────────────────────
+function abrirPDFRemision(id, tipo){
+  const r=(DB.remisiones||[]).find(x=>String(x.ID_REMISION||'')===String(id));
+  if(!r){ toast('No encontrada','error'); return; }
+  _generarPDFRemision(r, tipo||'ambos');
+}
+
+// ══════════════════════════════════════════════════════════════
+// EDITOR PDF REMISIÓN — ventana tipo PDF igual que conformidades
+// ══════════════════════════════════════════════════════════════
+function abrirEditorRemision(remId){
+  const r = remId ? (DB.remisiones||[]).find(x=>String(x.ID_REMISION||'')===String(remId)) : null;
+  const esNueva = !r;
+  const idRem = r ? (r.ID_REMISION||remId) : _getNextRemNum();
+
+  // Catálogo OP para datalist
+  const opOpts=[...new Set((DB.produccion||[]).map(o=>String(o.OP||o.IDQR||'').trim()).filter(Boolean))].sort();
+  // Índice OP → ítems (igual que conformidades)
+  const opItemIdx={};
+  (DB.produccion||[]).forEach(o=>{
+    const k=String(o.OP||o.IDQR||'').trim(); if(!k) return;
+    if(!opItemIdx[k]) opItemIdx[k]=[];
+    opItemIdx[k].push({
+      ITEM:    String(o.ITEM||''),
+      CLIENTE: String(o.EMPRESA||o.CLIENTE||''),
+      COTIZ:   String(o.COTIZACION||o.COT||''),
+      DESC:    String(o['DESCRIPCION DEL PROYECTO']||o.DESCRIPCION||''),
+      CANT:    String(o.CANTIDAD||o.CANT||'1'),
+    });
+  });
+
+  const dlOpts=arr=>arr.map(v=>`<option value="${esc(String(v))}">`).join('');
+  // Número consecutivo de remisión (4 dígitos)
+  function _getNextRemNum(){
+    let seq=parseInt(localStorage.getItem('wedm_rem_seq')||'0',10);
+    seq=isNaN(seq)?0:seq; seq++;
+    localStorage.setItem('wedm_rem_seq',seq);
+    return String(seq).padStart(4,'0');
+  }
+  const numRem = r ? (r.NUMERO_REMISION||idRem) : _getNextRemNum();
+
+  // Valores precargados
+  const v = k => r?.[k]||'';
+
+  // Ítems previos
+  let itemsPrev=[];
+  try{ itemsPrev=JSON.parse(v('ITEMS_JSON')||'[]'); }catch(e){}
+  if(!itemsPrev.length) itemsPrev=[{cant:'1',desc:''}];
+
+  const filasItems=itemsPrev.map((it,i)=>`
+    <tr id="item-tr-${i}">
+      <td style="border:1px solid #ccc;padding:3px;text-align:center;width:36px;font-weight:700">${i+1}</td>
+      <td style="border:1px solid #ccc;padding:3px;width:60px"><input class="i-cant" type="text" value="${esc(String(it.cant||'1'))}" style="text-align:center;width:100%;font-size:10px;border:none"></td>
+      <td style="border:1px solid #ccc;padding:3px"><textarea class="i-desc" rows="2" style="width:100%;font-size:10px;border:none;resize:vertical">${esc(it.desc||'')}</textarea></td>
+      <td style="border:1px solid #ccc;padding:3px;text-align:center;width:28px">
+        <button type="button" onclick="_remDelItem(${i})" style="background:#dc2626;color:#fff;border:none;border-radius:3px;width:18px;height:18px;font-size:10px;cursor:pointer;line-height:1" class="no-print">✕</button>
+      </td>
+    </tr>`).join('');
+
+  const today=()=>new Date().toISOString().slice(0,10);
+
+  const html=`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+  <title>${esNueva?'Nueva Remisión':'Editar Remisión — '+esc(String(numRem))}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:Arial,sans-serif;font-size:10px;color:#000;background:#f1f5f9;padding-top:60px}
+    input,textarea,select{font:inherit;color:inherit;border:none;background:transparent;width:100%;padding:2px 3px;border-radius:2px;transition:background .15s}
+    input:hover,textarea:hover,select:hover{background:rgba(37,99,235,.06)}
+    input:focus,textarea:focus,select:focus{outline:none;background:#eaf1ff;box-shadow:0 0 0 2px #2563eb inset}
+    textarea{resize:vertical}
+    .toolbar{position:fixed;top:0;left:0;right:0;z-index:99;background:#1a3a6b;color:#fff;
+      padding:10px 18px;display:flex;align-items:center;gap:10px;box-shadow:0 3px 10px rgba(0,0,0,.25)}
+    .toolbar b{flex:1;font-size:12.5px;font-weight:700}
+    .toolbar .status{font-size:11px;font-weight:600;color:#bbf7d0;min-width:120px;text-align:right}
+    .toolbar button{border:none;border-radius:8px;padding:9px 16px;font-size:12px;font-weight:700;cursor:pointer}
+    .btn-print{background:#0891b2;color:#fff}
+    .btn-save{background:#16a34a;color:#fff}
+    .sheet{background:#fff;max-width:860px;margin:14px auto 30px;padding:20px;border-radius:6px;box-shadow:0 2px 14px rgba(0,0,0,.12)}
+    .section-title{font-size:11px;font-weight:700;color:#1a3a6b;text-transform:uppercase;letter-spacing:.6px;
+      border-bottom:2px solid #1a3a6b;padding-bottom:4px;margin:18px 0 10px}
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+    .field{display:flex;flex-direction:column;gap:2px}
+    .field label{font-size:7.5px;font-weight:700;text-transform:uppercase;color:#555;letter-spacing:.3px}
+    .field input,.field textarea,.field select{border:1px solid #ddd;border-radius:4px;padding:5px 7px;font-size:10px;background:#fff}
+    .field input:focus,.field textarea:focus{border-color:#2563eb;box-shadow:none;background:#eaf1ff}
+    /* Tabla items */
+    .items-table{width:100%;border-collapse:collapse;margin-top:6px}
+    .items-table th{background:#1a3a6b;color:#fff;padding:6px 8px;font-size:9px;text-align:center;text-transform:uppercase;border:1px solid #2a4a7b}
+    .items-table td{border:1px solid #ccc;padding:2px;vertical-align:top}
+    .btn-add-item{width:100%;border:1.5px dashed #2563eb;background:#fff;color:#2563eb;
+      border-radius:8px;padding:7px;font-size:11px;font-weight:700;cursor:pointer;margin-top:8px}
+    .sep{border:none;border-top:2px dashed #ddd;margin:20px 0}
+    @media print{
+      .no-print,.toolbar{display:none!important}
+      body{background:#fff;padding-top:0}
+      .sheet{box-shadow:none;padding:0;max-width:none;margin:0}
+      @page{size:A4 portrait;margin:10mm}
+    }
+  </style></head><body>
+  <datalist id="dl-op-rem">${dlOpts(opOpts)}</datalist>
+
+  <div class="toolbar no-print">
+    <b>${esNueva?'📄 Nueva Remisión':'✏️ Editando Remisión N° '+esc(String(numRem))}</b>
+    <span class="status" id="save-status"></span>
+    <button type="button" class="btn-print" onclick="_imprimirRemision()">🖨️ Imprimir / PDF</button>
+    <button type="button" class="btn-save" onclick="_guardarRemision()">${esNueva?'💾 Crear Remisión':'💾 Guardar Cambios'}</button>
+  </div>
+
+  <div class="sheet">
+
+    <!-- ══ DATOS GENERALES ══ -->
+    <div class="section-title">📋 Datos Generales</div>
+    <div class="grid3">
+      <div class="field">
+        <label>Remisión N°</label>
+        <input id="r-num" type="text" value="${esc(String(numRem))}" style="font-weight:900;font-size:14px;color:#16a34a">
+      </div>
+      <div class="field">
+        <label>Fecha</label>
+        <input id="r-fecha" type="date" value="${esc(String(v('FECHA')||today()).slice(0,10))}">
+      </div>
+      <div class="field">
+        <label>Estado</label>
+        <select id="r-estado">
+          ${['BORRADOR','ENVIADA','ANULADA'].map(e=>`<option${v('ESTADO')===e?' selected':''}>${e}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+
+    <!-- ══ ENCABEZADO: buscar por OP o Cotización ══ -->
+    <div class="section-title">🏭 Encabezado</div>
+    <!-- Buscador OP / Cotización -->
+    <div style="background:#f0f4fa;border:1px solid #c7d4ea;border-radius:8px;padding:12px;margin-bottom:12px">
+      <div style="font-size:9px;font-weight:700;color:#1a3a6b;text-transform:uppercase;margin-bottom:8px;letter-spacing:.4px">
+        🔍 Buscar por OP o por Cotización — se autocompletan los datos
+      </div>
+      <div class="grid2">
+        <div class="field">
+          <label>OP</label>
+          <input id="r-op" type="text" list="dl-op-rem" placeholder="Escribe o busca la OP…"
+            value="${esc(v('OP'))}" style="font-weight:900;font-size:13px;color:#1a3a6b"
+            oninput="_remBuscarOP()" onchange="_remBuscarOP()">
+        </div>
+        <div class="field">
+          <label>Cotización</label>
+          <input id="r-cotiz-bus" type="text" list="dl-cotiz-rem" placeholder="Escribe o busca la cotización…"
+            value="${esc(v('COTIZACION'))}" style="font-weight:900;font-size:13px;color:#1a3a6b"
+            oninput="_remBuscarCotiz()" onchange="_remBuscarCotiz()">
+          <datalist id="dl-cotiz-rem">${dlOpts([...new Set((DB.produccion||[]).map(o=>String(o.COTIZACION||o.COT||'').trim()).filter(Boolean))].sort())}</datalist>
+        </div>
+      </div>
+    </div>
+    <!-- Datos autocargados del encabezado -->
+    <div class="grid3">
+      <div class="field">
+        <label>Cliente / Señores (autocompletado)</label>
+        <input id="r-señores-auto" type="text" value="${esc(v('SEÑORES')||'')}" readonly
+          style="background:#f8fafc;color:#1a3a6b;font-weight:700;cursor:default">
+      </div>
+      <div class="field">
+        <label>Cotización (confirmada)</label>
+        <input id="r-cotiz" type="text" value="${esc(v('COTIZACION'))}" readonly
+          style="background:#f8fafc;color:#1a3a6b;font-weight:700">
+      </div>
+      <div class="field">
+        <label>Proyecto</label>
+        <input id="r-proyecto" type="text" value="${esc(v('PROYECTO'))}" placeholder="ej. DEVOLUCION FMM867322">
+      </div>
+    </div>
+    <div class="field" style="margin-top:8px">
+      <label>Descripción breve (para el Acta de Entrega)</label>
+      <input id="r-desc-acta" type="text" value="${esc(v('DESC_ACTA'))}"
+        placeholder="ej. devolución de repuesto relacionado al FMM867322, no se le hizo ninguna intervención…">
+    </div>
+
+    <!-- ══ DESTINATARIO ══ -->
+    <div class="section-title">🏢 Destinatario</div>
+    <div class="grid2">
+      <div class="field">
+        <label>Señores</label>
+        <input id="r-señores" type="text" value="${esc(v('SEÑORES')||'AMCOR HOLDINGS AUSTRALIA PTY LTD SUCURSAL COLOMBIA')}">
+      </div>
+      <div class="field">
+        <label>NIT</label>
+        <input id="r-nit" type="text" value="${esc(v('NIT_DEST')||'900078003')}">
+      </div>
+      <div class="field">
+        <label>Dirección</label>
+        <input id="r-dir" type="text" value="${esc(v('DIRECCION_DEST')||'ZONA FRANCA PALMASECA BODEGA A5A')}">
+      </div>
+      <div class="field">
+        <label>Ciudad</label>
+        <input id="r-ciudad" type="text" value="${esc(v('CIUDAD_DEST')||'PALMIRA')}">
+      </div>
+      <div class="field">
+        <label>Encargado</label>
+        <input id="r-encargado" type="text" value="${esc(v('ENCARGADO')||'MIGUEL MARULANDA')}">
+      </div>
+      <div class="field">
+        <label>Teléfono destinatario</label>
+        <input id="r-tel-dest" type="text" value="${esc(v('TEL_DEST')||'')}">
+      </div>
+    </div>
+
+    <!-- ══ ÍTEMS / TABLA DE REMISIÓN ══ -->
+    <div class="section-title">📦 Ítems de la Remisión</div>
+    <!-- Buscador de ítems de la OP cargada -->
+    <div id="item-picker-wrap" style="background:#f0f4fa;border:1px solid #c7d4ea;border-radius:8px;padding:10px;margin-bottom:10px">
+      <div style="font-size:9px;font-weight:700;color:#1a3a6b;text-transform:uppercase;margin-bottom:6px;letter-spacing:.4px">
+        ➕ Seleccionar ítem de la OP para agregar a la remisión
+      </div>
+      <div style="display:flex;gap:8px;align-items:flex-end">
+        <div class="field" style="flex:1">
+          <label>Ítem de la OP</label>
+          <select id="r-item-pick" style="border:1px solid #c7d4ea;border-radius:4px;padding:6px 8px;background:#fff;font-size:10px">
+            <option value="">— Primero busca una OP o Cotización arriba —</option>
+          </select>
+        </div>
+        <div class="field" style="width:70px">
+          <label>Cantidad</label>
+          <input id="r-item-cant" type="number" min="1" value="1"
+            style="border:1px solid #c7d4ea;border-radius:4px;padding:6px 8px;background:#fff;font-size:11px;font-weight:700;text-align:center">
+        </div>
+        <button type="button" onclick="_remAgregarItem()"
+          style="background:#1a3a6b;color:#fff;border:none;border-radius:6px;padding:8px 16px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">
+          + Agregar
+        </button>
+      </div>
+      <!-- Descripción manual adicional (opcional) -->
+      <div class="field" style="margin-top:8px">
+        <label>Descripción adicional / personalizada (opcional — sobreescribe la del ítem)</label>
+        <input id="r-item-desc-extra" type="text" placeholder="Dejar vacío para usar la descripción del ítem"
+          style="border:1px solid #c7d4ea;border-radius:4px;padding:5px 8px;background:#fff;font-size:10px">
+      </div>
+    </div>
+    <!-- Tabla de ítems agregados -->
+    <table class="items-table">
+      <thead><tr>
+        <th style="width:32px">#</th>
+        <th style="width:55px">Cant.</th>
+        <th>Descripción</th>
+        <th style="width:28px" class="no-print">Del</th>
+      </tr></thead>
+      <tbody id="items-tbody">${filasItems}</tbody>
+    </table>
+    <button type="button" class="btn-add-item no-print" onclick="_remAddItemManual()">+ Agregar ítem manual</button>
+
+    <!-- ══ OBSERVACIONES ══ -->
+    <div class="section-title">📝 Observaciones</div>
+    <div class="field">
+      <textarea id="r-obs" rows="3">${esc(v('OBSERVACIONES'))}</textarea>
+    </div>
+
+  </div><!-- /sheet -->
+
+  <script>
+  var _ID_REM   = ${JSON.stringify(idRem)};
+  var _ES_NUEVA = ${JSON.stringify(esNueva)};
+  var _NUM_REM  = ${JSON.stringify(numRem)};
+  var _opItemIdx= ${JSON.stringify(opItemIdx)};
+
+  function _esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function _fmtFecha(s){
+    if(!s) return '—';
+    try{
+      var d=new Date(s+'T12:00:00');
+      return d.toLocaleDateString('es-CO',{day:'2-digit',month:'2-digit',year:'numeric'});
+    }catch(e){ return s; }
+  }
+  function _g(id){ var el=document.getElementById(id); return el?el.value.trim():''; }
+
+  // ── Índice cotización → OP (para buscar por cotización) ───────
+  var _cotizOpIdx={};
+  Object.keys(_opItemIdx).forEach(function(op){
+    _opItemIdx[op].forEach(function(it){
+      if(it.COTIZ) _cotizOpIdx[it.COTIZ]=op;
+    });
+  });
+
+  // ── Actualizar picker de ítems con los de la OP ─────────────
+  function _remPoblarPicker(opVal){
+    var items=_opItemIdx[opVal]||[];
+    var sel=document.getElementById('r-item-pick');
+    if(!sel) return;
+    if(!items.length){
+      sel.innerHTML='<option value="">— No hay ítems para esta OP —</option>';
+      return;
+    }
+    sel.innerHTML='<option value="">— Escoger ítem —</option>';
+    items.forEach(function(it,i){
+      var opt=document.createElement('option');
+      opt.value=i;
+      var label='Item '+it.ITEM;
+      if(it.DESC) label+=' — '+it.DESC.slice(0,60);
+      if(it.CANT) label+=' (x'+it.CANT+')';
+      opt.textContent=label;
+      opt.dataset.cant=it.CANT||'1';
+      opt.dataset.desc=it.DESC||'';
+      opt.dataset.cliente=it.CLIENTE||'';
+      opt.dataset.cotiz=it.COTIZ||'';
+      opt.dataset.item=it.ITEM||'';
+      sel.appendChild(opt);
+    });
+  }
+
+  // ── Cargar datos del encabezado desde una OP ─────────────────
+  function _remCargarEncabezado(opVal){
+    var items=_opItemIdx[opVal]||[];
+    var sf=function(id,v){ var el=document.getElementById(id); if(el&&v) el.value=v; };
+    if(items.length>0){
+      var it=items[0];
+      sf('r-cotiz',       it.COTIZ);
+      sf('r-cotiz-bus',   it.COTIZ);
+      sf('r-señores-auto',it.CLIENTE||'');
+      sf('r-señores',     it.CLIENTE||'');
+    }
+    _remPoblarPicker(opVal);
+  }
+
+  // ── Buscar por OP ──────────────────────────────────────────
+  function _remBuscarOP(){
+    var opVal=document.getElementById('r-op').value.trim();
+    if(!opVal||!_opItemIdx[opVal]) return;
+    _remCargarEncabezado(opVal);
+  }
+
+  // ── Buscar por Cotización ──────────────────────────────────
+  function _remBuscarCotiz(){
+    var cotVal=document.getElementById('r-cotiz-bus').value.trim();
+    if(!cotVal) return;
+    var opEncontrada=_cotizOpIdx[cotVal]||'';
+    if(!opEncontrada){
+      // Buscar parcialmente
+      var keys=Object.keys(_cotizOpIdx);
+      var match=keys.find(function(k){ return k.indexOf(cotVal)!==-1; });
+      if(match) opEncontrada=_cotizOpIdx[match];
+    }
+    if(!opEncontrada) return;
+    var opEl=document.getElementById('r-op');
+    if(opEl) opEl.value=opEncontrada;
+    _remCargarEncabezado(opEncontrada);
+  }
+
+  // ── Agregar ítem desde el picker ───────────────────────────
+  function _remAgregarItem(){
+    var sel=document.getElementById('r-item-pick');
+    var cantInput=document.getElementById('r-item-cant');
+    var descExtra=document.getElementById('r-item-desc-extra');
+    if(!sel||sel.value===''){
+      alert('Primero escoge un ítem de la lista.');
+      return;
+    }
+    var opt=sel.options[sel.selectedIndex];
+    var cant=cantInput?cantInput.value.trim():'1';
+    var descBase=opt.dataset.desc||opt.textContent;
+    var desc=descExtra&&descExtra.value.trim()?descExtra.value.trim():descBase;
+
+    _remInsertarFila(cant, desc);
+
+    // Limpiar picker para el siguiente ítem
+    sel.value='';
+    if(cantInput) cantInput.value='1';
+    if(descExtra) descExtra.value='';
+  }
+
+  // ── Agregar ítem manual (sin picker) ──────────────────────
+  function _remAddItemManual(){
+    _remInsertarFila('1','');
+  }
+
+  // ── Insertar fila en la tabla ──────────────────────────────
+  function _remInsertarFila(cant, desc){
+    var tbody=document.getElementById('items-tbody');
+    var idx=tbody.rows.length;
+    var tr=document.createElement('tr');
+    tr.id='item-tr-'+idx;
+    tr.innerHTML=
+      '<td style="border:1px solid #ccc;padding:3px;text-align:center;width:32px;font-weight:700">'+(idx+1)+'</td>'+
+      '<td style="border:1px solid #ccc;padding:3px;width:55px"><input class="i-cant" type="text" value="'+_esc(String(cant||'1'))+'" style="text-align:center;width:100%;font-size:10px;border:none"></td>'+
+      '<td style="border:1px solid #ccc;padding:3px"><textarea class="i-desc" rows="2" style="width:100%;font-size:10px;border:none;resize:vertical">'+_esc(desc||'')+'</textarea></td>'+
+      '<td style="border:1px solid #ccc;padding:3px;text-align:center;width:28px">'+
+        '<button type="button" onclick="_remDelItem('+idx+')" style="background:#dc2626;color:#fff;border:none;border-radius:3px;width:18px;height:18px;font-size:10px;cursor:pointer;line-height:1" class="no-print">✕</button>'+
+      '</td>';
+    tbody.appendChild(tr);
+  }
+
+  function _remDelItem(idx){
+    var tr=document.getElementById('item-tr-'+idx);
+    if(tr) tr.remove();
+    document.querySelectorAll('#items-tbody tr').forEach(function(row,i){
+      row.cells[0].textContent=i+1;
+    });
+  }
+
+  // ── Recolectar ítems ───────────────────────────────────────
+  function _getItems(){
+    var items=[];
+    document.querySelectorAll('#items-tbody tr').forEach(function(tr){
+      var cant=tr.querySelector('.i-cant')?tr.querySelector('.i-cant').value.trim():'1';
+      var desc=tr.querySelector('.i-desc')?tr.querySelector('.i-desc').value.trim():'';
+      if(cant||desc) items.push({cant:cant,desc:desc});
+    });
+    return items;
+  }
+
+  // ── Guardar → postMessage al main ──────────────────────────
+  function _guardarRemision(){
+    var op=_g('r-op');
+    if(!op){ alert('Selecciona una OP antes de guardar.'); return; }
+    var items=_getItems();
+    var payload={
+      ID_REMISION:    _ID_REM,
+      NUMERO_REMISION:_g('r-num')||_NUM_REM,
+      ES_NUEVA:       _ES_NUEVA,
+      FECHA:          _g('r-fecha'),
+      ESTADO:         _g('r-estado'),
+      OP:             op,
+      COTIZACION:     _g('r-cotiz'),
+      PROYECTO:       _g('r-proyecto'),
+      DESC_ACTA:      _g('r-desc-acta'),
+      SEÑORES:        _g('r-señores-auto')||_g('r-señores'),
+      NIT_DEST:       _g('r-nit'),
+      DIRECCION_DEST: _g('r-dir'),
+      CIUDAD_DEST:    _g('r-ciudad'),
+      ENCARGADO:      _g('r-encargado'),
+      TEL_DEST:       _g('r-tel-dest'),
+      OBSERVACIONES:  _g('r-obs'),
+      ITEMS_JSON:     JSON.stringify(items),
+      DESCRIPCION:    items.map(function(i){return i.desc;}).join(' / '),
+    };
+    var st=document.getElementById('save-status');
+    if(window.opener&&!window.opener.closed){
+      window.opener.postMessage({type:'remision-editor-save',payload:payload},'*');
+      st.textContent='✅ Guardado — puedes cerrar esta pestaña';
+      st.style.color='#bbf7d0';
+    } else {
+      alert('No se pudo comunicar con la ventana principal.');
+    }
+  }
+
+  // ── Imprimir ambos documentos ──────────────────────────────
+  function _imprimirRemision(){
+    var op=_g('r-op');
+    var items=_getItems();
+    var fecha=_fmtFecha(_g('r-fecha'));
+    var numRem=_g('r-num')||_NUM_REM;
+    var señores=_g('r-señores');
+    var nit=_g('r-nit');
+    var dir=_g('r-dir');
+    var ciudad=_g('r-ciudad');
+    var encargado=_g('r-encargado');
+    var telDest=_g('r-tel-dest');
+    var proyecto=_g('r-proyecto');
+    var cotiz=_g('r-cotiz');
+    var descActa=_g('r-desc-acta')||'devolución de repuesto. No se realizó ninguna intervención, por lo tanto no genera costo $0.';
+    var obs=_g('r-obs');
+
+    var filasItemsHtml=items.map(function(it,i){
+      return '<tr>'+
+        '<td style="border:1px solid #ccc;padding:8px 6px;text-align:center;font-weight:700">'+(i+1)+'</td>'+
+        '<td style="border:1px solid #ccc;padding:8px 6px;text-align:center">'+(it.cant||'1')+'</td>'+
+        '<td style="border:1px solid #ccc;padding:8px 12px;text-transform:uppercase;font-size:10px">'+_esc(it.desc)+'</td>'+
+      '</tr>';
+    }).join('');
+
+    // Logo SVG inline GRUPO WEDM
+    var logoHtml='<div style="font-weight:900;font-size:18px;color:#1a3a6b;line-height:1.1">GRUPO<span style="color:#2563eb">WEDM</span><br><span style="font-size:9px;font-weight:400;color:#555">Metalmecánica Avanzada</span></div>';
+
+    var css='*{box-sizing:border-box;margin:0;padding:0}'+
+      'body{font-family:Arial,sans-serif;font-size:10px;color:#111}'+
+      '.page{padding:18mm 16mm;min-height:297mm;page-break-after:always;position:relative}'+
+      '.page:last-child{page-break-after:auto}'+
+      'table{border-collapse:collapse;width:100%}'+
+      'th,td{border:1px solid #ccc;padding:5px 8px;font-size:10px}'+
+      'th{background:#1a3a6b;color:#fff;text-transform:uppercase;font-size:9px;letter-spacing:.3px}'+
+      '.barra{background:#1a3a6b;color:#fff;padding:5px 10px;font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.5px}'+
+      '.footer{position:absolute;bottom:12mm;left:16mm;right:16mm;border-top:1px solid #ccc;padding-top:5px;text-align:center;font-size:8px;color:#777}'+
+      '@media print{body{margin:0}@page{size:A4 portrait;margin:0}}';
+
+    // ══ PÁGINA 1: ACTA DE ENTREGA ══
+    var pag1='<div class="page">'+
+      // Encabezado
+      '<div style="text-align:center;margin-bottom:30px">'+logoHtml+'</div>'+
+      // Datos carta
+      '<p style="margin-bottom:6px">'+fecha+'</p>'+
+      '<p style="margin-bottom:4px"><b>Señores</b></p>'+
+      '<p style="margin-bottom:4px">'+_esc(señores)+'</p>'+
+      '<p style="margin-bottom:20px">Cordial Saludo</p>'+
+      // Título
+      '<h2 style="text-align:center;font-size:13px;font-weight:900;margin:30px 0 30px;text-transform:uppercase;letter-spacing:1px">Acta de Entrega</h2>'+
+      // Cuerpo
+      '<p style="line-height:1.8;margin-bottom:40px;text-align:justify">'+
+        'Por medio de la presente reportamos '+_esc(descActa)+
+      '</p>'+
+      (obs?'<p style="margin-bottom:40px;font-style:italic">'+_esc(obs)+'</p>':'')+
+      // Firma
+      '<p style="margin-bottom:50px">Cordialmente</p>'+
+      '<div style="width:200px;border-top:1px solid #333;padding-top:6px">'+
+        '<p style="font-weight:700">Mauricio Andrés García Posada</p>'+
+        '<p>Gerente General</p>'+
+        '<p>GRUPO WEDM</p>'+
+      '</div>'+
+      // Footer
+      '<div class="footer">Dirección: Calle 39 # 1H - 31 Bodega 5. &nbsp; Tel: 379 7352 - 308 7376 - 345 1648 &nbsp; Cel: 300 886 0468<br>administracion@grupowedm.com &nbsp;·&nbsp; Cali - Valle</div>'+
+    '</div>';
+
+    // ══ PÁGINA 2: REMISIÓN ══
+    var pag2='<div class="page">'+
+      // Header: logo izq + datos cliente der
+      '<table style="margin-bottom:14px;border:none"><tr>'+
+        '<td style="border:none;width:42%;vertical-align:top;padding:0">'+
+          logoHtml+
+          '<div style="font-size:8.5px;line-height:1.7;margin-top:8px;color:#333">'+
+            'CALLE 39 No. 1H-31 BOD-05<br>'+
+            'Tel: 3797352 &nbsp; Cel: 3008860468<br>'+
+            'Email: administracion@grupowedm.com<br>'+
+            'NIT: 900763241-7<br>'+
+            'CALI - VALLE DEL CAUCA - COLOMBIA'+
+          '</div>'+
+        '</td>'+
+        '<td style="border:none;width:58%;vertical-align:top;padding:0 0 0 16px">'+
+          '<table style="font-size:9px"><tbody>'+
+            '<tr><td style="border:none;padding:2px 4px"><b>FECHA:</b></td><td style="border:none;padding:2px 4px">'+fecha+'</td></tr>'+
+            '<tr><td style="border:none;padding:2px 4px"><b>SEÑORES:</b></td><td style="border:none;padding:2px 4px;font-weight:700">'+_esc(señores)+'</td></tr>'+
+            '<tr><td style="border:none;padding:2px 4px"><b>NIT:</b></td><td style="border:none;padding:2px 4px">'+_esc(nit)+'</td></tr>'+
+            '<tr><td style="border:none;padding:2px 4px"><b>DIRECCIÓN:</b></td><td style="border:none;padding:2px 4px">'+_esc(dir)+'</td></tr>'+
+            '<tr><td style="border:none;padding:2px 4px"><b>CIUDAD:</b></td><td style="border:none;padding:2px 4px;font-weight:700">'+_esc(ciudad)+'</td></tr>'+
+            '<tr><td style="border:none;padding:2px 4px"><b>ENCARGADO:</b></td><td style="border:none;padding:2px 4px;font-weight:700">'+_esc(encargado)+'</td></tr>'+
+            '<tr><td style="border:none;padding:2px 4px"><b>TELÉFONO:</b></td><td style="border:none;padding:2px 4px">'+_esc(telDest)+'</td></tr>'+
+          '</tbody></table>'+
+        '</td>'+
+      '</tr></table>'+
+      // Proyecto y Remisión
+      '<table style="margin-bottom:12px;border:2px solid #1a3a6b"><tbody>'+
+        '<tr><td style="background:#f0f4fa;font-weight:700;width:120px;font-size:10px">PROYECTO:</td>'+
+            '<td style="font-weight:700;font-size:11px;text-transform:uppercase">'+_esc(proyecto)+'</td></tr>'+
+        '<tr><td style="background:#f0f4fa;font-weight:700;font-size:10px">REMISIÓN:</td>'+
+            '<td style="font-weight:900;font-size:18px">'+_esc(String(numRem))+'</td></tr>'+
+      '</tbody></table>'+
+      // OP y Cotización
+      '<table style="margin-bottom:12px;border:2px solid #1a3a6b"><tbody>'+
+        '<tr><td style="background:#1a3a6b;color:#fff;font-weight:700;font-size:10px;text-transform:uppercase;width:200px;padding:8px 12px">Orden de Producción</td>'+
+            '<td style="font-weight:900;font-size:14px;padding:8px 16px">'+_esc(op)+'</td></tr>'+
+        '<tr><td style="background:#1a3a6b;color:#fff;font-weight:700;font-size:10px;text-transform:uppercase;padding:8px 12px">Cotización</td>'+
+            '<td style="font-weight:900;font-size:14px;padding:8px 16px">'+_esc(cotiz)+'</td></tr>'+
+      '</tbody></table>'+
+      // Tabla ítems
+      '<table><thead><tr>'+
+        '<th style="width:36px">#</th>'+
+        '<th style="width:60px">Cant</th>'+
+        '<th>Descripción</th>'+
+      '</tr></thead><tbody>'+filasItemsHtml+'</tbody></table>'+
+      // Firma remisión
+      '<div style="margin-top:28px;display:grid;grid-template-columns:1fr 1fr;max-width:500px">'+
+        '<div>'+
+          '<div class="barra" style="display:inline-block;padding:6px 20px;border-radius:4px 4px 0 0">Atentamente</div>'+
+          '<div style="border:1px solid #ccc;padding:14px 20px;font-weight:700;font-size:12px">Mauricio García</div>'+
+        '</div>'+
+      '</div>'+
+      (obs?'<p style="margin-top:14px;font-size:9px;color:#555"><b>Obs:</b> '+_esc(obs)+'</p>':'')+
+      '<div class="footer">Dirección: Calle 39 # 1H - 31 Bodega 5. &nbsp; Tel: 379 7352 &nbsp; Cel: 300 886 0468 &nbsp; NIT: 900763241-7<br>Cali - Valle del Cauca - Colombia</div>'+
+    '</div>';
+
+    var html='<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">'+
+      '<title>REMISION-'+_esc(String(numRem))+'</title>'+
+      '<style>'+css+'</style></head><body>'+pag1+pag2+'</body></html>';
+
+    var win=window.open('','_blank','width=850,height=1100');
+    if(!win){ alert('Permite ventanas emergentes para imprimir'); return; }
+    win.document.write(html);
+    win.document.close();
+    setTimeout(function(){ win.print(); },400);
+  }
+
+  // Inicialización: si hay OP preexistente, cargar encabezado y picker
+  (function(){
+    var opEl=document.getElementById('r-op');
+    if(opEl&&opEl.value.trim()) _remCargarEncabezado(opEl.value.trim());
+    // Si hay cotización buscarla
+    var cotEl=document.getElementById('r-cotiz-bus');
+    if(cotEl&&cotEl.value.trim()&&(!opEl||!opEl.value.trim())) _remBuscarCotiz();
+  })();
+  <\/script>
+  </body></html>`;
+
+  const win=window.open('','_blank');
+  if(!win){ toast('Permite ventanas emergentes para editar','error'); return; }
+  win.document.write(html);
+  win.document.close();
+}
+
+// ── Listener postMessage del editor de remisiones ─────────────
+window.addEventListener('message',(ev)=>{
+  const msg=ev.data;
+  if(!msg||msg.type!=='remision-editor-save') return;
+  const payload=msg.payload||{};
+  const idRem=payload.ID_REMISION;
+
+  if(!DB.remisiones) DB.remisiones=[];
+  if(payload.ES_NUEVA){
+    DB.remisiones.push(payload);
+  } else {
+    const idx=DB.remisiones.findIndex(x=>String(x.ID_REMISION||'')===String(idRem));
+    if(idx>=0) DB.remisiones[idx]=Object.assign({},DB.remisiones[idx],payload);
+    else DB.remisiones.push(payload);
+  }
+
+  // Guardar al GAS
+  POST_QA_BG(payload.ES_NUEVA?'createRemision':'updateRemision', payload);
+
+  toast(payload.ES_NUEVA?'📄 Remisión creada':'✅ Remisión actualizada');
+  if(MOD==='remisiones') renderRemisiones();
+});
+
+// Número consecutivo de remisión (guardado en localStorage)
+function _getNextRemNum(){
+  let seq=parseInt(localStorage.getItem('wedm_rem_seq')||'0',10);
+  seq=isNaN(seq)?0:seq; seq++;
+  localStorage.setItem('wedm_rem_seq',seq);
+  return String(seq).padStart(4,'0');
 }
 
 // ── Listener postMessage de vuelta del editor de conformidades ─
