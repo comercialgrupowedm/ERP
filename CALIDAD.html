@@ -835,8 +835,31 @@ async function _initApp(){
     const r=await GET('getControlProduccion',{modo:'todo'});
     DB.produccion=Array.isArray(r)?r:(r?.data??[]);
     cSet('produccion',DB.produccion);
+    setSplash(55,'Cargando cotizaciones e ítems…');
+    // Cargar hoja COTIZACIONES del ERP principal
+    try{
+      const rcot=await GET('getCotizaciones',{modo:'todo'});
+      DB.cotizaciones=Array.isArray(rcot)?rcot:(rcot?.data??[]);
+      cSet('cotizaciones',DB.cotizaciones);
+    }catch(e){ DB.cotizaciones=cGetStale('cotizaciones')||[]; console.warn('getCotizaciones:',e); }
+    // Cargar hoja ELEMENTOS del ERP principal — ítems de cotización con descripción, material, cantidad
+    try{
+      const rits=await GET('getItems',{modo:'todo'});
+      DB.items=Array.isArray(rits)?rits:(rits?.data??[]);
+      cSet('items',DB.items);
+    }catch(e){ DB.items=cGetStale('items')||[]; console.warn('getItems:',e); }
     setSplash(60,'Cargando solicitudes externas…');
     // Cargar solicitudes externas — el GAS combina AppSheet + hoja propia
+    try{
+      const rcot=await GET('getCotizaciones',{modo:'todo'});
+      DB.cotizaciones=Array.isArray(rcot)?rcot:(rcot?.data??[]);
+      cSet('cotizaciones',DB.cotizaciones);
+    }catch(e){}
+    try{
+      const rits=await GET('getItems',{modo:'todo'});
+      DB.items=Array.isArray(rits)?rits:(rits?.data??[]);
+      cSet('items',DB.items);
+    }catch(e){}
     try{
       const rs=await GET_QA('getSolicitudesExternas');
       DB.solicitudes=Array.isArray(rs)?rs:(rs?.data??[]);
@@ -3477,11 +3500,11 @@ function renderRemisiones(){
     rems.slice().reverse().forEach(r=>{
       const estado=r.ESTADO||'BORRADOR';
       const color=estado==='ENVIADA'?'var(--success)':estado==='ANULADA'?'#dc2626':'var(--primary)';
-      html+=`<div class="op-row rem-row" onclick="detailRemision('${esc(r.ID_REMISION||'')}')">
+      html+=`<div class="op-row rem-row" onclick="detailRemision('${esc(r.ID_REMISION||r.ID_PEDIDO||'')}')">
         <div class="op-badge" style="background:${color}">📄</div>
         <div class="op-info">
-          <div class="op-title">Rem. N° ${esc(String(r.NUMERO_REMISION||r.ID_REMISION||'—'))} · ${esc(r.PROYECTO||'—')}</div>
-          <div class="op-sub">OP ${esc(String(r.OP||'—'))} · ${esc(r.SEÑORES||r.CLIENTE||'—')}</div>
+          <div class="op-title">Rem. N° ${esc(String(r.NUMERO_REMISION||r.REMISION||r.ID_PEDIDO||'—'))} · ${esc(r.PROYECTO||r['DESCRIPCION DEL PROYECTO']||'—')}</div>
+          <div class="op-sub">OP ${esc(String(r.OP||'—'))} · ${esc(r.SEÑORES||r.EMPRESA||r.CLIENTE||'—')}</div>
           <div class="op-sub">${fmtDate(r.FECHA)} · <b style="color:${color}">${esc(estado)}</b></div>
         </div>
         <div style="font-size:20px">›</div>
@@ -3492,7 +3515,8 @@ function renderRemisiones(){
 }
 
 function detailRemision(id){
-  const r=(DB.remisiones||[]).find(x=>String(x.ID_REMISION||'')===String(id));
+  const r=(DB.remisiones||[]).find(x=>
+    String(x.ID_REMISION||x.ID_PEDIDO||'')===String(id));
   if(!r){ toast('Remisión no encontrada','error'); return; }
   let html=`
     <div class="qa-actions">
@@ -3513,6 +3537,7 @@ function detailRemision(id){
       <div class="field-group"><div class="field-label">Remisión N°</div><div class="field-value">${esc(String(r.NUMERO_REMISION||'—'))}</div></div>
       <div class="field-group"><div class="field-label">OP</div><div class="field-value">${esc(String(r.OP||'—'))}</div></div>
       <div class="field-group"><div class="field-label">Cotización</div><div class="field-value">${esc(String(r.COTIZACION||'—'))}</div></div>
+    ${r.ORDEN_COMPRA||r['ORDEN DE COMPRA']?`<div class="field-group"><div class="field-label">Orden de Compra</div><div class="field-value" style="color:var(--primary);font-weight:700">${esc(r.ORDEN_COMPRA||r['ORDEN DE COMPRA']||'')}</div></div>`:''}
       <div class="field-group"><div class="field-label">Fecha</div><div class="field-value">${fmtDate(r.FECHA)}</div></div>
       <div class="field-group"><div class="field-label">Estado</div><div class="field-value">${esc(r.ESTADO||'—')}</div></div>
     </div>
@@ -3525,7 +3550,8 @@ function detailRemision(id){
 
 // ── Abrir PDF de remisión ya guardada ────────────────────────
 function abrirPDFRemision(id, tipo){
-  const r=(DB.remisiones||[]).find(x=>String(x.ID_REMISION||'')===String(id));
+  const r=(DB.remisiones||[]).find(x=>
+    String(x.ID_REMISION||x.ID_PEDIDO||'')===String(id));
   if(!r){ toast('No encontrada','error'); return; }
   _generarPDFRemision(r, tipo||'ambos');
 }
@@ -3534,23 +3560,161 @@ function abrirPDFRemision(id, tipo){
 // EDITOR PDF REMISIÓN — ventana tipo PDF igual que conformidades
 // ══════════════════════════════════════════════════════════════
 function abrirEditorRemision(remId){
-  const r = remId ? (DB.remisiones||[]).find(x=>String(x.ID_REMISION||'')===String(remId)) : null;
+  const r = remId ? (DB.remisiones||[]).find(x=>
+    String(x.ID_REMISION||x.ID_PEDIDO||'')===String(remId)) : null;
   const esNueva = !r;
-  const idRem = r ? (r.ID_REMISION||remId) : _getNextRemNum();
+  const idRem = r ? (r.ID_REMISION||r.ID_PEDIDO||remId) : _getNextRemNum();
 
-  // Catálogo OP para datalist
-  const opOpts=[...new Set((DB.produccion||[]).map(o=>String(o.OP||o.IDQR||'').trim()).filter(Boolean))].sort();
-  // Índice OP → ítems (igual que conformidades)
+  // Datos del cliente: vienen de la hoja COTIZACIONES del ERP (DB.cotizaciones)
+  const _rOP       = r ? String(r.OP||'').trim() : '';
+  const _rCotizRaw = r ? String(r.COTIZACION||'').trim() : '';
+
+  // 1. Resolver número real de cotización
+  //    SOLAMCOR a veces guarda el ID_PEDIDO (UUID) en vez del número
+  let _cotizNumReal = _rCotizRaw;
+  if(r && _rCotizRaw){
+    const _esNum = /^\d+$/.test(_rCotizRaw);
+    if(!_esNum){
+      // Buscar por ID_PEDIDO en DB.cotizaciones
+      const _byUUID = (DB.cotizaciones||[]).find(c=>
+        String(c.ID_PEDIDO||'').trim()===_rCotizRaw
+      );
+      _cotizNumReal = _byUUID ? String(_byUUID.COTIZACION||'').trim() : '';
+    }
+  }
+  // Fallback: obtener cotización desde producción usando la OP
+  if(!_cotizNumReal && _rOP){
+    const _po = (DB.produccion||[]).find(o=>String(o.OP||o.IDQR||'').trim()===_rOP);
+    if(_po) _cotizNumReal = String(_po.COTIZACION||_po.COT||'').trim();
+  }
+
+  // 2. Fila de COTIZACIONES del ERP — fuente principal de datos del cliente
+  //    Columnas: ID_PEDIDO, COTIZACION, EMPRESA, NIT, DIRECCION, CIUDAD,
+  //              ENCARGADO, TELEFONO, DESCRIPCION DEL PROYECTO, ORDEN DE COMPRA
+  const _cotizMatch = r ? (
+    (DB.cotizaciones||[]).find(c=>
+      _cotizNumReal && String(c.COTIZACION||'').trim()===_cotizNumReal
+    ) ||
+    (DB.cotizaciones||[]).find(c=>
+      _rCotizRaw && String(c.ID_PEDIDO||'').trim()===_rCotizRaw
+    ) ||
+    (DB.cotizaciones||[]).find(c=>
+      _rOP && String(c.OP||'').trim()===_rOP
+    )
+  ) : null;
+
+  // 3. Fila de producción — para EMPRESA si no está en cotizaciones
+  const _prodMatch = r ? (
+    (DB.produccion||[]).find(o=>_rOP && String(o.OP||o.IDQR||'').trim()===_rOP) ||
+    (DB.produccion||[]).find(o=>_cotizNumReal && String(o.COTIZACION||o.COT||'').trim()===_cotizNumReal)
+  ) : null;
+
+  // Catálogo OP para datalist — unión de producción + solicitudes
+  const opOpts=[...new Set([
+    ...(DB.produccion||[]).map(o=>String(o.OP||o.IDQR||'').trim()),
+    ...(DB.solicitudes||[]).map(s=>String(s.OP||s['#OP']||s.IDQR||'').trim()),
+  ].filter(Boolean))].sort();
+  // Datalist de cotizaciones también desde DB.items
+  const cotizOpts=[...new Set([
+    ...(DB.cotizaciones||[]).map(c=>String(c.COTIZACION||'').trim()),
+    ...(DB.items||[]).map(it=>String(it.COTIZACION||it.COT||'').trim()),
+    ...(DB.produccion||[]).map(o=>String(o.COTIZACION||o.COT||'').trim()),
+  ].filter(Boolean))].sort();
+
+  // ── Índice OP → ítems desde hoja ELEMENTOS (DB.items) ─────────────────────
+  // Columnas: ID_PEDIDO, COTIZACION, ITEM, COT-ITEM, UNIDADES, DESCRIPCION ITEM,
+  //           EMPRESA, DESCRIPCION DEL PROYECTO
+  // Relación con OP: primero buscamos en DB.produccion para obtener la OP de cada cotización
   const opItemIdx={};
+
+  // Índice cotización → OP (desde DB.produccion)
+  const _cotizToOP={};
+  (DB.produccion||[]).forEach(o=>{
+    const cot=String(o.COTIZACION||o.COT||'').trim();
+    const op=String(o.OP||o.IDQR||'').trim();
+    if(cot && op) _cotizToOP[cot]=op;
+  });
+
+  // Índice COTIZACION → datos del encabezado (desde DB.cotizaciones)
+  const _cotizIdx={};
+  (DB.cotizaciones||[]).forEach(c=>{
+    const cot=String(c.COTIZACION||'').trim();
+    if(cot) _cotizIdx[cot]=c;
+  });
+
+  // Construir opItemIdx desde DB.items (hoja ELEMENTOS)
+  (DB.items||[]).forEach(it=>{
+    const cotiz  = String(it.COTIZACION||it.COT||'').trim();
+    const itemNum= String(it.ITEM||it['COT-ITEM']||'').trim();
+    const desc   = String(it['DESCRIPCION ITEM']||it.DESCRIPCION||'').trim();
+    const cant   = String(it.UNIDADES||it.CANTIDAD||'1').trim();
+
+    // Obtener OP desde _cotizToOP
+    let opKey = _cotizToOP[cotiz] || '';
+
+    // Si no hay OP en el índice, intentar desde producción por COT-ITEM
+    if(!opKey){
+      const cotItem = String(it['COT-ITEM']||'').trim();
+      const prod = (DB.produccion||[]).find(o=>
+        String(o.COTIZACION||o.COT||'').trim()===cotiz
+      );
+      if(prod) opKey = String(prod.OP||prod.IDQR||'').trim();
+    }
+
+    // Datos del encabezado desde DB.cotizaciones
+    const cdat = _cotizIdx[cotiz] || {};
+
+    const entry = {
+      ITEM:        itemNum,
+      CLIENTE:     String(it.EMPRESA||cdat.EMPRESA||''),
+      COTIZ:       cotiz,
+      DESC:        desc || String(cdat['DESCRIPCION DEL PROYECTO']||''),
+      CANT:        cant,
+      NIT:         String(cdat.NIT||''),
+      DIR:         String(cdat.DIRECCION||''),
+      CIUDAD:      String(it.CIUDAD||cdat.CIUDAD||''),
+      ENCARGADO:   String(cdat.ENCARGADO||''),
+      TEL:         String(cdat.TELEFONO||''),
+      ORDEN_COMPRA:String(cdat['ORDEN DE COMPRA']||''),
+      ID_PEDIDO:   String(it.ID_PEDIDO||cdat.ID_PEDIDO||''),
+      // Datos extra de ELEMENTOS útiles para la descripción del ítem
+      MATERIAL:    String(it['MATERIAL 1']||it.MATERIAL||''),
+      PLANO:       String(it.PLANO||''),
+    };
+
+    if(opKey){
+      if(!opItemIdx[opKey]) opItemIdx[opKey]=[];
+      opItemIdx[opKey].push(entry);
+    }
+    // También indexar por cotización para que _remBuscarCotiz funcione
+    if(cotiz){
+      if(!opItemIdx['_COT_'+cotiz]) opItemIdx['_COT_'+cotiz]=[];
+      opItemIdx['_COT_'+cotiz].push(entry);
+    }
+  });
+
+  // Fallback: agregar desde DB.produccion los ítems que no estén en ELEMENTOS
   (DB.produccion||[]).forEach(o=>{
     const k=String(o.OP||o.IDQR||'').trim(); if(!k) return;
+    if(opItemIdx[k] && opItemIdx[k].length>0) return; // ya tiene ítems desde ELEMENTOS
+    const cotiz=String(o.COTIZACION||o.COT||'').trim();
+    const cdat=_cotizIdx[cotiz]||{};
     if(!opItemIdx[k]) opItemIdx[k]=[];
     opItemIdx[k].push({
-      ITEM:    String(o.ITEM||''),
-      CLIENTE: String(o.EMPRESA||o.CLIENTE||''),
-      COTIZ:   String(o.COTIZACION||o.COT||''),
-      DESC:    String(o['DESCRIPCION DEL PROYECTO']||o.DESCRIPCION||''),
-      CANT:    String(o.CANTIDAD||o.CANT||'1'),
+      ITEM:        String(o.ITEM||''),
+      CLIENTE:     String(o.EMPRESA||o.CLIENTE||cdat.EMPRESA||''),
+      COTIZ:       cotiz,
+      DESC:        String(o['DESCRIPCION DEL PROYECTO']||o.DESCRIPCION||cdat['DESCRIPCION DEL PROYECTO']||''),
+      CANT:        String(o.CANTIDAD||o.CANT||'1'),
+      NIT:         String(cdat.NIT||''),
+      DIR:         String(cdat.DIRECCION||''),
+      CIUDAD:      String(o.CIUDAD||cdat.CIUDAD||''),
+      ENCARGADO:   String(cdat.ENCARGADO||''),
+      TEL:         String(cdat.TELEFONO||''),
+      ORDEN_COMPRA:String(cdat['ORDEN DE COMPRA']||''),
+      ID_PEDIDO:   String(cdat.ID_PEDIDO||''),
+      MATERIAL:    '',
+      PLANO:       '',
     });
   });
 
@@ -3562,15 +3726,52 @@ function abrirEditorRemision(remId){
     localStorage.setItem('wedm_rem_seq',seq);
     return String(seq).padStart(4,'0');
   }
-  const numRem = r ? (r.NUMERO_REMISION||idRem) : _getNextRemNum();
+  const numRem = r ? (r.NUMERO_REMISION||r.REMISION||idRem) : _getNextRemNum();
 
-  // Valores precargados
-  const v = k => r?.[k]||'';
+  // v() busca la clave directa y sus alias de SOLAMCOR
+  const _ALIAS = {
+    'FECHA':          ['FECHA EMISION','FECHA  EMISION COT.','FECHA EMISION COT.'],
+    'ESTADO':         ['TIPO'],
+    'SEÑORES':        ['EMPRESA'],
+    'NIT_DEST':       ['NIT'],
+    'DIRECCION_DEST': ['DIRECCION'],
+    'CIUDAD_DEST':    ['CIUDAD'],
+    'TEL_DEST':       ['TELEFONO'],
+    'ENCARGADO':      ['ENCARGADO'],
+    'PROYECTO':       ['DESCRIPCION DEL PROYECTO'],
+    'ORDEN_COMPRA':   ['ORDEN DE COMPRA'],
+    'DESC_ACTA':      ['DESC_ACTA'],
+    'OBSERVACIONES':  ['OBSERVACIONES ESPECIALES'],
+    'COTIZACION':     ['COTIZACION'],
+    'OP':             ['OP'],
+    'ID_PEDIDO_COT':  ['ID_PEDIDO'],
+    'ITEMS_JSON':     ['ITEMS_JSON'],
+    'NUMERO_REMISION':['REMISION','NUMERO_REMISION'],
+  };
+  const v = k => {
+    if(!r) return '';
+    if(r[k]!==undefined && r[k]!==null && String(r[k]).trim()!=='') return r[k];
+    const alts = _ALIAS[k] || [];
+    for(const alt of alts){
+      if(r[alt]!==undefined && r[alt]!==null && String(r[alt]).trim()!=='') return r[alt];
+    }
+    return '';
+  };
+
+
 
   // Ítems previos
   let itemsPrev=[];
   try{ itemsPrev=JSON.parse(v('ITEMS_JSON')||'[]'); }catch(e){}
-  if(!itemsPrev.length) itemsPrev=[{cant:'1',desc:''}];
+  if(!itemsPrev.length && r){
+    const descItems = r['DESCRIPCION DE ITEMS']||r['DESCRIPCION']||'';
+    const cantItems = r['CANTIDAD']||'1';
+    if(descItems){
+      const descs = descItems.split(' / ').map(d=>d.trim()).filter(Boolean);
+      itemsPrev = descs.map(d=>({cant:cantItems,desc:d}));
+    }
+  }
+  if(!itemsPrev.length) itemsPrev=[{cant:'',desc:''}];
 
   const filasItems=itemsPrev.map((it,i)=>`
     <tr id="item-tr-${i}">
@@ -3670,9 +3871,9 @@ function abrirEditorRemision(remId){
         <div class="field">
           <label>Cotización</label>
           <input id="r-cotiz-bus" type="text" list="dl-cotiz-rem" placeholder="Escribe o busca la cotización…"
-            value="${esc(v('COTIZACION'))}" style="font-weight:900;font-size:13px;color:#1a3a6b"
+            value="${esc(_cotizNumReal)}" style="font-weight:900;font-size:13px;color:#1a3a6b"
             oninput="_remBuscarCotiz()" onchange="_remBuscarCotiz()">
-          <datalist id="dl-cotiz-rem">${dlOpts([...new Set((DB.produccion||[]).map(o=>String(o.COTIZACION||o.COT||'').trim()).filter(Boolean))].sort())}</datalist>
+          <datalist id="dl-cotiz-rem">${dlOpts(cotizOpts)}</datalist>
         </div>
       </div>
     </div>
@@ -3685,7 +3886,7 @@ function abrirEditorRemision(remId){
       </div>
       <div class="field">
         <label>Cotización (confirmada)</label>
-        <input id="r-cotiz" type="text" value="${esc(v('COTIZACION'))}" readonly
+        <input id="r-cotiz" type="text" value="${esc(_cotizNumReal)}" readonly
           style="background:#f8fafc;color:#1a3a6b;font-weight:700">
       </div>
       <div class="field">
@@ -3693,10 +3894,17 @@ function abrirEditorRemision(remId){
         <input id="r-proyecto" type="text" value="${esc(v('PROYECTO'))}" placeholder="ej. DEVOLUCION FMM867322">
       </div>
     </div>
-    <div class="field" style="margin-top:8px">
-      <label>Descripción breve (para el Acta de Entrega)</label>
-      <input id="r-desc-acta" type="text" value="${esc(v('DESC_ACTA'))}"
-        placeholder="ej. devolución de repuesto relacionado al FMM867322, no se le hizo ninguna intervención…">
+    <div class="grid2" style="margin-top:8px">
+      <div class="field">
+        <label>Orden de Compra (O/C del cliente)</label>
+        <input id="r-oc" type="text" value="${esc(v('ORDEN_COMPRA'))}" placeholder="N° orden de compra del cliente"
+          style="font-weight:700;color:#1a3a6b">
+      </div>
+      <div class="field">
+        <label>Descripción breve (para el Acta de Entrega)</label>
+        <input id="r-desc-acta" type="text" value="${esc(v('DESC_ACTA'))}"
+          placeholder="ej. devolución de repuesto relacionado al FMM867322, no se le hizo ninguna intervención…">
+      </div>
     </div>
 
     <!-- ══ DESTINATARIO ══ -->
@@ -3704,23 +3912,23 @@ function abrirEditorRemision(remId){
     <div class="grid2">
       <div class="field">
         <label>Señores</label>
-        <input id="r-señores" type="text" value="${esc(v('SEÑORES')||'AMCOR HOLDINGS AUSTRALIA PTY LTD SUCURSAL COLOMBIA')}">
+        <input id="r-señores" type="text" value="${esc(v('SEÑORES'))}">
       </div>
       <div class="field">
         <label>NIT</label>
-        <input id="r-nit" type="text" value="${esc(v('NIT_DEST')||'900078003')}">
+        <input id="r-nit" type="text" value="${esc(v('NIT_DEST'))}">
       </div>
       <div class="field">
         <label>Dirección</label>
-        <input id="r-dir" type="text" value="${esc(v('DIRECCION_DEST')||'ZONA FRANCA PALMASECA BODEGA A5A')}">
+        <input id="r-dir" type="text" value="${esc(v('DIRECCION_DEST'))}">
       </div>
       <div class="field">
         <label>Ciudad</label>
-        <input id="r-ciudad" type="text" value="${esc(v('CIUDAD_DEST')||'PALMIRA')}">
+        <input id="r-ciudad" type="text" value="${esc(v('CIUDAD_DEST'))}">
       </div>
       <div class="field">
         <label>Encargado</label>
-        <input id="r-encargado" type="text" value="${esc(v('ENCARGADO')||'MIGUEL MARULANDA')}">
+        <input id="r-encargado" type="text" value="${esc(v('ENCARGADO'))}">
       </div>
       <div class="field">
         <label>Teléfono destinatario</label>
@@ -3771,6 +3979,9 @@ function abrirEditorRemision(remId){
     </table>
     <button type="button" class="btn-add-item no-print" onclick="_remAddItemManual()">+ Agregar ítem manual</button>
 
+    <!-- campo oculto para ID de la fila en COTIZACIONES -->
+    <input type="hidden" id="r-id-pedido" value="${esc(v('ID_PEDIDO_COT')||'')}">
+
     <!-- ══ OBSERVACIONES ══ -->
     <div class="section-title">📝 Observaciones</div>
     <div class="field">
@@ -3783,6 +3994,27 @@ function abrirEditorRemision(remId){
   var _ID_REM   = ${JSON.stringify(idRem)};
   var _ES_NUEVA = ${JSON.stringify(esNueva)};
   var _NUM_REM  = ${JSON.stringify(numRem)};
+  var _ID_PEDIDO_ORIG = ${JSON.stringify(r ? (r.ID_PEDIDO||r.ID_REMISION||idRem) : idRem)};
+  var _COTIZ_NUM_REAL = ${JSON.stringify(_cotizNumReal)};
+  var _DATOS_REMISION = ${JSON.stringify(r ? {
+    OP:        r.OP||(_prodMatch?String(_prodMatch.OP||''):''),
+    // EMPRESA: SOLAMCOR → producción
+    SEÑORES:   r.EMPRESA||r.SEÑORES||(_prodMatch?String(_prodMatch.EMPRESA||_prodMatch.CLIENTE||''):''),
+    // NIT, DIRECCION, CIUDAD, ENCARGADO, TELEFONO: SOLAMCOR → cotizaciones ERP
+    NIT:       r.NIT||(_cotizMatch?String(_cotizMatch.NIT||''):''),
+    DIR:       r.DIRECCION||(_cotizMatch?String(_cotizMatch.DIRECCION||''):''),
+    CIUDAD:    r.CIUDAD||(_cotizMatch?String(_cotizMatch.CIUDAD||''):''),
+    ENCARGADO: r.ENCARGADO||(_cotizMatch?String(_cotizMatch.ENCARGADO||''):''),
+    TEL:       r.TELEFONO||(_cotizMatch?String(_cotizMatch.TELEFONO||_cotizMatch.TEL||''):''),
+    // PROYECTO: SOLAMCOR → producción
+    PROYECTO:  r['DESCRIPCION DEL PROYECTO']||r.PROYECTO||
+               (_prodMatch?String(_prodMatch['DESCRIPCION DEL PROYECTO']||_prodMatch.DESCRIPCION||''):''),
+    // OC: SOLAMCOR → cotizaciones ERP
+    OC:        r['ORDEN DE COMPRA']||r.ORDEN_COMPRA||
+               (_cotizMatch?String(_cotizMatch['ORDEN DE COMPRA']||_cotizMatch.ORDEN_COMPRA||''):''),
+    OBS:       r['OBSERVACIONES ESPECIALES']||r.OBSERVACIONES||'',
+    ID_PEDIDO: r.ID_PEDIDO||r.ID_REMISION||(_cotizMatch?String(_cotizMatch.ID_PEDIDO||''):''),
+  } : null)};
   var _opItemIdx= ${JSON.stringify(opItemIdx)};
 
   function _esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
@@ -3817,7 +4049,8 @@ function abrirEditorRemision(remId){
       var opt=document.createElement('option');
       opt.value=i;
       var label='Item '+it.ITEM;
-      if(it.DESC) label+=' — '+it.DESC.slice(0,60);
+      if(it.DESC) label+=' — '+it.DESC.slice(0,70);
+      if(it.MATERIAL) label+=' ['+it.MATERIAL+']';
       if(it.CANT) label+=' (x'+it.CANT+')';
       opt.textContent=label;
       opt.dataset.cant=it.CANT||'1';
@@ -3835,10 +4068,19 @@ function abrirEditorRemision(remId){
     var sf=function(id,v){ var el=document.getElementById(id); if(el&&v) el.value=v; };
     if(items.length>0){
       var it=items[0];
-      sf('r-cotiz',       it.COTIZ);
-      sf('r-cotiz-bus',   it.COTIZ);
-      sf('r-señores-auto',it.CLIENTE||'');
-      sf('r-señores',     it.CLIENTE||'');
+      sf('r-cotiz',        it.COTIZ);
+      sf('r-cotiz-bus',    it.COTIZ);
+      sf('r-señores-auto', it.CLIENTE||'');
+      sf('r-señores',      it.CLIENTE||'');
+      sf('r-nit',          it.NIT);
+      sf('r-dir',          it.DIR);
+      sf('r-ciudad',       it.CIUDAD);
+      sf('r-encargado',    it.ENCARGADO);
+      sf('r-tel-dest',     it.TEL);
+      sf('r-oc',           it.ORDEN_COMPRA);
+      sf('r-proyecto',     it.DESC);
+      var hidEl=document.getElementById('r-id-pedido');
+      if(hidEl) hidEl.value=it.ID_PEDIDO||'';
     }
     _remPoblarPicker(opVal);
   }
@@ -3854,17 +4096,70 @@ function abrirEditorRemision(remId){
   function _remBuscarCotiz(){
     var cotVal=document.getElementById('r-cotiz-bus').value.trim();
     if(!cotVal) return;
+
+    // Buscar OP desde _cotizOpIdx (construido del opItemIdx)
     var opEncontrada=_cotizOpIdx[cotVal]||'';
     if(!opEncontrada){
-      // Buscar parcialmente
       var keys=Object.keys(_cotizOpIdx);
       var match=keys.find(function(k){ return k.indexOf(cotVal)!==-1; });
       if(match) opEncontrada=_cotizOpIdx[match];
     }
-    if(!opEncontrada) return;
-    var opEl=document.getElementById('r-op');
-    if(opEl) opEl.value=opEncontrada;
-    _remCargarEncabezado(opEncontrada);
+
+    if(opEncontrada){
+      // Tenemos OP — cargar encabezado normal
+      var opEl=document.getElementById('r-op');
+      if(opEl) opEl.value=opEncontrada;
+      _remCargarEncabezado(opEncontrada);
+    } else {
+      // No hay OP pero sí hay ítems indexados por cotización (_COT_XXXXX)
+      var cotKey='_COT_'+cotVal;
+      if(_opItemIdx[cotKey] && _opItemIdx[cotKey].length>0){
+        // Cargar datos del encabezado desde el primer ítem de esa cotización
+        var sf=function(id,v){ var el=document.getElementById(id); if(el&&v) el.value=v; };
+        var it=_opItemIdx[cotKey][0];
+        sf('r-cotiz',        cotVal);
+        sf('r-señores-auto', it.CLIENTE);
+        sf('r-señores',      it.CLIENTE);
+        sf('r-nit',          it.NIT);
+        sf('r-dir',          it.DIR);
+        sf('r-ciudad',       it.CIUDAD);
+        sf('r-encargado',    it.ENCARGADO);
+        sf('r-tel-dest',     it.TEL);
+        sf('r-oc',           it.ORDEN_COMPRA);
+        sf('r-proyecto',     it.DESC);
+        var hidEl=document.getElementById('r-id-pedido');
+        if(hidEl) hidEl.value=it.ID_PEDIDO||'';
+        // Poblar picker con ítems de esa cotización
+        _remPoblarPickerCotiz(cotKey);
+      }
+    }
+  }
+
+  // Poblar picker con ítems de una cotización (cuando no hay OP)
+  function _remPoblarPickerCotiz(cotKey){
+    var items=_opItemIdx[cotKey]||[];
+    var sel=document.getElementById('r-item-pick');
+    if(!sel) return;
+    if(!items.length){
+      sel.innerHTML='<option value="">— No hay ítems para esta cotización —</option>';
+      return;
+    }
+    sel.innerHTML='<option value="">— Escoger ítem —</option>';
+    items.forEach(function(it,i){
+      var opt=document.createElement('option');
+      opt.value=i;
+      var label='Item '+it.ITEM;
+      if(it.DESC) label+=' — '+it.DESC.slice(0,60);
+      if(it.CANT) label+=' (x'+it.CANT+')';
+      if(it.MATERIAL) label+=' ['+it.MATERIAL+']';
+      opt.textContent=label;
+      opt.dataset.cant=it.CANT||'1';
+      opt.dataset.desc=it.DESC||'';
+      opt.dataset.cliente=it.CLIENTE||'';
+      opt.dataset.cotiz=it.COTIZ||'';
+      opt.dataset.item=it.ITEM||'';
+      sel.appendChild(opt);
+    });
   }
 
   // ── Agregar ítem desde el picker ───────────────────────────
@@ -3891,7 +4186,7 @@ function abrirEditorRemision(remId){
 
   // ── Agregar ítem manual (sin picker) ──────────────────────
   function _remAddItemManual(){
-    _remInsertarFila('1','');
+    _remInsertarFila('','');
   }
 
   // ── Insertar fila en la tabla ──────────────────────────────
@@ -3935,24 +4230,53 @@ function abrirEditorRemision(remId){
     if(!op){ alert('Selecciona una OP antes de guardar.'); return; }
     var items=_getItems();
     var payload={
+      // Claves internas
       ID_REMISION:    _ID_REM,
+      ID_PEDIDO:      _ID_PEDIDO_ORIG||_ID_REM,
       NUMERO_REMISION:_g('r-num')||_NUM_REM,
       ES_NUEVA:       _ES_NUEVA,
+
+      // Columnas exactas de SOLAMCOR
+      COTIZACION:               _g('r-cotiz')||_COTIZ_NUM_REAL,
+      REMISION:                 _g('r-num')||_NUM_REM,
+      'DESCRIPCION DEL PROYECTO':_g('r-proyecto'),
+      EMPRESA:                  _g('r-señores-auto')||_g('r-señores'),
+      NIT:                      _g('r-nit'),
+      DIRECCION:                _g('r-dir'),
+      CIUDAD:                   _g('r-ciudad'),
+      ENCARGADO:                _g('r-encargado'),
+      TELEFONO:                 _g('r-tel-dest'),
+      'ORDEN DE COMPRA':        _g('r-oc'),
+      OP:                       op,
+      'OBSERVACIONES ESPECIALES':_g('r-obs'),
+      'FECHA EMISION':          _g('r-fecha'),
+      TIPO:                     _g('r-estado'),
+
+      // Alias legacy para código existente
       FECHA:          _g('r-fecha'),
       ESTADO:         _g('r-estado'),
-      OP:             op,
-      COTIZACION:     _g('r-cotiz'),
       PROYECTO:       _g('r-proyecto'),
-      DESC_ACTA:      _g('r-desc-acta'),
       SEÑORES:        _g('r-señores-auto')||_g('r-señores'),
       NIT_DEST:       _g('r-nit'),
       DIRECCION_DEST: _g('r-dir'),
       CIUDAD_DEST:    _g('r-ciudad'),
-      ENCARGADO:      _g('r-encargado'),
       TEL_DEST:       _g('r-tel-dest'),
+      ORDEN_COMPRA:   _g('r-oc'),
+      ID_PEDIDO_COT:  _g('r-id-pedido'),
       OBSERVACIONES:  _g('r-obs'),
-      ITEMS_JSON:     JSON.stringify(items),
+      DESC_ACTA:      _g('r-desc-acta'),
       DESCRIPCION:    items.map(function(i){return i.desc;}).join(' / '),
+
+      // Ítems para ELAMCOR
+      ITEMS_JSON:     JSON.stringify(items.map(function(it,i){return {
+        ID_PEDIDO:   _ID_PEDIDO_ORIG||_ID_REM,
+        ID_REMISION: _ID_REM,
+        COTIZACION:  _g('r-cotiz')||_COTIZ_NUM_REAL,
+        ITEM:        String(i+1),
+        DESCRIPCION: it.desc,
+        UNIDADES:    it.cant||'1',
+        UNID_REST:   it.cant||'1',
+      };})),
     };
     var st=document.getElementById('save-status');
     if(window.opener&&!window.opener.closed){
@@ -3979,6 +4303,7 @@ function abrirEditorRemision(remId){
     var proyecto=_g('r-proyecto');
     var cotiz=_g('r-cotiz');
     var descActa=_g('r-desc-acta')||'devolución de repuesto. No se realizó ninguna intervención, por lo tanto no genera costo $0.';
+    var oc=_g('r-oc');
     var obs=_g('r-obs');
 
     var filasItemsHtml=items.map(function(it,i){
@@ -4053,6 +4378,7 @@ function abrirEditorRemision(remId){
             '<tr><td style="border:none;padding:2px 4px"><b>CIUDAD:</b></td><td style="border:none;padding:2px 4px;font-weight:700">'+_esc(ciudad)+'</td></tr>'+
             '<tr><td style="border:none;padding:2px 4px"><b>ENCARGADO:</b></td><td style="border:none;padding:2px 4px;font-weight:700">'+_esc(encargado)+'</td></tr>'+
             '<tr><td style="border:none;padding:2px 4px"><b>TELÉFONO:</b></td><td style="border:none;padding:2px 4px">'+_esc(telDest)+'</td></tr>'+
+            (oc?'<tr><td style="border:none;padding:2px 4px"><b>O/C:</b></td><td style="border:none;padding:2px 4px;font-weight:700;color:#1a3a6b">'+_esc(oc)+'</td></tr>':'')+
           '</tbody></table>'+
         '</td>'+
       '</tr></table>'+
@@ -4098,13 +4424,57 @@ function abrirEditorRemision(remId){
     setTimeout(function(){ win.print(); },400);
   }
 
-  // Inicialización: si hay OP preexistente, cargar encabezado y picker
+  // Inicialización: precargar datos guardados y luego enriquecer desde opItemIdx
   (function(){
-    var opEl=document.getElementById('r-op');
-    if(opEl&&opEl.value.trim()) _remCargarEncabezado(opEl.value.trim());
-    // Si hay cotización buscarla
-    var cotEl=document.getElementById('r-cotiz-bus');
-    if(cotEl&&cotEl.value.trim()&&(!opEl||!opEl.value.trim())) _remBuscarCotiz();
+    var opEl  = document.getElementById('r-op');
+    var cotEl = document.getElementById('r-cotiz-bus');
+    var sf = function(id,v){ var el=document.getElementById(id); if(el&&v) el.value=v; };
+
+    // Paso 1: precargar directamente desde datos guardados en SOLAMCOR
+    if(_DATOS_REMISION){
+      sf('r-op',           _DATOS_REMISION.OP);
+      sf('r-señores-auto', _DATOS_REMISION.SEÑORES);
+      sf('r-señores',      _DATOS_REMISION.SEÑORES);
+      sf('r-nit',          _DATOS_REMISION.NIT);
+      sf('r-dir',          _DATOS_REMISION.DIR);
+      sf('r-ciudad',       _DATOS_REMISION.CIUDAD);
+      sf('r-encargado',    _DATOS_REMISION.ENCARGADO);
+      sf('r-tel-dest',     _DATOS_REMISION.TEL);
+      sf('r-proyecto',     _DATOS_REMISION.PROYECTO);
+      sf('r-oc',           _DATOS_REMISION.OC);
+      sf('r-obs',          _DATOS_REMISION.OBS);
+      var hidEl=document.getElementById('r-id-pedido');
+      if(hidEl && _DATOS_REMISION.ID_PEDIDO) hidEl.value=_DATOS_REMISION.ID_PEDIDO;
+    }
+
+    // Paso 2: enriquecer desde opItemIdx si tiene datos para la OP
+    var opVal = opEl ? opEl.value.trim() : '';
+    if(opVal && _opItemIdx[opVal]){
+      var itemsOP = _opItemIdx[opVal] || [];
+      if(itemsOP.length > 0){
+        var it = itemsOP[0];
+        sf('r-cotiz',        it.COTIZ || _COTIZ_NUM_REAL);
+        sf('r-cotiz-bus',    it.COTIZ || _COTIZ_NUM_REAL);
+        sf('r-nit',          it.NIT);
+        sf('r-dir',          it.DIR);
+        sf('r-ciudad',       it.CIUDAD);
+        sf('r-encargado',    it.ENCARGADO);
+        sf('r-tel-dest',     it.TEL);
+        sf('r-oc',           it.ORDEN_COMPRA);
+        sf('r-señores-auto', it.CLIENTE);
+        sf('r-señores',      it.CLIENTE);
+        sf('r-proyecto',     it.DESC);
+        var hidEl2=document.getElementById('r-id-pedido');
+        if(hidEl2 && it.ID_PEDIDO) hidEl2.value=it.ID_PEDIDO;
+      }
+      _remPoblarPicker(opVal);
+    } else if(_COTIZ_NUM_REAL){
+      if(cotEl) cotEl.value = _COTIZ_NUM_REAL;
+      sf('r-cotiz', _COTIZ_NUM_REAL);
+      _remBuscarCotiz();
+    } else if(cotEl && cotEl.value.trim()){
+      _remBuscarCotiz();
+    }
   })();
   <\/script>
   </body></html>`;
@@ -4126,15 +4496,47 @@ window.addEventListener('message',(ev)=>{
   if(payload.ES_NUEVA){
     DB.remisiones.push(payload);
   } else {
-    const idx=DB.remisiones.findIndex(x=>String(x.ID_REMISION||'')===String(idRem));
+    const idx=DB.remisiones.findIndex(x=>
+      String(x.ID_REMISION||x.ID_PEDIDO||'')===String(idRem));
     if(idx>=0) DB.remisiones[idx]=Object.assign({},DB.remisiones[idx],payload);
     else DB.remisiones.push(payload);
   }
 
-  // Guardar al GAS
+  // Guardar remisión en SOLAMCOR
   POST_QA_BG(payload.ES_NUEVA?'createRemision':'updateRemision', payload);
 
-  toast(payload.ES_NUEVA?'📄 Remisión creada':'✅ Remisión actualizada');
+  // Guardar ítems en ELAMCOR
+  let detalleItems=[];
+  try{ detalleItems=JSON.parse(payload.ITEMS_JSON||'[]'); }catch(e){}
+  if(detalleItems.length){
+    POST_QA_BG('saveRemisionDetalle',{
+      ID_REMISION: payload.ID_REMISION,
+      ES_NUEVA:    payload.ES_NUEVA,
+      items:       detalleItems,
+    });
+  }
+
+  // Si hay OC nueva, actualizar COTIZACIONES en el ERP
+  if(payload.ORDEN_COMPRA && payload.COTIZACION){
+    const cotFila=(DB.solicitudes||[]).find(s=>
+      String(s.COTIZACION||s.COT||'').trim()===String(payload.COTIZACION).trim()
+    );
+    const ocAnterior=String(cotFila?.['ORDEN DE COMPRA']||cotFila?.ORDEN_COMPRA||'').trim();
+    const ocNueva=String(payload.ORDEN_COMPRA).trim();
+    if(ocNueva && ocNueva!==ocAnterior){
+      POST_QA_BG('updateOrdenCompra',{
+        COTIZACION:   payload.COTIZACION,
+        ORDEN_COMPRA: ocNueva,
+        ID_PEDIDO:    payload.ID_PEDIDO_COT||cotFila?.ID_PEDIDO||'',
+      });
+      if(cotFila){ cotFila['ORDEN DE COMPRA']=ocNueva; cotFila.ORDEN_COMPRA=ocNueva; }
+      toast(payload.ES_NUEVA?'📄 Remisión creada · 🛒 O/C guardada':'✅ Remisión actualizada · 🛒 O/C guardada');
+    } else {
+      toast(payload.ES_NUEVA?'📄 Remisión creada':'✅ Remisión actualizada');
+    }
+  } else {
+    toast(payload.ES_NUEVA?'📄 Remisión creada':'✅ Remisión actualizada');
+  }
   if(MOD==='remisiones') renderRemisiones();
 });
 
@@ -4796,6 +5198,7 @@ async function refreshCurrent(){
       DB.proveedores = _mergeProveedores(provWEDM, DB.solicitudes);
     }catch(e){}
     try{ const rc=await GET_QA('getConformidades'); DB.conformidades=Array.isArray(rc)?rc:(rc?.data??[]); }catch(e){}
+    try{ const rr=await GET_QA('getRemisiones');    DB.remisiones=Array.isArray(rr)?rr:(rr?.data??[]); }catch(e){}
     _updateBadges();
     toast('✅ Datos actualizados');
     nav(MOD);
