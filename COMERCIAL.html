@@ -9,7 +9,7 @@
 <style>
 :root {
   --bg:#edf0f5; --surface:#ffffff; --card:#ffffff; --card2:#f3f5f9;
-  --border:#dde2e9; --accent:#2563eb; --accent2:#1d4ed8;
+  --border:#dde2e9; --accent:#2563eb; --accent2:#1d4ed8; --primary:#2563eb;
   --gold:#b7791f; --danger:#dc2626; --warn:#d97706; --info:#0284c7;
   --text:#1e293b; --muted:#64748b;
   --mono:'JetBrains Mono','Fira Mono',monospace;
@@ -2644,15 +2644,15 @@ const TIPO_COLORS = Object.fromEntries(TIPO_KEYS.map(k=>[k, TIPOS_COT[k].color])
 // ═══════════════════════════════════════════════════════════════
 // SESIÓN Y LOGIN
 // ═══════════════════════════════════════════════════════════════
-// Credenciales locales — puedes cambiar las contraseñas aquí
+// Credenciales locales — clave de 4 dígitos por usuario (cámbialas aquí)
 const USUARIOS_COMERCIAL = [
-  { nombre:'Juan Diego García',  asesor:'Juan Diego García',  pass:'wedm2026', rol:'comercial' },
-  { nombre:'Mauricio García',    asesor:'Mauricio García',    pass:'wedm2026', rol:'comercial' },
-  { nombre:'Gerson Ramos',       asesor:'Gerson Ramos',       pass:'wedm2026', rol:'comercial' },
-  { nombre:'Eduardo Cabal',      asesor:'Eduardo Cabal',      pass:'wedm2026', rol:'comercial' },
-  { nombre:'Felipe Dávalos',     asesor:'Felipe Dávalos',     pass:'wedm2026', rol:'comercial' },
-  { nombre:'Francisco Giraldo',  asesor:'Francisco Giraldo',  pass:'wedm2026', rol:'comercial' },
-  { nombre:'Admin',              asesor:'',                   pass:'wedmadmin', rol:'admin'     },
+  { nombre:'Juan Diego García',  asesor:'Juan Diego García',  pass:'1001', rol:'comercial' },
+  { nombre:'Mauricio García',    asesor:'Mauricio García',    pass:'1002', rol:'comercial' },
+  { nombre:'Gerson Ramos',       asesor:'Gerson Ramos',       pass:'1003', rol:'comercial' },
+  { nombre:'Eduardo Cabal',      asesor:'Eduardo Cabal',      pass:'1004', rol:'comercial' },
+  { nombre:'Felipe Dávalos',     asesor:'Felipe Dávalos',     pass:'1005', rol:'comercial' },
+  { nombre:'Francisco Giraldo',  asesor:'Francisco Giraldo',  pass:'1006', rol:'comercial' },
+  { nombre:'Admin',              asesor:'',                   pass:'9999', rol:'admin'     },
 ];
 
 let _SESSION = JSON.parse(localStorage.getItem('_wedm_session')||'null');
@@ -2667,13 +2667,19 @@ function loginCerrar(){
   mostrarLogin();
 }
 
+let _LOGIN_USER = null;
+
 function mostrarLogin(){
   // Ocultar splash si está visible
   const spl = document.getElementById('splash');
   if(spl) spl.classList.add('hidden');
 
   const overlay = document.getElementById('login-overlay');
-  if(overlay){ overlay.style.display='flex'; return; }
+  if(overlay){
+    overlay.style.display='flex';
+    _loginBack(); // siempre reinicia en la pantalla de selección de usuario
+    return;
+  }
 
   const div = document.createElement('div');
   div.id = 'login-overlay';
@@ -2681,63 +2687,156 @@ function mostrarLogin(){
     position:fixed;inset:0;z-index:99999;
     background:linear-gradient(135deg,#0a0e1a 0%,#0f1b3d 60%,#0a1628 100%);
     display:flex;align-items:center;justify-content:center;flex-direction:column;
-    gap:0;font-family:var(--font-sans,'Inter',sans-serif);
+    gap:0;font-family:var(--font-sans,'Inter',sans-serif);padding:16px;
   `;
   div.innerHTML = `
-    <div style="text-align:center;margin-bottom:28px">
-      <img src="" id="login-logo" style="width:min(70vw,280px);height:auto;margin-bottom:12px"
+    <div style="text-align:center;margin-bottom:20px">
+      <img src="" id="login-logo" style="width:min(60vw,220px);height:auto;margin-bottom:10px"
         onerror="this.style.display='none'">
       <div style="color:#fff;font-size:22px;font-weight:800;letter-spacing:.3px">ERP Comercial</div>
       <div style="color:#6b7db3;font-size:13px;margin-top:4px">Grupo WEDM</div>
     </div>
-    <div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);
-      border-radius:20px;padding:28px 24px;width:min(90vw,360px);backdrop-filter:blur(12px)">
-      <div style="color:#e8f0fe;font-size:14px;font-weight:700;margin-bottom:16px">Iniciar sesión</div>
-      <div style="margin-bottom:14px">
-        <select id="login-usuario" style="
-        width:100%;padding:12px 14px;border-radius:10px;
-        background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);
-        color:#fff;font-size:14px;appearance:none;outline:none">
-        <option value="" style="background:#111827; color:#fff;">— Selecciona tu nombre —</option>
-        ${USUARIOS_COMERCIAL.map(u=>`<option value="${u.nombre}" style="background:#111827; color:#fff;">${u.nombre}</option>`).join('')}
-        </select>
+    <div class="login-card" style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);
+      backdrop-filter:blur(12px);color:#e8f0fe">
+
+      <div class="login-step active" id="login-step-user">
+        <div style="font-size:14px;font-weight:700;margin-bottom:14px;text-align:center">¿Quién eres?</div>
+        <div class="user-grid" id="login-user-grid">
+          ${USUARIOS_COMERCIAL.map(u=>`
+            <div class="user-btn" style="background:rgba(255,255,255,.06)" onclick="_loginSelectUser(${JSON.stringify(u.nombre).replace(/"/g,'&quot;')})">
+              <div class="u-avatar">👤</div>
+              <div class="u-name" style="color:#e8f0fe">${u.nombre}</div>
+              <div class="u-rol" style="color:#6b7db3">${u.rol}</div>
+            </div>`).join('')}
+        </div>
       </div>
-      <div style="margin-bottom:20px;position:relative">
-        <input id="login-pass" type="password" placeholder="Contraseña"
-          style="width:100%;padding:12px 14px;border-radius:10px;box-sizing:border-box;
-          background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);
-          color:#fff;font-size:14px;outline:none"
+
+      <div class="login-step" id="login-step-pin">
+        <div class="login-user-selected" style="background:rgba(255,255,255,.06)">
+          <div class="u-avatar">👤</div>
+          <div class="u-info">
+            <div class="u-name" id="login-pin-name" style="color:#e8f0fe">—</div>
+            <div class="u-rol" id="login-pin-rol" style="color:#6b7db3">—</div>
+          </div>
+        </div>
+        <div style="font-size:13px;color:#9fb0d1;text-align:center;margin-bottom:4px">Ingresa tu clave de 4 dígitos</div>
+        <div class="pin-display" id="pin-display">
+          ${[0,1,2,3].map(i=>`<div class="pin-dot" id="pin-dot-${i}"></div>`).join('')}
+        </div>
+        <div class="login-error" id="login-err"></div>
+        <input id="login-pin-input" type="tel" inputmode="numeric" pattern="[0-9]*" maxlength="4"
+          autocomplete="one-time-code"
+          style="position:absolute;opacity:0;pointer-events:none;width:1px;height:1px"
+          oninput="_loginPinInputHandler(this)"
           onkeydown="if(event.key==='Enter') doLogin()">
-        <button onclick="const i=document.getElementById('login-pass');i.type=i.type==='password'?'text':'password'"
-          style="position:absolute;right:12px;top:50%;transform:translateY(-50%);
-          background:none;border:none;color:#6b7db3;cursor:pointer;font-size:16px">👁</button>
+        <div class="pin-pad">
+          ${[1,2,3,4,5,6,7,8,9].map(n=>`<button type="button" class="pin-key" onclick="_loginPinPress('${n}')">${n}</button>`).join('')}
+          <div></div>
+          <button type="button" class="pin-key" onclick="_loginPinPress('0')">0</button>
+          <button type="button" class="pin-key del" onclick="_loginPinDel()">⌫</button>
+        </div>
+        <button type="button" class="login-back" style="color:#6b7db3" onclick="_loginBack()">← Cambiar usuario</button>
       </div>
-      <div id="login-err" style="color:#f87171;font-size:12px;margin-bottom:12px;min-height:16px;text-align:center"></div>
-      <button onclick="doLogin()" style="
-        width:100%;padding:13px;border-radius:10px;border:none;
-        background:linear-gradient(135deg,#1a56db,#1d4ed8);
-        color:#fff;font-size:15px;font-weight:700;cursor:pointer;
-        transition:opacity .15s" onmouseover="this.style.opacity='.9'" onmouseout="this.style.opacity='1'">
-        Entrar →
-      </button>
+
     </div>
-    <div style="color:#3a4a6b;font-size:11px;margin-top:24px">© 2026 Grupo WEDM</div>
+    <div style="color:#3a4a6b;font-size:11px;margin-top:20px">© 2026 Grupo WEDM</div>
   `;
   document.body.appendChild(div);
   // Poner el logo si existe
   const splLogo = document.getElementById('splash-logo-img');
   if(splLogo?.src) document.getElementById('login-logo').src = splLogo.src;
-  setTimeout(()=>document.getElementById('login-pass')?.focus(), 100);
+}
+
+// ── Selección de usuario → pantalla de PIN ──────────────────────
+function _loginSelectUser(nombre){
+  _LOGIN_USER = nombre;
+  const u = USUARIOS_COMERCIAL.find(x=>x.nombre===nombre);
+  document.getElementById('login-step-user')?.classList.remove('active');
+  document.getElementById('login-step-pin')?.classList.add('active');
+  const nameEl = document.getElementById('login-pin-name');
+  const rolEl  = document.getElementById('login-pin-rol');
+  if(nameEl) nameEl.textContent = u?.nombre||nombre;
+  if(rolEl)  rolEl.textContent  = u?.rol||'';
+  const inp = document.getElementById('login-pin-input');
+  if(inp) inp.value = '';
+  _loginPinRender();
+  const err = document.getElementById('login-err');
+  if(err) err.textContent = '';
+  // Enfocar el input oculto: en celular abre el teclado numérico automáticamente;
+  // en computador, cualquier tecla 0-9 que el usuario escriba llega aquí igual.
+  setTimeout(()=>inp?.focus(), 150);
+}
+
+function _loginBack(){
+  _LOGIN_USER = null;
+  const inp = document.getElementById('login-pin-input');
+  if(inp) inp.value = '';
+  _loginPinRender();
+  document.getElementById('login-step-pin')?.classList.remove('active');
+  document.getElementById('login-step-user')?.classList.add('active');
+  const err = document.getElementById('login-err');
+  if(err) err.textContent = '';
+}
+
+// ── Botones táctiles del teclado numérico en pantalla ───────────
+function _loginPinPress(d){
+  const inp = document.getElementById('login-pin-input');
+  if(!inp || inp.value.length>=4) return;
+  inp.value += d;
+  _loginPinInputHandler(inp);
+}
+
+function _loginPinDel(){
+  const inp = document.getElementById('login-pin-input');
+  if(!inp) return;
+  inp.value = inp.value.slice(0,-1);
+  _loginPinInputHandler(inp);
+}
+
+// ── Fuente única de verdad: se llama tanto al tocar los botones en
+// pantalla como al escribir directamente desde el teclado (físico o
+// numérico del celular), porque ambos caminos actualizan el mismo input.
+function _loginPinInputHandler(el){
+  const digits = (el.value||'').replace(/\D/g,'').slice(0,4);
+  el.value = digits;
+  _loginPinRender();
+  const err = document.getElementById('login-err');
+  if(err) err.textContent = '';
+  if(digits.length === 4) setTimeout(doLogin, 120);
+  else el.focus();
+}
+
+function _loginPinRender(){
+  const inp = document.getElementById('login-pin-input');
+  const len = inp?.value?.length||0;
+  for(let i=0;i<4;i++){
+    const dot = document.getElementById('pin-dot-'+i);
+    if(dot) dot.classList.toggle('filled', i<len);
+  }
+}
+
+function _loginPinShakeError(msg){
+  const err = document.getElementById('login-err');
+  if(err) err.textContent = msg;
+  for(let i=0;i<4;i++){
+    const dot = document.getElementById('pin-dot-'+i);
+    if(dot){ dot.classList.remove('filled'); dot.classList.add('error'); }
+  }
+  const inp = document.getElementById('login-pin-input');
+  if(inp) inp.value = '';
+  setTimeout(()=>{
+    for(let i=0;i<4;i++){ const dot=document.getElementById('pin-dot-'+i); if(dot) dot.classList.remove('error'); }
+    inp?.focus();
+  }, 500);
 }
 
 function doLogin(){
-  const nombre = document.getElementById('login-usuario')?.value?.trim();
-  const pass   = document.getElementById('login-pass')?.value?.trim();
-  const err    = document.getElementById('login-err');
-  if(!nombre){ if(err) err.textContent='Selecciona tu nombre'; return; }
-  if(!pass)  { if(err) err.textContent='Ingresa tu contraseña'; return; }
-  const u = USUARIOS_COMERCIAL.find(x=>x.nombre===nombre && x.pass===pass);
-  if(!u){ if(err) err.textContent='Contraseña incorrecta'; return; }
+  if(!_LOGIN_USER) return;
+  const inp = document.getElementById('login-pin-input');
+  const pin = inp?.value||'';
+  if(pin.length < 4) return;
+  const u = USUARIOS_COMERCIAL.find(x=>x.nombre===_LOGIN_USER && x.pass===pin);
+  if(!u){ _loginPinShakeError('Clave incorrecta'); return; }
   // Sesión válida
   _SESSION = { nombre:u.nombre, asesor:u.asesor, rol:u.rol, ts:Date.now() };
   localStorage.setItem('_wedm_session', JSON.stringify(_SESSION));
@@ -3266,7 +3365,7 @@ async function saveItem(exist, cotId){
     'DESCRIPCION DEL PROYECTO': cotRef?.['DESCRIPCION DEL PROYECTO']||'',
     EMPRESA: cotRef?.EMPRESA || cotRef?.Empresa || '',
     CIUDAD:  cotRef?.CIUDAD||'',
-    'FECHA EMISION COT.': cotRef?.['FECHA EMISION COT.']||'',
+    'FECHA  EMISION COT.': cotRef?.['FECHA EMISION COT.']||'',
     'FECHA ENTREGA PACTADA': cotRef?.['FECHA ENTREGA PACTADA']||'',
     ITEM:  gv('i2'),    // jerárquico: "1", "1.1", "1.2", "2"
     'COT-ITEM': (cotId||'')+'-'+gv('i2'),  // ej: "18118-1.1"
@@ -3297,6 +3396,7 @@ async function saveItem(exist, cotId){
   for(let n = 1; n <= 5; n++){
     const m = matRows[n-1]||{nombre:'',geo:'',diametro:0,espesor:0,largo:0,ancho:0,volumen:0,peso:0,costo:0,cantTotal:0,esEspecial:false,descEsp:'',costEsp:0};
     const geomKey = n===1 ? 'GEOMETRIA 1' : `GEOMETRIA ${n} (mm)`;
+    const costoMatKey = n===1 ? 'COSTO MAT 1 ' : `COSTO MAT ${n}`; // n=1 usa la columna real con espacio final
     data[`MATERIAL ${n}`]              = m.nombre||'';
     data[geomKey]                      = m.geo||'';
     data[`DIAMETRO ${n} (mm)`]         = m.diametro||0;
@@ -3305,7 +3405,7 @@ async function saveItem(exist, cotId){
     data[`ESPESOR ${n} (mm)`]          = m.espesor||0;
     data[`VOLUMEN MAT ${n} (mm³)`]     = m.volumen||0;
     data[`PESO MAT ${n} (kg)`]         = m.peso||0;
-    data[`COSTO MAT ${n}`]             = m.costo||0;
+    data[costoMatKey]                  = m.costo||0;
     data[`COSTO MAT ${n} ESP`]         = m.esEspecial ? (m.costEsp||m.costo||0) : 0;
     data[`DESCRIPCION MAT ESP ${n}`]   = m.esEspecial ? (m.descEsp||'') : '';
     data[`CANTIDAD TOTAL MATERIAL ${n}`] = m.cantTotal||0;
@@ -3316,7 +3416,9 @@ async function saveItem(exist, cotId){
     const s = svcRows[n-1]||{nombre:'',dias:0,costo:0,dureza:'',desc:''};
     data[`SERVICIO EXTERNO ${n}`]                  = s.nombre||'';
     data[`DIAS SERVICIO E ${n}`]                   = s.dias||0;
-    data[`COSTO SERVICIO E ${n} (costo total)`]    = s.costo||0;
+    // n=2 usa la columna real de ELEMENTOS (doble espacio antes del paréntesis)
+    const keyCostoSvc = (n===2) ? 'COSTO SERVICIO E 2  (costo total)' : `COSTO SERVICIO E ${n} (costo total)`;
+    data[keyCostoSvc]                              = s.costo||0;
     data[`DUREZA ${n}`]                            = s.dureza||'';
     data[`DESCRIPCION OTROS ${n}`]                 = s.desc||'';
   }
@@ -3326,7 +3428,9 @@ async function saveItem(exist, cotId){
     const p = prcRows[n-1]||{nombre:'',tarifa:0,tiempo:0,costo:0,diasSe:'',descOtros:''};
     data[`PROCESO ${n}`]            = p.nombre||'';
     data[`TARIFA PRO ${n}`]         = p.tarifa||0;
-    data[`TIEMPO PRO ${n} (horas)`] = Number(((p.tiempo||0)*cant).toFixed(4));
+    // n=3 usa la columna real de ELEMENTOS (doble espacio antes del paréntesis)
+    const keyTiempoPro = (n===3) ? 'TIEMPO PRO 3  (horas)' : `TIEMPO PRO ${n} (horas)`;
+    data[keyTiempoPro]              = Number(((p.tiempo||0)*cant).toFixed(4));
     data[`COSTO PRO ${n}`]          = p.costo||0;
     data[`DIAS SE ${n}`]            = p.diasSe||'';
     data[`DESCRIPCION OTROS P${n}`] = p.descOtros||'';
@@ -3532,6 +3636,13 @@ function onTipoCot(val){
   if(desc) desc.textContent = info.desc || '';
 }
 function refreshCurrent(){
+  if(MOD === 'dashboard'){
+    // En el dashboard, ↻ dispara la sincronización completa (7 colecciones)
+    // bajo demanda — es el único lugar donde eso ahora ocurre además del
+    // arranque inicial de la app.
+    _syncAgresivo(true);
+    return;
+  }
   DB[MOD] = null;
   try{ localStorage.removeItem(CACHE_KEY_PREFIX + MOD); }catch(e){}
   nav(MOD);
@@ -3907,6 +4018,51 @@ function dashPanel(titulo, items, emptyMsg='Sin resultados'){
   document.getElementById('content').style.overflow = 'hidden';
 }
 
+// ── Sincronización agresiva (global): trae las 7 colecciones del backend.
+// Se usa (1) en dashboard() solo durante la carga inicial de la app, y
+// (2) manualmente cuando el usuario presiona el botón de refrescar (↻).
+// NO se dispara automáticamente cada vez que se navega al dashboard.
+async function _syncAgresivo(silent=false){
+  _showSyncDot(true);
+  try {
+    const rango1m = RANGO_STATE.cotizaciones || '1m';
+    const _base = _esComercial() && _asesorActual()
+      ? { rango: rango1m, asesor: _asesorActual() }
+      : { rango: rango1m };
+
+    const [cots, its, prod] = await Promise.all([
+      GET('getCotizaciones',      '', _base).catch(()=>null),
+      GET('getItems',             '', _base).catch(()=>null),
+      GET('getControlProduccion', '', { rango: 'todo' }).catch(()=>null),
+    ]);
+    if(cots?.length){
+      DB.cotizaciones = cots.map(c=>c.ESTADO?{...c,ESTADO:_normEstado(c.ESTADO)}:c);
+      cacheSet('cotizaciones', DB.cotizaciones);
+    }
+    if(its?.length){ DB.items = its; cacheSet('items', DB.items); }
+    if(prod?.length){ DB.produccion = prod; cacheSet('produccion', prod); }
+
+    const [clts, mats, svcs, prcs] = await Promise.all([
+      GET('getClientes',   '', {}).catch(()=>null),
+      GET('getMateriales', '', {}).catch(()=>null),
+      GET('getServicios',  '', {}).catch(()=>null),
+      GET('getProcesos',   '', {}).catch(()=>null),
+    ]);
+    if(clts?.length){ DB.clientes   = clts; cacheSet('clientes',   clts); }
+    if(mats?.length){ DB.materiales = mats; cacheSet('materiales', mats); }
+    if(svcs?.length){ DB.servicios  = svcs; cacheSet('servicios',  svcs); }
+    if(prcs?.length){ DB.procesos   = prcs; cacheSet('procesos',   prcs); }
+
+    if(silent){
+      updateBadges();
+      if(MOD==='cotizaciones') cotizaciones();
+      else if(MOD==='items') items();
+      else if(MOD==='dashboard') dashboard();
+    }
+  } catch(e){ console.warn('syncAgresivo:', e.message); }
+  finally { _showSyncDot(false); }
+}
+
 async function dashboard(){
   loading();
   try{
@@ -3959,61 +4115,21 @@ async function dashboard(){
       }
     };
 
-    // ── Sincronización al inicio: rango 1m, liviana y rápida ──────
-    // Solo trae el último mes. El selector de rango en la UI permite ampliar.
-    const _syncAgresivo = async (silent=false) => {
-      _showSyncDot(true);
-      try {
-        const rango1m = RANGO_STATE.cotizaciones || '1m';
-        // Filtro base: rango + asesor si es comercial
-        const _base = _esComercial() && _asesorActual()
-          ? { rango: rango1m, asesor: _asesorActual() }
-          : { rango: rango1m };
-
-        // Cotizaciones e ítems en paralelo — solo 1 mes
-        const [cots, its, prod] = await Promise.all([
-          GET('getCotizaciones',      '', _base).catch(()=>null),
-          GET('getItems',             '', _base).catch(()=>null),
-          GET('getControlProduccion', '', { rango: 'todo' }).catch(()=>null),
-        ]);
-        if(cots?.length){
-          DB.cotizaciones = cots.map(c=>c.ESTADO?{...c,ESTADO:_normEstado(c.ESTADO)}:c);
-          cacheSet('cotizaciones', DB.cotizaciones);
-        }
-        if(its?.length){ DB.items = its; cacheSet('items', DB.items); }
-        if(prod?.length){ DB.produccion = prod; cacheSet('produccion', prod); }
-
-        // Catálogos pequeños en paralelo (sin rango — son tablas completas pequeñas)
-        const [clts, mats, svcs, prcs] = await Promise.all([
-          GET('getClientes',   '', {}).catch(()=>null),
-          GET('getMateriales', '', {}).catch(()=>null),
-          GET('getServicios',  '', {}).catch(()=>null),
-          GET('getProcesos',   '', {}).catch(()=>null),
-        ]);
-        if(clts?.length){ DB.clientes   = clts; cacheSet('clientes',   clts); }
-        if(mats?.length){ DB.materiales = mats; cacheSet('materiales', mats); }
-        if(svcs?.length){ DB.servicios  = svcs; cacheSet('servicios',  svcs); }
-        if(prcs?.length){ DB.procesos   = prcs; cacheSet('procesos',   prcs); }
-
-        if(silent){
-          updateBadges();
-          if(MOD==='cotizaciones') cotizaciones();
-          else if(MOD==='items') items();
-        }
-      } catch(e){ console.warn('syncAgresivo:', e.message); }
-      finally { _showSyncDot(false); }
-    };
+    // _syncAgresivo ahora es una función global (ver arriba de dashboard()),
+    // así el botón de refrescar manual puede reutilizarla.
 
     if(hayCacheCompleto){
       // Cache válido → splash rápido + sync inmediata en background (sin delay)
+      // Ojo: este auto-sync SOLO se dispara en la carga inicial de la app
+      // (isFirstLoad). Volver a entrar al dashboard navegando entre módulos
+      // ya NO relanza la sincronización — para eso está el botón ↻ manual.
       if(isFirstLoad){
         const bar = document.getElementById('splash-bar');
         const txt = document.getElementById('splash-step');
         if(bar) bar.style.width = '90%';
         if(txt) txt.textContent = '⚡ Datos en caché — sincronizando…';
+        setTimeout(() => _syncAgresivo(true), 2000);
       }
-      // Sync en background después de que el usuario ve el dashboard
-      setTimeout(() => _syncAgresivo(true), 2000);
 
     } else {
       // Sin cache o expirado → cargar stale si existe y sincronizar
@@ -6915,23 +7031,30 @@ const svcOpts = (DB.servicios || []).map(s => {
         const n = _mi+1;
         const _costoDeAtributo = Number(_costEl.dataset.savedCost||0);
         const _costoDeSheet = Number(
-          it['COSTO MAT '+n] ?? it['COSTO_MAT_'+n] ??
+          it['COSTO MAT '+n+' '] ?? it['COSTO MAT '+n] ?? it['COSTO_MAT_'+n] ??
           it['COSTO MATERIAL '+n] ?? it['COSTO MAT'+n] ?? 0
         );
         const _costoGuardado = _costoDeAtributo || _costoDeSheet;
+        const _matVal = document.getElementById('mat'+_mi)?.value||'';
         if(_costoGuardado > 0){
           _costEl._manual = true;
           _costEl.value = _costoGuardado;
-        }
-        // También actualizar los displays de densidad/peso si el material está cargado
-        const _matVal = document.getElementById('mat'+_mi)?.value||'';
-        if(_matVal && _matVal !== 'ESPECIAL'){
-          const _matDB = (DB.materiales||[]).find(m=>m.MATERIAL===_matVal);
-          if(_matDB){
-            const _s = (id,v)=>{ const e=document.getElementById(id); if(e) e.textContent=v; };
-            _s('mat'+_mi+'-dens', (_matDB['Densidad g/mm3']||0).toString());
-            _s('mat'+_mi+'-pkg',  '$'+Number(_matDB['PRECIO KG']||0).toLocaleString('es-CO'));
+          // Refrescar displays de densidad/precio/volumen/peso para que
+          // coincidan con el costo guardado (sin tocar el valor de costo)
+          if(_matVal && _matVal !== 'ESPECIAL'){
+            const _matDB = (DB.materiales||[]).find(m=>m.MATERIAL===_matVal);
+            if(_matDB){
+              const _s = (id,v)=>{ const e=document.getElementById(id); if(e) e.textContent=v; };
+              _s('mat'+_mi+'-dens', (_matDB['Densidad g/mm3']||0).toString());
+              _s('mat'+_mi+'-pkg',  '$'+Number(_matDB['PRECIO KG']||0).toLocaleString('es-CO'));
+            }
           }
+        } else if(_matVal && _matVal !== 'ESPECIAL'){
+          // El costo guardado está en 0 o vacío (nunca se calculó bien, o se
+          // perdió) → recalcularlo YA desde el material + dimensiones que ya
+          // están cargadas, en vez de dejarlo en $0 hasta que el usuario
+          // presione "Recalc" manualmente. Así se evita volver a guardar 0.
+          calcCostMat(_mi, true);
         }
       }
     }
@@ -7955,7 +8078,7 @@ async function ejecutarDuplicar(idOrigen){
         'COT-ITEM':      newId+'-'+(it.ITEM||it['COT-ITEM']||''),
         EMPRESA:         empNueva,
         ASESOR:          aseNuevo,
-        'FECHA EMISION COT.': fecNueva,
+        'FECHA  EMISION COT.': fecNueva,
         'DESCRIPCION DEL PROYECTO': descNueva,
         // Limpiar datos de OP y producción
         OP:              '',
@@ -9878,7 +10001,7 @@ function _matN(it, n){
     dim1,
     lar:  Number(it['LARGO_'+n] ?? it['LARGO '+n+' (mm)'] ?? 0),
     anc:  Number(it['ANCHO_'+n] ?? it['ANCHO '+n+' (mm)'] ?? 0),
-    cost: Number(it['COSTO_MAT_'+n] ?? it['COSTO MAT '+n] ?? 0),
+    cost: Number(it['COSTO_MAT_'+n] ?? it['COSTO MAT '+n+' '] ?? it['COSTO MAT '+n] ?? 0),
     cant: Number(it['CANT_MAT_'+n] ?? it['CANTIDAD TOTAL MATERIAL '+n] ?? it['PESO MAT '+n+' (kg)'] ?? 0),
     esEspecial,
     descEsp: it['DESCRIPCION_MAT_ESP_'+n] ?? it['DESCRIPCION MAT ESP '+n] ?? '',
@@ -11526,7 +11649,7 @@ async function confirmarCopiarItem(){
   newItem.EMPRESA=cotDest.EMPRESA||cotDest.Empresa||it.EMPRESA||'';
   newItem.ASESOR=cotDest.ASESOR||it.ASESOR||'';
   newItem['DESCRIPCION DEL PROYECTO']=cotDest['DESCRIPCION DEL PROYECTO']||it['DESCRIPCION DEL PROYECTO']||'';
-  newItem['FECHA EMISION COT.']=cotDest['FECHA EMISION COT.']||'';
+  newItem['FECHA  EMISION COT.']=cotDest['FECHA EMISION COT.']||'';
   newItem['FECHA ENTREGA PACTADA']=cotDest['FECHA ENTREGA PACTADA']||'';
 
   try{
