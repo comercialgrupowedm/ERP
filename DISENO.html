@@ -1865,7 +1865,7 @@ function renderIngenieria(){
       <div class="lc-meta">
         ${_esAdmin()&&op.DISEÑADOR?`<span class="badge morado">✏️ ${esc(op.DISEÑADOR)}</span>`:''}
         <button class="btn btn-sm" style="background:var(--teal);color:#fff;margin-left:auto"
-          onclick="event.stopPropagation();aprobarIngenieria('${safe(op.OP||op.IDQR)}')">✓ Aprobar</button>
+          onclick="event.stopPropagation();aprobarIngenieria('${safe(op.IDQR||op.OP)}')">✓ Aprobar</button>
       </div>
     </div>`;
   }).join('')}</div>`}
@@ -2275,7 +2275,7 @@ function verDetalle(opId){
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
     ${_esAdmin()&&!op.DISEÑADOR?`<button class="btn btn-primary btn-sm" onclick="asignarDiseñadorModal('${safe(op.OP||op.IDQR)}','${safe(op.DESCRIPCION||'')}')">✏️ Asignar diseñador</button>`:''}
     ${_esAdmin()&&op.DISEÑADOR?`<button class="btn btn-ghost btn-sm" onclick="asignarDiseñadorModal('${safe(op.OP||op.IDQR)}','${safe(op.DESCRIPCION||'')}')">✏️ Cambiar diseñador</button>`:''}
-    ${!ingenOK?`<button class="btn btn-sm" style="background:var(--teal);color:#fff" onclick="aprobarIngenieria('${safe(op.OP||op.IDQR)}')">📐 Diseño OK</button>`:`<span class="badge verde" style="padding:7px 12px;font-size:12px">✅ Diseño OK</span>`}
+    ${!ingenOK?`<button class="btn btn-sm" style="background:var(--teal);color:#fff" onclick="aprobarIngenieria('${safe(op.IDQR||op.OP)}')">📐 Diseño OK</button>`:`<span class="badge verde" style="padding:7px 12px;font-size:12px">✅ Diseño OK</span>`}
     ${String(op.ESTADO||'')===('PENDIENTE MP')?`<button class="btn btn-sm" style="background:var(--gold);color:#fff" onclick="marcarMPPedido('${safe(op.OP||op.IDQR)}')">🧱 MP Pedido</button>`:''}
     ${op.PLANO_URL?`<a href="${esc(op.PLANO_URL)}" target="_blank" class="btn btn-ghost btn-sm">📄 Ver plano</a>`:''}
     ${_bsYes(op.NO_LLEVA_MP)
@@ -2397,14 +2397,15 @@ async function _guardarDiseñador(opId){
 
 async function aprobarIngenieria(opId){
   if(!confirm('¿Aprobar Ingeniería & Planeación?')) return;
-  const op=(DB.produccion||[]).find(o=>String(o.OP||o.IDQR||'')===String(opId));
+  const norm = v => String(v||'').replace(/\.0*$/,'').trim();
+  const op=(DB.produccion||[]).find(o=>norm(o.IDQR)===norm(opId));
   if(!op){ toast('OP no encontrada','error'); return; }
   // Pedir fecha de entrega planeación
   const hoy = new Date().toLocaleDateString('es-CO',{day:'2-digit',month:'2-digit',year:'2-digit'});
   const fechaInput = prompt('Fecha entrega Planeación (DD/MM/AA):', hoy);
   if(fechaInput === null) return; // canceló
   try{
-    syncStart('Aprobando ingeniería…', 'OP-'+(op.OP||opId));
+    syncStart('Aprobando ingeniería…', 'OP-'+(op.OP||opId)+' · Ítem '+(op.ITEM||''));
     const payload = {
       IDQR: op.IDQR||opId,
       'INGENIERIA Y PLANEACIÓN': true,
@@ -2415,7 +2416,7 @@ async function aprobarIngenieria(opId){
     op['FECHA ENTREGA\nPLANEACIÓN\nDD/MM/AA'] = fechaInput.trim();
     syncDone('✅ Ingeniería aprobada', fechaInput);
     closeDetail(); updateBadges();
-    if(document.getElementById('detail-panel')?.classList.contains('open')) verDetalle(op.OP||opId);
+    if(document.getElementById('detail-panel')?.classList.contains('open')) verDetalle(op.IDQR||opId);
     else nav(MOD);
   }catch(e){ toast('❌ '+e.message,'error'); }
 }
