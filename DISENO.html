@@ -406,6 +406,45 @@ td.mono{font-family:var(--mono);font-size:11px}
 
 /* ═══ FADEÍN ═══════════════════════════════════════════ */
 @keyframes fadein{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+
+/* ═══ LOGIN estilo PIN (grid usuarios + teclado) ═══════════════ */
+.login-step{display:none}.login-step.active{display:block}
+.user-grid-dis{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:4px}
+.user-btn-dis{
+  background:rgba(255,255,255,.06);border:2px solid transparent;border-radius:12px;
+  padding:12px 6px;text-align:center;cursor:pointer;transition:.15s;
+}
+.user-btn-dis:active{transform:scale(.95);border-color:#7c3aed;background:rgba(124,58,237,.15)}
+.user-btn-dis .u-avatar{font-size:26px;margin-bottom:4px}
+.user-btn-dis .u-name{font-size:11px;font-weight:600;color:#e8d5ff;word-break:break-word}
+.user-btn-dis .u-rol{font-size:9px;color:#9f87c9;margin-top:2px}
+.pin-display-dis{display:flex;gap:12px;justify-content:center;margin:20px 0}
+.pin-dot-dis{
+  width:16px;height:16px;border-radius:50%;
+  border:2px solid rgba(167,139,250,.35);background:transparent;transition:.15s;
+}
+.pin-dot-dis.filled{background:#7c3aed;border-color:#7c3aed}
+.pin-dot-dis.error{background:#ef4444;border-color:#ef4444}
+.pin-pad-dis{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:8px}
+.pin-key-dis{
+  background:rgba(255,255,255,.06);border:none;border-radius:12px;
+  padding:16px;font-size:20px;font-weight:700;color:#e8d5ff;
+  cursor:pointer;transition:.1s;text-align:center;
+}
+.pin-key-dis:active{transform:scale(.92);background:rgba(255,255,255,.12)}
+.pin-key-dis.del{font-size:16px;color:#9f87c9}
+.login-back-dis{
+  background:none;border:none;color:#9f87c9;font-size:13px;
+  cursor:pointer;margin-top:16px;width:100%;text-align:center;padding:8px;
+}
+.login-error-dis{color:#f87171;font-size:12px;text-align:center;margin-top:8px;min-height:18px}
+.login-user-selected-dis{
+  display:flex;align-items:center;gap:10px;
+  background:rgba(255,255,255,.06);border-radius:10px;padding:10px 14px;margin-bottom:16px;
+}
+.login-user-selected-dis .u-avatar{font-size:24px}
+.login-user-selected-dis .u-info .u-name{font-size:14px;font-weight:700;color:#e8d5ff}
+.login-user-selected-dis .u-info .u-rol{font-size:11px;color:#9f87c9}
 </style>
 </head>
 <body>
@@ -524,10 +563,10 @@ const IMGBB_API_KEY = '708036495454b0ac80dbf7eb28a24c7c';
 
 // ── DISEÑADORES Y SUS CONTRASEÑAS ────────────────────────────────────
 const USUARIOS_DISEÑO = [
-  { nombre:'A. MEZA',    diseñador:'A. MEZA',    pass:'meza2026',    rol:'diseñador' },
-  { nombre:'F. GIRALDO', diseñador:'F. GIRALDO', pass:'giraldo2026', rol:'diseñador' },
-  { nombre:'M. GOMEZ',   diseñador:'M. GOMEZ',   pass:'gomez2026',   rol:'diseñador' },
-  { nombre:'Admin',      diseñador:'',            pass:'wedmadmin',   rol:'admin'     },
+  { nombre:'A. MEZA',    diseñador:'A. MEZA',    pass:'2001',    rol:'diseñador' },
+  { nombre:'F. GIRALDO', diseñador:'F. GIRALDO', pass:'2002', rol:'diseñador' },
+  { nombre:'M. GOMEZ',   diseñador:'M. GOMEZ',   pass:'2003',   rol:'diseñador' },
+  { nombre:'Admin',      diseñador:'',            pass:'8888',   rol:'admin'     },
 ];
 
 // ── COLORES POR DISEÑADOR ─────────────────────────────────────────────
@@ -549,12 +588,14 @@ function loginCerrar(){
   location.reload();
 }
 
+let _LOGIN_USER = null;
+
 function mostrarLogin(){
   const spl = document.getElementById('splash');
   if(spl){ spl.classList.add('hide'); setTimeout(()=>spl.style.display='none',450); }
 
   const existing = document.getElementById('login-overlay');
-  if(existing){ existing.style.display='flex'; return; }
+  if(existing){ existing.style.display='flex'; _loginBack(); return; }
 
   const div = document.createElement('div');
   div.id = 'login-overlay';
@@ -562,67 +603,155 @@ function mostrarLogin(){
     position:fixed;inset:0;z-index:99999;
     background:linear-gradient(135deg,#0d0015 0%,#1a0a2e 50%,#0d0015 100%);
     display:flex;align-items:center;justify-content:center;flex-direction:column;
-    font-family:var(--sans,-apple-system,sans-serif);
+    font-family:var(--sans,-apple-system,sans-serif);padding:16px;
   `;
   div.innerHTML = `
-    <div style="text-align:center;margin-bottom:28px">
+    <div style="text-align:center;margin-bottom:20px">
       <img src="" id="login-logo" style="width:min(65vw,260px);height:auto;margin-bottom:16px;
         filter:drop-shadow(0 4px 20px rgba(167,139,250,.4))" onerror="this.style.display='none'">
       <div style="color:#fff;font-size:22px;font-weight:800;letter-spacing:.3px">ERP Diseño</div>
       <div style="color:#7c5bbf;font-size:13px;margin-top:4px">Grupo WEDM</div>
     </div>
-    <div style="background:rgba(255,255,255,.04);border:1px solid rgba(167,139,250,.2);
-      border-radius:20px;padding:28px 24px;width:min(90vw,360px);backdrop-filter:blur(16px);
+    <div class="login-card-dis" style="background:rgba(255,255,255,.04);border:1px solid rgba(167,139,250,.2);
+      border-radius:20px;padding:24px 20px;width:min(90vw,360px);backdrop-filter:blur(16px);
       box-shadow:0 24px 64px rgba(0,0,0,.6)">
-      <div style="color:#e8d5ff;font-size:14px;font-weight:700;margin-bottom:18px;
-        display:flex;align-items:center;gap:8px">🔐 Iniciar sesión</div>
-      <div style="margin-bottom:14px">
-        <select id="login-usuario" style="width:100%;padding:12px 14px;border-radius:10px;
-          background:rgba(255,255,255,.07);border:1px solid rgba(167,139,250,.25);
-          color:#fff;font-size:14px;appearance:none;outline:none;cursor:pointer">
-          <option value="" style="background:#1a0a2e;color:#fff">— Selecciona tu nombre —</option>
-          ${USUARIOS_DISEÑO.map(u=>`<option value="${u.nombre}" style="background:#1a0a2e;color:#fff">${u.nombre}</option>`).join('')}
-        </select>
+
+      <div class="login-step active" id="login-step-user">
+        <div style="font-size:14px;font-weight:700;margin-bottom:14px;text-align:center;color:#e8d5ff">¿Quién eres?</div>
+        <div class="user-grid-dis" id="login-user-grid">
+          ${USUARIOS_DISEÑO.map(u=>`
+            <div class="user-btn-dis" onclick="_loginSelectUser(${JSON.stringify(u.nombre).replace(/"/g,'&quot;')})">
+              <div class="u-avatar">👤</div>
+              <div class="u-name">${u.nombre}</div>
+              <div class="u-rol">${u.rol}</div>
+            </div>`).join('')}
+        </div>
       </div>
-      <div style="margin-bottom:20px;position:relative">
-        <input id="login-pass" type="password" placeholder="Contraseña"
-          style="width:100%;padding:12px 44px 12px 14px;border-radius:10px;box-sizing:border-box;
-          background:rgba(255,255,255,.07);border:1px solid rgba(167,139,250,.25);
-          color:#fff;font-size:14px;outline:none"
-          onkeydown="if(event.key==='Enter')doLogin()">
-        <button onclick="const i=document.getElementById('login-pass');i.type=i.type==='password'?'text':'password'"
-          style="position:absolute;right:12px;top:50%;transform:translateY(-50%);
-          background:none;border:none;color:#7c5bbf;cursor:pointer;font-size:16px">👁</button>
+
+      <div class="login-step" id="login-step-pin">
+        <div class="login-user-selected-dis">
+          <div class="u-avatar">👤</div>
+          <div class="u-info">
+            <div class="u-name" id="login-pin-name">—</div>
+            <div class="u-rol" id="login-pin-rol">—</div>
+          </div>
+        </div>
+        <div style="font-size:13px;color:#c4b0e8;text-align:center;margin-bottom:4px">Ingresa tu clave de 4 dígitos</div>
+        <div class="pin-display-dis" id="pin-display">
+          ${[0,1,2,3].map(i=>`<div class="pin-dot-dis" id="pin-dot-${i}"></div>`).join('')}
+        </div>
+        <div class="login-error-dis" id="login-err"></div>
+        <input id="login-pin-input" type="tel" inputmode="numeric" pattern="[0-9]*" maxlength="4"
+          autocomplete="one-time-code"
+          style="position:absolute;opacity:0;pointer-events:none;width:1px;height:1px"
+          oninput="_loginPinInputHandler(this)"
+          onkeydown="if(event.key==='Enter') doLogin()">
+        <div class="pin-pad-dis">
+          ${[1,2,3,4,5,6,7,8,9].map(n=>`<button type="button" class="pin-key-dis" onclick="_loginPinPress('${n}')">${n}</button>`).join('')}
+          <div></div>
+          <button type="button" class="pin-key-dis" onclick="_loginPinPress('0')">0</button>
+          <button type="button" class="pin-key-dis del" onclick="_loginPinDel()">⌫</button>
+        </div>
+        <button type="button" class="login-back-dis" onclick="_loginBack()">← Cambiar usuario</button>
       </div>
-      <div id="login-err" style="color:#f87171;font-size:12px;margin-bottom:14px;min-height:16px;text-align:center"></div>
-      <button onclick="doLogin()" style="width:100%;padding:13px;border-radius:10px;border:none;
-        background:linear-gradient(135deg,#6d28d9,#7c3aed);color:#fff;font-size:15px;font-weight:700;
-        cursor:pointer;transition:opacity .15s;box-shadow:0 4px 20px rgba(124,58,237,.4)"
-        onmouseover="this.style.opacity='.88'" onmouseout="this.style.opacity='1'">
-        Entrar →
-      </button>
+
     </div>
     <div style="color:#2d1a4d;font-size:11px;margin-top:24px">© 2026 Grupo WEDM</div>
   `;
   document.body.appendChild(div);
-  // Poner logo
   const splLogo = document.getElementById('splash-logo-img');
   if(splLogo?.src) document.getElementById('login-logo').src = splLogo.src;
-  setTimeout(()=>document.getElementById('login-pass')?.focus(), 150);
+}
+
+// ── Selección de usuario → pantalla de PIN ──────────────────────
+function _loginSelectUser(nombre){
+  _LOGIN_USER = nombre;
+  const u = USUARIOS_DISEÑO.find(x=>x.nombre===nombre);
+  document.getElementById('login-step-user')?.classList.remove('active');
+  document.getElementById('login-step-pin')?.classList.add('active');
+  const nameEl = document.getElementById('login-pin-name');
+  const rolEl  = document.getElementById('login-pin-rol');
+  if(nameEl) nameEl.textContent = u?.nombre||nombre;
+  if(rolEl)  rolEl.textContent  = u?.rol||'';
+  const inp = document.getElementById('login-pin-input');
+  if(inp) inp.value = '';
+  _loginPinRender();
+  const err = document.getElementById('login-err');
+  if(err) err.textContent = '';
+  setTimeout(()=>inp?.focus(), 150);
+}
+
+function _loginBack(){
+  _LOGIN_USER = null;
+  const inp = document.getElementById('login-pin-input');
+  if(inp) inp.value = '';
+  _loginPinRender();
+  document.getElementById('login-step-pin')?.classList.remove('active');
+  document.getElementById('login-step-user')?.classList.add('active');
+  const err = document.getElementById('login-err');
+  if(err) err.textContent = '';
+}
+
+// ── Botones táctiles del teclado numérico en pantalla ───────────
+function _loginPinPress(d){
+  const inp = document.getElementById('login-pin-input');
+  if(!inp || inp.value.length>=4) return;
+  inp.value += d;
+  _loginPinInputHandler(inp);
+}
+
+function _loginPinDel(){
+  const inp = document.getElementById('login-pin-input');
+  if(!inp) return;
+  inp.value = inp.value.slice(0,-1);
+  _loginPinInputHandler(inp);
+}
+
+function _loginPinInputHandler(el){
+  const digits = (el.value||'').replace(/\D/g,'').slice(0,4);
+  el.value = digits;
+  _loginPinRender();
+  const err = document.getElementById('login-err');
+  if(err) err.textContent = '';
+  if(digits.length === 4) setTimeout(doLogin, 120);
+  else el.focus();
+}
+
+function _loginPinRender(){
+  const inp = document.getElementById('login-pin-input');
+  const len = inp?.value?.length||0;
+  for(let i=0;i<4;i++){
+    const dot = document.getElementById('pin-dot-'+i);
+    if(dot) dot.classList.toggle('filled', i<len);
+  }
+}
+
+function _loginPinShakeError(msg){
+  const err = document.getElementById('login-err');
+  if(err) err.textContent = msg;
+  for(let i=0;i<4;i++){
+    const dot = document.getElementById('pin-dot-'+i);
+    if(dot){ dot.classList.remove('filled'); dot.classList.add('error'); }
+  }
+  const inp = document.getElementById('login-pin-input');
+  if(inp) inp.value = '';
+  setTimeout(()=>{
+    for(let i=0;i<4;i++){ const dot=document.getElementById('pin-dot-'+i); if(dot) dot.classList.remove('error'); }
+    inp?.focus();
+  }, 500);
 }
 
 function doLogin(){
-  const nombre = document.getElementById('login-usuario')?.value?.trim();
-  const pass   = document.getElementById('login-pass')?.value?.trim();
-  const err    = document.getElementById('login-err');
-  if(!nombre){ if(err) err.textContent='Selecciona tu nombre'; return; }
-  if(!pass)  { if(err) err.textContent='Ingresa tu contraseña'; return; }
-  const u = USUARIOS_DISEÑO.find(x=>x.nombre===nombre && x.pass===pass);
-  if(!u){ if(err) err.textContent='Contraseña incorrecta ❌'; return; }
+  if(!_LOGIN_USER) return;
+  const inp = document.getElementById('login-pin-input');
+  const pin = inp?.value||'';
+  if(pin.length < 4) return;
+  const u = USUARIOS_DISEÑO.find(x=>x.nombre===_LOGIN_USER && x.pass===pin);
+  if(!u){ _loginPinShakeError('Clave incorrecta'); return; }
   _SESSION = { nombre:u.nombre, diseñador:u.diseñador, rol:u.rol, ts:Date.now() };
   localStorage.setItem('_wedm_dis_session', JSON.stringify(_SESSION));
-  const ov = document.getElementById('login-overlay');
-  if(ov) ov.style.display='none';
+  const overlay = document.getElementById('login-overlay');
+  if(overlay) overlay.style.display='none';
   iniciarApp();
 }
 
