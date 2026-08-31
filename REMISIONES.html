@@ -1,0 +1,1723 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="theme-color" content="#0f2443">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Remisiones · Grupo WEDM</title>
+<style>
+:root {
+  --bg:#edf0f5; --surface:#ffffff; --card:#ffffff; --card2:#f3f5f9;
+  --border:#dde2e9; --accent:#2563eb; --accent2:#1d4ed8;
+  --gold:#b7791f; --danger:#dc2626; --warn:#d97706; --info:#0284c7;
+  --text:#1e293b; --muted:#64748b;
+  --mono:'JetBrains Mono','Fira Mono',monospace;
+  --sans:-apple-system,'Segoe UI',sans-serif;
+  --r:10px; --sh:0 2px 16px rgba(30,41,59,.08);
+  --nav-h:70px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;touch-action:manipulation}
+body{display:flex;flex-direction:column;font-family:var(--sans);font-size:14px;background:var(--bg);color:var(--text);}
+/* TOPBAR */
+#topbar{height:54px;background:rgba(255,255,255,.94);backdrop-filter:blur(16px);border-bottom:1px solid rgba(0,0,0,.06);display:flex;align-items:center;padding:0 12px;gap:10px;flex-shrink:0;z-index:200;box-shadow:0 2px 12px rgba(30,41,59,.05);}
+#page-title{font-size:16px;font-weight:800;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.tb-icon-btn{width:36px;height:36px;border-radius:10px;background:var(--bg);border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:15px;flex-shrink:0;}
+/* CONTENT */
+#content{flex:1;overflow-y:auto;overflow-x:hidden;padding:14px 12px;-webkit-overflow-scrolling:touch;background:var(--bg);}
+/* BOTTOM NAV */
+#bottom-nav{height:auto;background:rgba(255,255,255,.96);backdrop-filter:blur(20px);border-top:1px solid rgba(0,0,0,.07);display:flex;align-items:center;flex-shrink:0;z-index:200;padding:8px 8px 10px;box-shadow:0 -4px 24px rgba(30,41,59,.08);overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;gap:5px;}
+#bottom-nav::-webkit-scrollbar{display:none}
+.bn-item{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;padding:5px 10px;color:var(--muted);font-size:9.5px;font-weight:600;transition:all .18s cubic-bezier(.34,1.56,.64,1);user-select:none;position:relative;border-radius:12px;-webkit-tap-highlight-color:transparent;min-width:56px;}
+.bn-item:active{transform:scale(.88)}
+.bn-icon{font-size:20px;line-height:1;width:36px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:9px;transition:all .18s cubic-bezier(.34,1.56,.64,1);}
+.bn-item.active .bn-icon{background:linear-gradient(135deg,var(--accent),#60a5fa);box-shadow:0 4px 14px rgba(37,99,235,.35);transform:scale(1.08) translateY(-2px);}
+.bn-item.active{color:var(--accent)}
+/* FAB */
+.btn-fab{position:fixed;right:16px;bottom:calc(var(--nav-h) + 14px);width:54px;height:54px;border-radius:50%;background:linear-gradient(135deg,var(--accent2),#3b82f6);border:none;color:#fff;font-size:26px;cursor:pointer;box-shadow:0 6px 22px rgba(29,78,216,.45);z-index:150;display:flex;align-items:center;justify-content:center;-webkit-tap-highlight-color:transparent;transition:transform .15s cubic-bezier(.34,1.56,.64,1),box-shadow .15s;}
+.btn-fab:active{transform:scale(.9);box-shadow:0 3px 12px rgba(29,78,216,.3)}
+/* TOAST */
+#toast{position:fixed;bottom:calc(var(--nav-h)+12px);left:50%;transform:translateX(-50%);z-index:2000;display:flex;flex-direction:column;gap:6px;pointer-events:none;width:min(340px,90vw)}
+.toast-msg{background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:10px 14px;font-size:13px;box-shadow:var(--sh);animation:slideUp .2s ease;display:flex;align-items:center;gap:8px;pointer-events:auto;}
+.toast-msg.ok{border-left:3px solid var(--accent)}
+.toast-msg.error{border-left:3px solid var(--danger)}
+@keyframes slideUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+/* PROGRESS */
+#prog-bar-top{position:fixed;top:0;left:0;right:0;height:3px;z-index:9999;background:transparent;pointer-events:none;}
+#prog-bar-top-fill{height:100%;width:0%;background:var(--accent);transition:width .35s ease;border-radius:0 2px 2px 0;}
+#prog-toast{position:fixed;bottom:24px;right:20px;z-index:9998;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px 16px 10px;box-shadow:0 6px 24px rgba(0,0,0,.15);display:none;align-items:center;gap:10px;min-width:260px;max-width:340px;flex-direction:column;animation:slideUp .2s ease;}
+#prog-toast.show{display:flex;}
+#prog-toast-row{display:flex;align-items:center;gap:10px;width:100%;}
+#prog-toast-icon{font-size:20px;flex-shrink:0;}
+#prog-toast-info{flex:1;min-width:0;}
+#prog-toast-label{font-size:12px;font-weight:700;color:var(--text);}
+#prog-toast-sub{font-size:11px;color:var(--muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+#prog-toast-pct{font-size:12px;font-weight:700;color:var(--accent);flex-shrink:0;}
+#prog-toast-minibar{width:100%;height:3px;background:var(--border);border-radius:2px;overflow:hidden;}
+#prog-toast-minibar-fill{height:100%;width:0%;background:var(--accent);border-radius:2px;transition:width .35s ease;}
+/* BUSY */
+.busy-ov{display:none !important;}
+/* MODAL */
+.overlay{position:fixed;inset:0;background:rgba(15,23,42,.5);display:none;align-items:flex-end;justify-content:center;z-index:800;}
+.overlay.open{display:flex}
+@media(min-width:600px){.overlay{align-items:center}}
+.modal{background:var(--card);border:1px solid var(--border);border-radius:16px 16px 0 0;width:100%;max-width:640px;max-height:92vh;display:flex;flex-direction:column;box-shadow:var(--sh);}
+@media(min-width:600px){.modal{border-radius:16px;max-height:88vh}}
+.modal-head{padding:16px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0;}
+.modal-handle{width:40px;height:4px;background:var(--border);border-radius:2px;margin:10px auto 0;flex-shrink:0;}
+.modal-head h3{flex:1;font-size:15px;font-weight:700}
+.modal-body{flex:1;overflow-y:auto;padding:16px 18px;-webkit-overflow-scrolling:touch}
+.modal-foot{padding:12px 18px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px;flex-shrink:0}
+/* FORM */
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:480px){.form-grid{grid-template-columns:1fr}}
+.field{display:flex;flex-direction:column;gap:5px}
+.field.span2{grid-column:1/-1}
+.field label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-weight:700}
+.field input,.field select,.field textarea{background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:10px 12px;font-size:14px;font-family:inherit;outline:none;transition:border-color .15s;-webkit-appearance:none;appearance:none;}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--accent)}
+.field select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%2364748b' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:32px}
+.field select option{background:var(--surface);color:var(--text)}
+.field textarea{resize:vertical;min-height:68px}
+/* BTN */
+.btn{display:inline-flex;align-items:center;gap:5px;padding:8px 14px;border-radius:var(--r);border:none;cursor:pointer;font-size:13px;font-weight:600;transition:all .12s;user-select:none;-webkit-tap-highlight-color:transparent;}
+.btn-primary{background:var(--accent2);color:#fff}
+.btn-primary:active{background:var(--accent)}
+.btn-ghost{background:transparent;color:var(--muted);border:1px solid var(--border)}
+.btn-ghost:active{color:var(--text);background:var(--card2)}
+.btn-danger{background:var(--danger);color:#fff}
+.btn-sm{padding:5px 10px;font-size:11px;border-radius:8px}
+/* DETAIL PANEL */
+.detail-panel{position:fixed;inset:0;background:var(--surface);z-index:600;display:flex;flex-direction:column;transform:translate3d(100%,0,0);transition:transform .18s ease-out;will-change:transform;}
+.detail-panel.open{transform:translate3d(0,0,0)}
+@media(min-width:700px){.detail-panel{left:auto;width:620px;right:0;border-left:1px solid var(--border)}}
+@media(min-width:960px){.detail-panel{width:700px}}
+@media(min-width:1300px){.detail-panel{width:780px}}
+.dp-head{padding:0 14px;height:52px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0;background:var(--card);}
+.dp-head h3{flex:1;font-size:14px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dp-actions{display:flex;gap:6px;flex-shrink:0}
+.dp-body{flex:1;overflow-y:auto;padding:14px;-webkit-overflow-scrolling:touch}
+/* SPINNER */
+.spinner{display:inline-block;width:20px;height:20px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite}
+.busy-spinner{width:30px;height:30px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-wrap{display:flex;align-items:center;justify-content:center;gap:10px;padding:40px;color:var(--muted)}
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:40px 20px;color:var(--muted);text-align:center}
+.empty-icon{font-size:36px;opacity:.3}
+/* TABLE */
+table{width:100%;border-collapse:collapse}
+thead th{background:var(--card2);color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.7px;padding:10px 11px;text-align:left;border-bottom:2px solid var(--border);white-space:nowrap;position:sticky;top:0;font-weight:800;}
+tbody tr{border-bottom:1px solid var(--border);transition:background .1s}
+tbody tr:last-child{border-bottom:none}
+tbody tr:hover{background:rgba(37,99,235,.04)}
+tbody tr:active{background:var(--card2)}
+tbody td{padding:10px 11px;font-size:12px;cursor:pointer}
+.hover-row:hover{background:rgba(37,99,235,.04)}
+/* SCROLLBAR */
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+/* BADGES */
+.badge{display:inline-block;padding:3px 8px;border-radius:6px;font-size:10px;font-weight:700}
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div id="topbar">
+  <div id="page-title">🚚 Remisiones</div>
+  <button class="tb-icon-btn" onclick="refreshCurrent()" title="Actualizar">🔄</button>
+</div>
+
+<!-- CONTENT -->
+<div id="content">
+  <div class="loading-wrap"><div class="busy-spinner"></div> <span style="color:var(--muted);font-size:13px">Cargando…</span></div>
+</div>
+
+<!-- BOTTOM NAV SIMPLIFICADO -->
+<div id="bottom-nav">
+  <div class="bn-item active"><div class="bn-icon">🚚</div>Remisiones</div>
+</div>
+
+<!-- FAB -->
+<button class="btn-fab" id="fab" onclick="abrirEditorRem()" title="Nueva remisión">＋</button>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<!-- BARRA DE PROGRESO -->
+<div id="prog-bar-top"><div id="prog-bar-top-fill"></div></div>
+
+<!-- PROG TOAST -->
+<div id="prog-toast">
+  <div id="prog-toast-row">
+    <div id="prog-toast-icon">⏳</div>
+    <div id="prog-toast-info">
+      <div id="prog-toast-label">Procesando…</div>
+      <div id="prog-toast-sub"></div>
+    </div>
+    <div id="prog-toast-pct">0%</div>
+  </div>
+  <div id="prog-toast-minibar"><div id="prog-toast-minibar-fill"></div></div>
+</div>
+
+<!-- MODAL -->
+<div class="overlay" id="modal-ov">
+  <div class="modal" id="modal-box">
+    <div class="modal-handle"></div>
+    <div class="modal-head">
+      <h3 id="modal-title">—</h3>
+      <button class="btn btn-ghost btn-sm" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+    <div class="modal-foot" id="modal-foot"></div>
+  </div>
+</div>
+
+<!-- DETAIL PANEL -->
+<div class="detail-panel" id="dp">
+  <div class="dp-head">
+    <button class="btn btn-ghost btn-sm" onclick="closeDetail()">← Volver</button>
+    <h3 id="dp-title">—</h3>
+    <div class="dp-actions" id="dp-actions"></div>
+  </div>
+  <div class="dp-body" id="dp-body"></div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+//  CONFIG — URL del Apps Script desplegado
+// ═══════════════════════════════════════════════════════════
+const API = 'https://script.google.com/macros/s/AKfycbzvVCgj3lxZZS4RFbucb-onZ6nLP-LdygX9CFSBuyx_qri8cEioETTnIjm3jJ-rI83eKg/exec';
+
+// ═══════════════════════════════════════════════════════════
+//  CONSTANTES Y ESTADO
+// ═══════════════════════════════════════════════════════════
+const DB = {};
+const CACHE_TTL = 45 * 60 * 1000;
+const CACHE_KEY_PREFIX = 'erp_wedm_';
+const _RANGEABLE_KEYS = new Set(['remisiones','elementosRemision','cotizaciones','items','produccion']);
+const RANGO_STATE = { remisiones:'1m', cotizaciones:'1m', elementos:'1m', produccion:'1m' };
+const RANGO_OPCIONES = [
+  { key:'1m', label:'1 mes' },
+  { key:'3m', label:'3 meses' },
+  { key:'6m', label:'6 meses' },
+  { key:'1y', label:'1 año' },
+  { key:'todo', label:'Todo' },
+];
+let _busyCount = 0, _busyProg = null, _detailOpen = false, _bgSyncTimer = null;
+
+// ═══════════════════════════════════════════════════════════
+//  CACHÉ LOCAL
+// ═══════════════════════════════════════════════════════════
+function _cacheKey(key){
+  if(!_RANGEABLE_KEYS.has(key)) return key;
+  const rangoMap = { remisiones:'remisiones', elementosRemision:'remisiones', cotizaciones:'cotizaciones', items:'elementos', produccion:'produccion' };
+  const rk = rangoMap[key];
+  const rango = (rk && RANGO_STATE[rk]) ? RANGO_STATE[rk] : '1m';
+  return key + '_' + rango;
+}
+function cacheSet(key, data){
+  try{
+    localStorage.setItem(CACHE_KEY_PREFIX + _cacheKey(key), JSON.stringify({ts:Date.now(), data}));
+  }catch(e){}
+}
+function cacheGet(key){
+  try{
+    const raw = localStorage.getItem(CACHE_KEY_PREFIX + _cacheKey(key));
+    if(!raw) return null;
+    const obj = JSON.parse(raw);
+    if(Date.now() - obj.ts > CACHE_TTL) return null;
+    return obj.data;
+  }catch(e){ return null; }
+}
+function cacheGetStale(key){
+  try{
+    const raw = localStorage.getItem(CACHE_KEY_PREFIX + _cacheKey(key));
+    if(!raw) return null;
+    return JSON.parse(raw).data;
+  }catch(e){ return null; }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  PROGRESO NO BLOQUEANTE
+// ═══════════════════════════════════════════════════════════
+const _prog = { active:false, _t:null };
+function _progress({ icon='⏳', label='Procesando…', steps=[], color=null }={}) {
+  const bar=document.getElementById('prog-bar-top-fill');
+  const toastEl=document.getElementById('prog-toast');
+  const tIcon=document.getElementById('prog-toast-icon');
+  const tLabel=document.getElementById('prog-toast-label');
+  const tSub=document.getElementById('prog-toast-sub');
+  const tPct=document.getElementById('prog-toast-pct');
+  const mini=document.getElementById('prog-toast-minibar-fill');
+  if(!bar) return { step:()=>{}, pct:()=>{}, done:()=>{}, fail:()=>{} };
+  clearTimeout(_prog._t);
+  bar.style.transition='none'; bar.style.width='0%';
+  if(color) bar.style.background=color; else bar.style.background='var(--accent)';
+  if(mini){ mini.style.background=color||'var(--accent)'; mini.style.width='0%'; }
+  setTimeout(()=>{ bar.style.transition='width .35s ease'; },30);
+  tIcon.textContent=icon; tLabel.textContent=label; tSub.textContent=steps[0]||''; tPct.textContent=''; tPct.style.color='var(--accent)';
+  toastEl.classList.add('show'); _prog.active=true;
+  const total=steps.length||4;
+  const _setPct=(p)=>{ bar.style.width=p+'%'; if(mini) mini.style.width=p+'%'; tPct.textContent=p+'%'; };
+  return {
+    step(i){ _setPct(Math.round(((i+1)/total)*90)); if(steps[i]) tSub.textContent=steps[i]; },
+    pct(p){ _setPct(p); },
+    done(msg=''){
+      _setPct(100); tPct.style.color='#16a34a'; tSub.textContent=msg||'✅ Listo';
+      _prog._t=setTimeout(()=>{ toastEl.classList.remove('show'); setTimeout(()=>{ bar.style.transition='none'; bar.style.width='0%'; if(mini) mini.style.width='0%'; _prog.active=false; },400); },1400);
+    },
+    fail(msg='Error'){
+      if(mini) mini.style.background='var(--danger)'; bar.style.background='var(--danger)'; _setPct(100); tPct.textContent='!'; tPct.style.color='var(--danger)'; tSub.textContent='❌ '+msg;
+      _prog._t=setTimeout(()=>{ toastEl.classList.remove('show'); setTimeout(()=>{ bar.style.width='0%'; if(mini) mini.style.width='0%'; _prog.active=false; },400); },3000);
+    }
+  };
+}
+const BUSY_LABELS = { createRemision:'Creando remisión…', updateRemision:'Actualizando remisión…', deleteRemision:'Eliminando remisión…' };
+function busyLabelFor(a){ return BUSY_LABELS[a]||((/^create/i.test(a))?'Creando…':(/^update/i.test(a))?'Actualizando…':(/^delete/i.test(a))?'Eliminando…':'Guardando…'); }
+function _busyIcon(t=''){const s=t.toLowerCase();if(s.includes('elimin')) return '🗑️';if(s.includes('creand')) return '💾';if(s.includes('actuali')) return '✏️';return '⚙️';}
+function showBusy(text){ _busyCount++; _busyProg=_progress({icon:_busyIcon(text),label:text||'Guardando…',steps:[text||'Procesando…','Completado']}); _busyProg.pct(30); }
+function hideBusy(){ _busyCount=Math.max(0,_busyCount-1); if(_busyCount===0&&_busyProg){ _busyProg.done(''); _busyProg=null; } }
+
+// ═══════════════════════════════════════════════════════════
+//  API
+// ═══════════════════════════════════════════════════════════
+const ACTION_TO_KEY = { getRemisiones:'remisiones', getElementosRemision:'elementosRemision', getCotizaciones:'cotizaciones', getItems:'items', getControlProduccion:'produccion' };
+const _SYNC_ACTION = { remisiones:'getRemisiones', elementosRemision:'getElementosRemision', cotizaciones:'getCotizaciones', items:'getItems', produccion:'getControlProduccion' };
+const _RANGO_KEY = { remisiones:'remisiones', elementosRemision:'remisiones', cotizaciones:'cotizaciones', items:'elementos', produccion:'produccion' };
+
+function _fetchTimeout(url,opts={},ms=15000){ const ctrl=new AbortController(); const timer=setTimeout(()=>ctrl.abort(),ms); return fetch(url,{...opts,signal:ctrl.signal}).finally(()=>clearTimeout(timer)); }
+
+async function GET(action, id='', extraParams={}, _retry=1) {
+  try{
+    let url=`${API}?action=${action}${id?'&id='+encodeURIComponent(id):''}`;
+    Object.keys(extraParams||{}).forEach(k=>{ url+=`&${k}=${encodeURIComponent(extraParams[k])}`; });
+    url+=`&_t=${Date.now()}`;
+    const r=await _fetchTimeout(url); if(!r.ok) throw new Error('HTTP '+r.status);
+    const j=await r.json(); if(!j.ok) throw new Error(j.error);
+    if(ACTION_TO_KEY[action]&&!id){ const rk=_RANGO_KEY?.[ACTION_TO_KEY[action]]; const esRangoActual=rk&&extraParams?.rango===(RANGO_STATE?.[rk]||'1m'); if(!Object.keys(extraParams||{}).length||esRangoActual) cacheSet(ACTION_TO_KEY[action],j.data); }
+    return j.data;
+  }catch(e){
+    if(_retry>0&&(e.name==='AbortError'||e.message?.includes('fetch'))){ console.warn(`GET ${action} falló, reintentando…`); await new Promise(r=>setTimeout(r,800)); return GET(action,id,extraParams,_retry-1); }
+    if(ACTION_TO_KEY[action]&&!id&&!Object.keys(extraParams||{}).length){ const stale=cacheGetStale(ACTION_TO_KEY[action]); if(stale){ console.warn(`GET ${action}: usando caché stale`); return stale; } }
+    throw e;
+  }
+}
+
+async function POST(action, data={}) {
+  showBusy(busyLabelFor(action));
+  try{ const r=await fetch(API,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({action,data})}); const j=await r.json(); if(!j.ok) throw new Error(j.error); return j.data; }
+  finally{ hideBusy(); }
+}
+async function POST_SILENT(action, data={}) {
+  const r=await fetch(API,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({action,data})}); const j=await r.json(); if(!j.ok) throw new Error(j.error); return j.data;
+}
+function POST_BG(action, data={}, onError=null) {
+  const _send=(isRetry=false)=>{
+    fetch(API,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({action,data})}).then(r=>r.json()).then(j=>{ if(!j.ok){ if(!isRetry) setTimeout(()=>_send(true),4000); else{ toast('⚠️ Error guardando ('+action+'): '+(j.error||'sin detalle'),'error'); if(onError) onError(new Error(j.error)); } } }).catch(err=>{ if(!isRetry) setTimeout(()=>_send(true),4000); else{ toast('⚠️ Sin conexión: '+action,'error'); if(onError) onError(err); } });
+  };
+  _send();
+}
+async function load(key, action) {
+  if(!DB[key]){ const cached=cacheGet(key); if(cached){ DB[key]=cached; return DB[key]; } }
+  const rk=_RANGO_KEY?.[key]; const params=rk?{rango:RANGO_STATE[rk]||'1m'}:{};
+  DB[key]=await GET(action,'',params); return DB[key];
+}
+
+// ═══════════════════════════════════════════════════════════
+//  AUTO-SYNC
+// ═══════════════════════════════════════════════════════════
+function _autoSync(keys=[], renderFn=null){
+  try{ if(renderFn) renderFn(); else if(keys.includes('remisiones')) remisiones(); }catch(e){}
+  clearTimeout(_bgSyncTimer);
+  _bgSyncTimer=setTimeout(async()=>{
+    try{ await Promise.all(keys.map(async k=>{ const action=_SYNC_ACTION[k]; if(!action) return; const rk=_RANGO_KEY[k]; const params=rk?{rango:RANGO_STATE[rk]||'1m'}:{}; const data=await GET(action,'',params); if(data) DB[k]=data; })); }catch(e){}
+  },900);
+}
+function refreshCurrent(){
+  DB.remisiones=null; DB.elementosRemision=null;
+  // Limpiar solo el rango activo (queremos refrescar lo que estamos viendo)
+  try{
+    localStorage.removeItem(CACHE_KEY_PREFIX+'remisiones_'+RANGO_STATE.remisiones);
+    localStorage.removeItem(CACHE_KEY_PREFIX+'elementosRemision_'+RANGO_STATE.remisiones);
+  }catch(e){}
+  remisiones();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  UI HELPERS
+// ═══════════════════════════════════════════════════════════
+function setContent(h){ document.getElementById('content').innerHTML=h; }
+function empty(msg='Sin registros'){ return `<div class="empty"><div class="empty-icon">📭</div><p>${msg}</p></div>`; }
+function toast(msg,type='ok'){ const el=document.createElement('div'); el.className=`toast-msg ${type}`; el.innerHTML=`<span>${type==='ok'?'✓':'✗'}</span>${msg}`; document.getElementById('toast').appendChild(el); setTimeout(()=>el.remove(),2800); }
+function openModal(title,body,foot=''){ document.getElementById('modal-title').textContent=title; document.getElementById('modal-body').innerHTML=body; document.getElementById('modal-foot').innerHTML=foot; document.getElementById('modal-ov').classList.add('open'); }
+function closeModal(){ document.getElementById('modal-ov').classList.remove('open'); }
+function openDetail(title,body,actions=''){ document.getElementById('dp-title').textContent=title; document.getElementById('dp-body').innerHTML=body; document.getElementById('dp-actions').innerHTML=actions; document.getElementById('dp').classList.add('open'); document.getElementById('content').style.overflow='hidden'; if(!_detailOpen){ _detailOpen=true; history.pushState({detail:true},'','#detalle'); } }
+function closeDetail(){ const wasOpen=_detailOpen; _detailOpen=false; document.getElementById('dp').classList.remove('open'); document.getElementById('content').style.overflow=''; if(wasOpen&&!_navFromPopstate) history.back(); }
+let _navFromPopstate=false;
+window.addEventListener('popstate',function(e){ _navFromPopstate=true; if(_detailOpen){ _detailOpen=false; document.getElementById('dp').classList.remove('open'); document.getElementById('content').style.overflow=''; } _navFromPopstate=false; });
+function esc(v){ return String(v==null?'':v).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function gv(id){ const el=document.getElementById(id); return el?el.value.trim():''; }
+function gn(id){ return Number(gv(id))||0; }
+function fmtDate(d){
+  if(!d) return '—';
+  try{
+    const s=String(d);
+    if(s.startsWith('1899')||s.startsWith('1900')||s.startsWith('190')) return '—';
+    if(s.includes('T')){ const dt=new Date(s); if(isNaN(dt)||dt.getFullYear()<1990) return '—'; return dt.toLocaleDateString('es-CO'); }
+    if(s.includes('/')||s.includes('-')){ const dt=new Date(s.includes('/')?s.split('/').reverse().join('-'):s); if(isNaN(dt)||dt.getFullYear()<1990) return '—'; return dt.toLocaleDateString('es-CO'); }
+    return s||'—';
+  }catch(e){ return '—'; }
+}
+function fmt(n){ const x=Number(String(n||0).replace(/[^0-9.-]/g,'')); return isNaN(x)?'—':'$'+x.toLocaleString('es-CO'); }
+function moduleBanner(icon,title,sub,actions='',bgGrad='linear-gradient(135deg,#0f2443,#1a3a6e)'){
+  return `<div style="background:${bgGrad};border-radius:18px;padding:16px;margin-bottom:0;color:#fff;box-shadow:0 6px 24px rgba(30,41,59,.2);position:relative;overflow:hidden;"><div style="position:absolute;top:-30px;right:-30px;width:130px;height:130px;border-radius:50%;background:rgba(255,255,255,.06);pointer-events:none"></div><div style="display:flex;align-items:center;gap:12px;position:relative;z-index:1"><div style="width:46px;height:46px;border-radius:13px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.22);display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0;">${icon}</div><div style="flex:1;min-width:0"><div style="font-size:18px;font-weight:800;line-height:1.2">${title}</div><div style="font-size:11px;opacity:.65;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${sub}</div></div></div>${actions?`<div style="margin-top:14px;position:relative;z-index:1">${actions}</div>`:''}</div>`;
+}
+function rangoSelector(modulo){
+  const actual=RANGO_STATE[modulo];
+  return `<div style="display:flex;gap:3px;align-items:center;background:rgba(0,0,0,.18);border-radius:10px;padding:3px;width:fit-content">${RANGO_OPCIONES.map(r=>`<button onclick="cambiarRango('${modulo}','${r.key}')" style="${r.key===actual?'background:#fff;color:#1a1a2e;font-weight:800;box-shadow:0 1px 4px rgba(0,0,0,.2)':'background:transparent;color:rgba(255,255,255,.75);font-weight:600'};border:none;padding:5px 11px;border-radius:7px;font-size:12px;cursor:pointer;transition:all .15s;white-space:nowrap">${r.label}</button>`).join('')}</div>`;
+}
+async function cambiarRango(modulo, rango){
+  if(rango===RANGO_STATE[modulo]) return;
+  RANGO_STATE[modulo]=rango;
+  // Limpiar DB y caché de ambas colecciones (elementosRemision usa el mismo rango que remisiones)
+  DB[modulo]=null; DB.elementosRemision=null;
+  try{
+    // Eliminar entradas de caché con el rango anterior (todas las variantes)
+    ['1m','3m','6m','1y','todo'].forEach(r=>{
+      localStorage.removeItem(CACHE_KEY_PREFIX+'remisiones_'+r);
+      localStorage.removeItem(CACHE_KEY_PREFIX+'elementosRemision_'+r);
+    });
+  }catch(e){}
+  toast('⏳ Cargando '+(RANGO_OPCIONES.find(r=>r.key===rango)?.label||rango)+'…');
+  await remisiones();
+}
+
+// docCSS para PDFs
+function docCSS(){
+  return `<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,Helvetica,sans-serif;font-size:10px;color:#111;padding:20px 28px;max-width:800px;margin:0 auto;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}table{border-collapse:collapse;width:100%}td,th{padding:5px 8px;vertical-align:middle}.azul{background:#1a3a6b!important;color:#fff!important;font-weight:700}.azul-light{background:#2d5fa6!important;color:#fff!important;font-weight:700}.azul-row{background:#dde6f0!important}.borde{border:1px solid #999}.borde-azul{border:1px solid #1a3a6b}.negrita{font-weight:700}.right{text-align:right}.center{text-align:center}.mono{font-family:'Courier New',monospace}h1{font-size:13px;font-weight:700}.total-row{background:#1a3a6b!important;color:#fff!important;font-weight:700}.subtotal-row{background:#f0f0f0!important;font-weight:700}.footer-wedm{text-align:center;padding:8px 20px 6px;border-top:1.5px solid #1a3a6b;margin-top:30px}.footer-wedm p{font-size:8.5px;color:#1a3a6b;font-style:italic;letter-spacing:.4px;margin:0}.no-print{display:none}@page{size:letter portrait;margin:10mm 18mm;margin-top:10mm}@media print{body{padding:0;max-width:100%;-webkit-print-color-adjust:exact;print-color-adjust:exact}.no-print{display:none!important}}</style>`;
+}
+
+function _abrirDocParaImprimir(html, filename) {
+  function _esperarImagenes(win,doc,cb){ const imgs=Array.from(doc.images||[]); if(!imgs.length){cb();return;} let p=imgs.length,r=false; const t=()=>{ if(r) return; p--; if(p<=0){ r=true; cb(); } }; imgs.forEach(img=>{ if(img.complete){ t(); return; } img.addEventListener('load',t,{once:true}); img.addEventListener('error',t,{once:true}); }); setTimeout(()=>{ if(!r){ r=true; cb(); } },4000); }
+  try{
+    const old=document.getElementById('_print_iframe'); if(old) old.remove();
+    const iframe=document.createElement('iframe');
+    iframe.id='_print_iframe';
+    iframe.style.cssText='position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:none;opacity:0;';
+    document.body.appendChild(iframe);
+    const doc=iframe.contentDocument||iframe.contentWindow.document;
+    doc.open(); doc.write(html); doc.close();
+    iframe.onload=()=>{ _esperarImagenes(iframe.contentWindow,doc,()=>{ iframe.contentWindow.focus(); setTimeout(()=>{ iframe.contentWindow.print(); },100); }); };
+  }catch(e){ const w=window.open('','_blank'); if(w){ w.document.write(html); w.document.close(); setTimeout(()=>w.print(),400); } }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  MÓDULO REMISIONES (lógica principal)
+// ═══════════════════════════════════════════════════════════
+</script>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+//   MÓDULO REMISIONES — ERP Grupo WEDM
+//   Integra datos de DB.remisiones + DB.elementosRemision
+//   Editor en ventana separada (al estilo CALIDAD)
+//   PDF bilingual: español (GRUPO WEDM) o inglés (MOSAT GROUP)
+// ══════════════════════════════════════════════════════════════
+
+// ─── Estado de filtros y vista ───────────────────────────────
+const _REM_STATE = {
+  vista: 'cards',         // 'cards' | 'table'
+  filtroEmpresa: '',
+  filtroOP: '',
+  filtroEstado: '',
+  busqueda: '',
+};
+
+// ─── Listener postMessage del editor ─────────────────────────
+window.addEventListener('message', (ev) => {
+  const msg = ev.data;
+  if (!msg || msg.type !== 'remision-wedm-save') return;
+  const payload = msg.payload || {};
+
+  if (!DB.remisiones) DB.remisiones = [];
+  if (payload.ES_NUEVA) {
+    DB.remisiones.unshift(payload);
+  } else {
+    const idx = DB.remisiones.findIndex(x =>
+      String(x.REMISION || '') === String(payload.REMISION || '') ||
+      String(x.ID_PEDIDO || '') === String(payload.ID_PEDIDO || '')
+    );
+    if (idx >= 0) DB.remisiones[idx] = { ...DB.remisiones[idx], ...payload };
+    else DB.remisiones.unshift(payload);
+  }
+
+  // Guardar en backend
+  const datosGuardar = { ...payload };
+  delete datosGuardar.ES_NUEVA;
+
+  if (payload.ES_NUEVA) {
+    // nextRemId es GET en el GAS (doGet), no POST
+    GET('nextRemId').then(res => {
+      const numRem = (res && res.nextId) ? res.nextId : (payload.REMISION || Date.now());
+      datosGuardar.REMISION = numRem;
+      POST_SILENT('createRemision', datosGuardar).then(res2 => {
+        // createRemisionSegura devuelve { id, remId }
+        const idPedido = (res2 && (res2.id || res2.ID_PEDIDO)) || '';
+        if (idPedido && DB.remisiones && DB.remisiones[0]) {
+          DB.remisiones[0].ID_PEDIDO = idPedido;
+        }
+        _guardarElementosRem(payload.ITEMS || [], idPedido, payload.COTIZACION || '');
+      }).catch(e => toast('⚠️ Error creando remisión: ' + e.message, 'error'));
+    }).catch(e => toast('⚠️ Error obteniendo número: ' + e.message, 'error'));
+  } else {
+    POST_BG('updateRemision', datosGuardar);
+    if (payload.ITEMS && payload.ITEMS.length) {
+      const uuid = payload.ID_PEDIDO || '';
+      _guardarElementosRem(payload.ITEMS, uuid, payload.COTIZACION || '');
+    }
+  }
+
+  // Invalidar caché del rango activo para forzar recarga fresca
+  DB.elementosRemision = null;
+  try{ localStorage.removeItem(CACHE_KEY_PREFIX+'elementosRemision_'+RANGO_STATE.remisiones); }catch(e){}
+  toast('✅ Remisión guardada');
+  _autoSync(['remisiones'], remisiones);
+});
+
+function _guardarElementosRem(items, remUUID, cotizacion) {
+  // GAS tiene createElemRemision (un POST por ítem) — no existe saveRemisionDetalle
+  if (!items || !items.length || !remUUID) return;
+  const hoy = new Date().toISOString().slice(0, 10);
+  items.forEach((it, i) => {
+    POST_BG('createElemRemision', {
+      // PK — GAS genera UUID si ID está vacío
+      ID:             '',
+      ID_PEDIDO:      remUUID,
+      ID_REMISION:    remUUID,
+      REMISION_ID:    remUUID,
+      ID_REMISION_UUID: remUUID,
+      // Datos del ítem
+      ID_ELEMENTO:    it._itemId || '',
+      ITEM_ID:        it._itemId || '',
+      OP_ID:          it._itemId || '',
+      COTIZACION:     cotizacion,
+      ITEM:           it._itemNum || String(i + 1),
+      DESCRIPCION:    it._desc || '',
+      UNIDADES:       Number(it._cant) || 1,
+      CANT:           Number(it._cant) || 1,
+      'FECHA DE CRE': hoy,
+      PRECIO_UNITARIO: Number(it._precio) || 0,
+      SUBTOTAL:       (Number(it._cant) || 1) * (Number(it._precio) || 0),
+    });
+  });
+}
+
+// Eliminar remision
+async function eliminarRem(remId, uuid) {
+  uuid = uuid || '';
+  if (!confirm('Eliminar la remision REM-' + remId + '? Esta accion no se puede deshacer.')) return;
+  const data = { REMISION: remId };
+  if (uuid) { data.ID_PEDIDO = uuid; data.ID_REMISION_UUID = uuid; data.ID_REMISION = uuid; }
+  try {
+    await POST('deleteRemision', data);
+    if (DB.remisiones) {
+      DB.remisiones = DB.remisiones.filter(function(r) {
+        return String(r.REMISION || '') !== String(remId) && String(r.ID_PEDIDO || '') !== String(uuid);
+      });
+    }
+    if (DB.elementosRemision) {
+      DB.elementosRemision = DB.elementosRemision.filter(function(e) {
+        var eUUID = String(e.ID_REMISION || e.ID_REMISION_UUID || e.REMISION_ID || '');
+        return eUUID !== String(uuid) && String(e.REMISION || '') !== String(remId);
+      });
+    }
+    closeDetail();
+    toast('Remision eliminada');
+    remisiones();
+  } catch(e) { toast('Error al eliminar: ' + e.message, 'error'); }
+}
+
+// ══════════════════════════════════════════════════════════════
+//   FUNCIÓN PRINCIPAL: renderizar lista de remisiones
+// ══════════════════════════════════════════════════════════════
+async function remisiones() {
+  // Cargar datos si no están en cache
+  if (!DB.remisiones) DB.remisiones = await GET('getRemisiones', '', { rango: RANGO_STATE.remisiones || '1m' });
+  if (!DB.elementosRemision) DB.elementosRemision = await GET('getElementosRemision');
+
+  const all = [...(DB.remisiones || [])].sort((a, b) => {
+    return Number(b.REMISION || 0) - Number(a.REMISION || 0);
+  });
+
+  // ── Calcular opciones de filtros ──────────────────────────
+  const empresas = [...new Set(all.map(r => r.EMPRESA || '').filter(Boolean))].sort();
+  const ops = [...new Set(all.map(r => r.OP || '').filter(Boolean))].sort((a, b) => Number(b) - Number(a));
+  const estados = [...new Set(all.map(r => r.ESTADO || r.TIPO || '').filter(Boolean))].sort();
+
+  // ── Aplicar filtros ──────────────────────────────────────
+  const data = all.filter(r => {
+    const emp = (r.EMPRESA || '').toLowerCase();
+    const op = String(r.OP || '');
+    const est = r.ESTADO || r.TIPO || '';
+    const busq = _REM_STATE.busqueda.toLowerCase();
+    if (_REM_STATE.filtroEmpresa && emp !== _REM_STATE.filtroEmpresa.toLowerCase()) return false;
+    if (_REM_STATE.filtroOP && op !== _REM_STATE.filtroOP) return false;
+    if (_REM_STATE.filtroEstado && est !== _REM_STATE.filtroEstado) return false;
+    if (busq) {
+      const haystack = [
+        r.REMISION, r.EMPRESA, r.COTIZACION, r.OP,
+        r['DESCRIPCION DEL PROYECTO'], r.ASESOR, r.ESTADO
+      ].join(' ').toLowerCase();
+      if (!haystack.includes(busq)) return false;
+    }
+    return true;
+  });
+
+  // ── Construir HTML ─────────────────────────────────────────
+  const mkOpt = (val, label, sel) => `<option value="${esc(val)}" ${sel === val ? 'selected' : ''}>${esc(label)}</option>`;
+
+  const filtrosHTML = `
+    <div class="rem-filtros" style="display:flex;flex-wrap:wrap;gap:8px;padding:10px 14px;
+      background:var(--card2);border-bottom:1px solid var(--border)">
+      <input type="text" placeholder="🔍 Buscar remisión, empresa…" value="${esc(_REM_STATE.busqueda)}"
+        style="flex:1;min-width:160px;padding:7px 12px;border-radius:8px;border:1.5px solid var(--border);
+          font-size:13px;background:var(--surface)"
+        oninput="_remFiltro('busqueda',this.value)">
+      <select onchange="_remFiltro('filtroEmpresa',this.value)"
+        style="padding:7px 10px;border-radius:8px;border:1.5px solid var(--border);font-size:12px;
+          background:var(--surface);max-width:180px">
+        <option value="">Todas las empresas</option>
+        ${empresas.map(e => mkOpt(e, e, _REM_STATE.filtroEmpresa)).join('')}
+      </select>
+      <select onchange="_remFiltro('filtroOP',this.value)"
+        style="padding:7px 10px;border-radius:8px;border:1.5px solid var(--border);font-size:12px;
+          background:var(--surface)">
+        <option value="">Todas las OPs</option>
+        ${ops.map(o => mkOpt(o, 'OP-' + o, _REM_STATE.filtroOP)).join('')}
+      </select>
+      <select onchange="_remFiltro('filtroEstado',this.value)"
+        style="padding:7px 10px;border-radius:8px;border:1.5px solid var(--border);font-size:12px;
+          background:var(--surface)">
+        <option value="">Todos los estados</option>
+        ${estados.map(e => mkOpt(e, e, _REM_STATE.filtroEstado)).join('')}
+      </select>
+      <div style="display:flex;gap:4px;margin-left:auto">
+        <button onclick="_remVista('cards')" title="Tarjetas"
+          style="padding:7px 12px;border-radius:8px;border:1.5px solid var(--border);
+            cursor:pointer;font-size:14px;background:${_REM_STATE.vista==='cards'?'var(--accent)':'var(--surface)'};
+            color:${_REM_STATE.vista==='cards'?'#fff':'var(--text)'}">⊞</button>
+        <button onclick="_remVista('table')" title="Tabla"
+          style="padding:7px 12px;border-radius:8px;border:1.5px solid var(--border);
+            cursor:pointer;font-size:14px;background:${_REM_STATE.vista==='table'?'var(--accent)':'var(--surface)'};
+            color:${_REM_STATE.vista==='table'?'#fff':'var(--text)'}">≡</button>
+      </div>
+    </div>`;
+
+  const banner = moduleBanner('🚚', 'Remisiones', `${data.length} de ${all.length} despachos`,
+    rangoSelector('remisiones'), 'linear-gradient(135deg,#047857,#34d399)');
+
+  if (!all.length) {
+    setContent(banner + filtrosHTML + empty('Sin remisiones registradas'));
+    return;
+  }
+
+  let contenido = '';
+  if (_REM_STATE.vista === 'table') {
+    // ── Vista tabla ──────────────────────────────────────
+    const rows = data.map(r => {
+      const remId = r.REMISION || r['NUMERO DE REMISION'] || '—';
+      const fecha = fmtDate(r['FECHA EMISION COT.'] || r.FECHA || '');
+      const estado = r.ESTADO || r.TIPO || '—';
+      const colorEst = estado.includes('ANULADA') ? 'var(--danger)' :
+                       estado.includes('RECIBIDA') || estado.includes('FACTURADA') ? 'var(--accent)' :
+                       estado.includes('ENVIADA') ? 'var(--warn)' : 'var(--muted)';
+      const esMosat = (r.EMPRESA || '').toUpperCase().includes('MOSAT');
+      return `<tr onclick="detailRem('${esc(String(remId))}','${esc(r.ID_PEDIDO||r.ID_REMISION_UUID||'')}')"
+        style="cursor:pointer" class="hover-row">
+        <td style="font-weight:700;font-family:var(--mono)">${remId}</td>
+        <td>${fecha}</td>
+        <td>${esc(r.OP || '—')}</td>
+        <td>${esc(r.COTIZACION || '—')}</td>
+        <td>
+          <div style="font-weight:600">${esc(r.EMPRESA || '—')}</div>
+          ${esMosat ? '<span style="font-size:9px;background:#1a3a6b;color:#fff;border-radius:3px;padding:1px 5px">EN</span>' : ''}
+        </td>
+        <td style="font-size:11px;max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r['DESCRIPCION DEL PROYECTO']||'—')}</td>
+        <td><span style="color:${colorEst};font-size:11px;font-weight:700">${esc(estado)}</span></td>
+        <td style="font-family:var(--mono);font-size:11px;color:var(--gold)">${r.VALOR_TOTAL ? '$' + Number(r.VALOR_TOTAL).toLocaleString('es-CO') : '—'}</td>
+        <td>${esc(r.ASESOR || '—')}</td>
+        <td onclick="event.stopPropagation()">
+          <button onclick="abrirEditorRem('${esc(String(remId))}')"
+            style="background:transparent;border:none;cursor:pointer;font-size:15px;padding:2px">✏️</button>
+          <button onclick="generarPDFRemisionERP('${esc(String(remId))}','${esc(r.ID_PEDIDO||r.ID_REMISION_UUID||'')}')"
+            style="background:transparent;border:none;cursor:pointer;font-size:15px;padding:2px">📄</button>
+        </td>
+      </tr>`;
+    }).join('');
+
+    contenido = `<div style="overflow-x:auto;padding:0 12px 12px">
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="background:var(--card2)">
+          ${['REM#','Fecha','OP','COT','Empresa','Descripción','Estado','Valor','Asesor',''].map(h =>
+            `<th style="padding:8px 10px;text-align:left;border-bottom:2px solid var(--border);
+              font-size:11px;font-weight:700;color:var(--muted);white-space:nowrap">${h}</th>`
+          ).join('')}
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      ${!data.length ? `<p style="text-align:center;padding:24px;color:var(--muted)">Sin resultados</p>` : ''}
+    </div>`;
+
+  } else {
+    // ── Vista tarjetas ───────────────────────────────────
+    const cards = data.map(r => {
+      const remId = r.REMISION || r['NUMERO DE REMISION'] || '—';
+      const uuid = r.ID_PEDIDO || r.ID_REMISION_UUID || '';
+      const fecha = fmtDate(r['FECHA EMISION COT.'] || r.FECHA || '');
+      const estado = r.ESTADO || r.TIPO || '';
+      const colorEst = estado.includes('ANULADA') ? '#dc2626' :
+                       estado.includes('RECIBIDA') || estado.includes('FACTURADA') ? '#059669' :
+                       estado.includes('ENVIADA') ? '#d97706' : '#6b7280';
+      const bgEst = estado.includes('ANULADA') ? '#fee2e2' :
+                    estado.includes('RECIBIDA') || estado.includes('FACTURADA') ? '#d1fae5' :
+                    estado.includes('ENVIADA') ? '#fef3c7' : 'var(--card2)';
+      const esMosat = (r.EMPRESA || '').toUpperCase().includes('MOSAT');
+      // Contar ítems de esta remisión
+      const elems = (DB.elementosRemision || []).filter(e => {
+        const eUUID = String(e.ID_REMISION || e.ID_REMISION_UUID || e.REMISION_ID || '');
+        return (uuid && eUUID === uuid) || String(e.REMISION || '') === String(remId);
+      });
+
+      return `<div class="rem-card" onclick="detailRem('${esc(String(remId))}','${esc(uuid)}')"
+        style="background:var(--card);border:1.5px solid var(--border);border-radius:12px;
+          padding:14px 16px;cursor:pointer;transition:border-color .15s,box-shadow .15s;
+          display:flex;flex-direction:column;gap:8px"
+        onmouseover="this.style.borderColor='var(--accent)';this.style.boxShadow='0 4px 16px rgba(37,99,235,.12)'"
+        onmouseout="this.style.borderColor='var(--border)';this.style.boxShadow=''">
+        <!-- Cabecera -->
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div>
+            <span style="font-size:11px;color:var(--muted);font-weight:600">REMISIÓN</span>
+            <div style="font-size:20px;font-weight:900;font-family:var(--mono);color:var(--accent);line-height:1">
+              REM-${remId}
+            </div>
+          </div>
+          <div style="text-align:right;display:flex;flex-direction:column;gap:4px;align-items:flex-end">
+            <span style="background:${bgEst};color:${colorEst};border-radius:6px;padding:3px 10px;
+              font-size:10px;font-weight:700">${esc(estado || 'BORRADOR')}</span>
+            ${esMosat ? `<span style="background:#1a3a6b;color:#fff;border-radius:4px;padding:2px 7px;font-size:9px;font-weight:700">🌐 EN</span>` : ''}
+          </div>
+        </div>
+        <!-- Empresa y proyecto -->
+        <div>
+          <div style="font-size:13px;font-weight:700">${esc(r.EMPRESA || '—')}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px;
+            white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+            ${esc(r['DESCRIPCION DEL PROYECTO'] || '')}
+          </div>
+        </div>
+        <!-- Datos clave -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;font-size:11px">
+          <div><span style="color:var(--muted)">OP: </span><strong>${esc(r.OP || '—')}</strong></div>
+          <div><span style="color:var(--muted)">COT: </span><strong>${esc(String(r.COTIZACION || '—'))}</strong></div>
+          <div><span style="color:var(--muted)">Fecha: </span>${fecha}</div>
+          <div><span style="color:var(--muted)">Ítems: </span><strong>${elems.length}</strong></div>
+        </div>
+        ${r.VALOR_TOTAL ? `<div style="font-family:var(--mono);font-size:13px;font-weight:700;
+          color:var(--gold);margin-top:2px">$${Number(r.VALOR_TOTAL).toLocaleString('es-CO')}</div>` : ''}
+        <!-- Acciones -->
+        <div style="display:flex;gap:6px;margin-top:4px" onclick="event.stopPropagation()">
+          <button onclick="abrirEditorRem('${esc(String(remId))}')"
+            class="btn btn-ghost btn-sm" style="font-size:11px">✏️ Editar</button>
+          <button onclick="generarPDFRemisionERP('${esc(String(remId))}','${esc(uuid)}')"
+            class="btn btn-ghost btn-sm" style="font-size:11px">📄 PDF</button>
+          <button onclick="eliminarRem('${esc(String(remId))}','${esc(uuid)}')"
+            class="btn btn-danger btn-sm" style="font-size:11px;margin-left:auto">🗑️</button>
+        </div>
+      </div>`;
+    }).join('');
+
+    contenido = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));
+      gap:14px;padding:14px">
+      ${cards || `<p style="text-align:center;padding:24px;color:var(--muted);grid-column:1/-1">Sin resultados</p>`}
+    </div>`;
+  }
+
+  setContent(banner + filtrosHTML + contenido);
+}
+
+// ─── Helpers de filtro y vista ────────────────────────────────
+function _remFiltro(key, val) {
+  _REM_STATE[key] = val;
+  remisiones();
+}
+function _remVista(v) {
+  _REM_STATE.vista = v;
+  remisiones();
+}
+
+// ══════════════════════════════════════════════════════════════
+//   DETALLE DE REMISIÓN
+// ══════════════════════════════════════════════════════════════
+async function detailRem(id, uuid = '') {
+  const r = (DB.remisiones || []).find(x =>
+    String(x.REMISION || '') === String(id) ||
+    String(x['NUMERO DE REMISION'] || '') === String(id) ||
+    String(x.ID_PEDIDO || '') === String(id)
+  );
+  if (!r) { toast('Remisión no encontrada', 'error'); return; }
+
+  const remId = r.REMISION || r['NUMERO DE REMISION'] || id;
+  const remUUID = uuid || r.ID_PEDIDO || r.ID_REMISION_UUID || '';
+  const fecha = fmtDate(r['FECHA EMISION COT.'] || r.FECHA || '');
+  const estado = r.ESTADO || r.TIPO || '—';
+  const esMosat = (r.EMPRESA || '').toUpperCase().includes('MOSAT');
+
+  // Cargar elementos async
+  if (!DB.elementosRemision) {
+    DB.elementosRemision = await GET('getElementosRemision');
+  }
+  const elems = (DB.elementosRemision || []).filter(e => {
+    const eUUID = String(e.ID_REMISION || e.ID_REMISION_UUID || e.REMISION_ID || '');
+    return (remUUID && eUUID === remUUID) ||
+           String(e.REMISION || '') === String(remId);
+  });
+
+  const dr = (label, val) =>
+    `<div style="margin-bottom:6px"><span style="font-size:10px;color:var(--muted);font-weight:700;
+      text-transform:uppercase;letter-spacing:.5px">${label}</span>
+    <div style="font-size:13px;font-weight:500">${val || '—'}</div></div>`;
+
+  const elemsHTML = elems.length ? `
+    <div style="margin-top:14px">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;
+        letter-spacing:.6px;margin-bottom:8px">📦 Ítems despachados</div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr>
+          <th style="text-align:left;padding:6px 8px;border-bottom:1.5px solid var(--border);font-size:10px;color:var(--muted)">#</th>
+          <th style="text-align:left;padding:6px 8px;border-bottom:1.5px solid var(--border);font-size:10px;color:var(--muted)">Cant</th>
+          <th style="text-align:left;padding:6px 8px;border-bottom:1.5px solid var(--border);font-size:10px;color:var(--muted)">Descripción</th>
+        </tr></thead>
+        <tbody>
+          ${elems.map((e, i) => `<tr style="${i % 2 ? 'background:var(--card2)' : ''}">
+            <td style="padding:5px 8px;font-weight:700">${e.ITEM || e.ITEM_ID || String(i + 1)}</td>
+            <td style="padding:5px 8px;text-align:center">${e.UNIDADES || e.CANT || '—'}</td>
+            <td style="padding:5px 8px">${esc(e.DESCRIPCION || '—')}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>` : `<p style="color:var(--muted);font-size:12px;margin-top:12px">Sin ítems registrados</p>`;
+
+  openDetail(`Remisión REM-${remId}`, `
+    <div style="display:flex;gap:8px;margin-bottom:16px">
+      <button class="btn btn-primary btn-sm"
+        onclick="generarPDFRemisionERP('${esc(String(remId))}','${esc(remUUID)}')">
+        📄 ${esMosat ? 'Packing List' : 'Remisión PDF'}
+      </button>
+      <button class="btn btn-ghost btn-sm"
+        onclick="closeDetail();abrirEditorRem('${esc(String(remId))}')">
+        ✏️ Editar
+      </button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 20px">
+      ${dr('N° Remisión', `<strong style="font-size:18px;color:var(--accent)">REM-${remId}</strong>`)}
+      ${dr('Estado', `<span style="font-weight:700;color:${
+        estado.includes('ANULADA') ? 'var(--danger)' :
+        estado.includes('RECIBIDA') || estado.includes('FACTURADA') ? 'var(--accent)' :
+        estado.includes('ENVIADA') ? 'var(--warn)' : 'var(--muted)'}">${estado}</span>`)}
+      ${dr('Empresa', esc(r.EMPRESA || ''))}
+      ${dr('NIT', esc(r.NIT || ''))}
+      ${dr('Cotización', r.COTIZACION || '')}
+      ${dr('OP', r.OP || '')}
+      ${dr('Fecha', fecha)}
+      ${dr('O/C Cliente', esc(r['ORDEN DE COMPRA'] || ''))}
+      ${dr('Ciudad', esc(r.CIUDAD || ''))}
+      ${dr('Asesor', esc(r.ASESOR || ''))}
+    </div>
+    ${r['DESCRIPCION DEL PROYECTO'] ? dr('Descripción', esc(r['DESCRIPCION DEL PROYECTO'])) : ''}
+    ${r['OBSERVACIONES ESPECIALES'] ? dr('Observaciones', esc(r['OBSERVACIONES ESPECIALES'])) : ''}
+    ${r.VALOR_TOTAL ? `<div style="margin-top:8px;font-family:var(--mono);font-size:16px;
+      font-weight:700;color:var(--gold)">$${Number(r.VALOR_TOTAL).toLocaleString('es-CO')}</div>` : ''}
+    ${elemsHTML}`,
+    `<button class="btn btn-ghost btn-sm" onclick="abrirEditorRem('${esc(String(remId))}')">✏️ Editar</button>
+     <button class="btn btn-danger btn-sm" onclick="eliminarRem('${esc(String(remId))}','${esc(remUUID)}')">🗑️ Eliminar</button>`
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+//   EDITOR DE REMISIÓN (ventana separada)
+// ══════════════════════════════════════════════════════════════
+async function abrirEditorRem(remId = null) {
+  // Cargar datos necesarios
+  if (!DB.remisiones) DB.remisiones = await GET('getRemisiones', '', { rango: RANGO_STATE.remisiones || '1m' });
+  if (!DB.elementosRemision) DB.elementosRemision = await GET('getElementosRemision');
+  if (!DB.cotizaciones) await load('cotizaciones', 'getCotizaciones');
+  if (!DB.items) await load('items', 'getItems');
+  if (!DB.produccion) await load('produccion', 'getProduccion');
+
+  const r = remId ? (DB.remisiones || []).find(x =>
+    String(x.REMISION || '') === String(remId) ||
+    String(x['NUMERO DE REMISION'] || '') === String(remId)
+  ) : null;
+  const esNueva = !r;
+  const idRem = r ? (r.ID_PEDIDO || r.ID_REMISION || remId) : ('NEW-' + Date.now());
+
+  // ── Resolver cotización vinculada ─────────────────────────
+  const _rCotizRaw = r ? String(r.COTIZACION || '').trim() : '';
+  let _cotizNumReal = _rCotizRaw;
+  if (r && _rCotizRaw && !/^\d+$/.test(_rCotizRaw)) {
+    const byUUID = (DB.cotizaciones || []).find(c =>
+      String(c.ID_PEDIDO || '').trim() === _rCotizRaw);
+    _cotizNumReal = byUUID ? String(byUUID.COTIZACION || '').trim() : '';
+  }
+  if (!_cotizNumReal && r?.OP) {
+    const po = (DB.produccion || []).find(o => String(o.OP || '').trim() === String(r.OP));
+    if (po) _cotizNumReal = String(po.COTIZACION || po.COT || '').trim();
+  }
+
+  // ── Match en cotizaciones ─────────────────────────────────
+  const _cotizMatch = r ? (
+    (DB.cotizaciones || []).find(c => _cotizNumReal && String(c.COTIZACION || '').trim() === _cotizNumReal) ||
+    (DB.cotizaciones || []).find(c => _rCotizRaw && String(c.ID_PEDIDO || '').trim() === _rCotizRaw)
+  ) : null;
+
+  // ── Índice OP → ítems ─────────────────────────────────────
+  const _cotizIdx = {};
+  (DB.cotizaciones || []).forEach(c => {
+    const cot = String(c.COTIZACION || '').trim();
+    if (cot) _cotizIdx[cot] = c;
+  });
+  const _cotizToOP = {};
+  (DB.produccion || []).forEach(o => {
+    const cot = String(o.COTIZACION || o.COT || '').trim();
+    const op = String(o.OP || o.IDQR || '').trim();
+    if (cot && op) _cotizToOP[cot] = op;
+  });
+
+  const opItemIdx = {};
+  (DB.items || []).forEach(it => {
+    const cotiz = String(it.COTIZACION || it.COT || '').trim();
+    const itemNum = String(it.ITEM || it['COT-ITEM'] || '').trim();
+    const desc = String(it['DESCRIPCION ITEM'] || it.DESCRIPCION || '').trim();
+    const cant = String(it.UNIDADES || it.CANTIDAD || '1').trim();
+    let opKey = _cotizToOP[cotiz] || '';
+    if (!opKey) {
+      const prod = (DB.produccion || []).find(o => String(o.COTIZACION || o.COT || '').trim() === cotiz);
+      if (prod) opKey = String(prod.OP || prod.IDQR || '').trim();
+    }
+    const cdat = _cotizIdx[cotiz] || {};
+    const entry = {
+      ITEM: itemNum, CLIENTE: String(it.EMPRESA || cdat.EMPRESA || ''),
+      COTIZ: cotiz, DESC: desc || String(cdat['DESCRIPCION DEL PROYECTO'] || ''),
+      CANT: cant, NIT: String(cdat.NIT || ''), DIR: String(cdat.DIRECCION || ''),
+      CIUDAD: String(it.CIUDAD || cdat.CIUDAD || ''),
+      ENCARGADO: String(cdat.ENCARGADO || cdat['ENCARGADO/CONTACTO'] || ''),
+      TEL: String(cdat.TELEFONO || ''),
+      ORDEN_COMPRA: String(cdat['ORDEN DE COMPRA'] || ''),
+      ID_PEDIDO: String(it.ID_PEDIDO || cdat.ID_PEDIDO || ''),
+      ID_ITEM: String(it.ID_ITEM || it.OP_ID || ''),
+      PRECIO: Number(it['PRECIO UNITARIO'] || it['PRECIO SIN IVA'] || it.PRECIO_UNIT || 0),
+    };
+    if (opKey) {
+      if (!opItemIdx[opKey]) opItemIdx[opKey] = [];
+      opItemIdx[opKey].push(entry);
+    }
+    if (cotiz) {
+      if (!opItemIdx['_COT_' + cotiz]) opItemIdx['_COT_' + cotiz] = [];
+      opItemIdx['_COT_' + cotiz].push(entry);
+    }
+  });
+
+  // Fallback desde produccion
+  (DB.produccion || []).forEach(o => {
+    const k = String(o.OP || o.IDQR || '').trim();
+    if (!k || (opItemIdx[k] && opItemIdx[k].length > 0)) return;
+    const cotiz = String(o.COTIZACION || o.COT || '').trim();
+    const cdat = _cotizIdx[cotiz] || {};
+    if (!opItemIdx[k]) opItemIdx[k] = [];
+    opItemIdx[k].push({
+      ITEM: String(o.ITEM || ''), CLIENTE: String(o.EMPRESA || o.CLIENTE || cdat.EMPRESA || ''),
+      COTIZ: cotiz, DESC: String(o['DESCRIPCION DEL PROYECTO'] || o.DESCRIPCION || cdat['DESCRIPCION DEL PROYECTO'] || ''),
+      CANT: String(o.CANTIDAD || o.CANT || '1'), NIT: String(cdat.NIT || ''),
+      DIR: String(cdat.DIRECCION || ''), CIUDAD: String(o.CIUDAD || cdat.CIUDAD || ''),
+      ENCARGADO: String(cdat.ENCARGADO || cdat['ENCARGADO/CONTACTO'] || ''),
+      TEL: String(cdat.TELEFONO || ''), ORDEN_COMPRA: String(cdat['ORDEN DE COMPRA'] || ''),
+      ID_PEDIDO: String(cdat.ID_PEDIDO || ''), ID_ITEM: '', PRECIO: 0,
+    });
+  });
+
+  // ── Ítems previos de esta remisión ────────────────────────
+  const elemsExist = (DB.elementosRemision || []).filter(e => {
+    const eUUID = String(e.ID_REMISION || e.ID_REMISION_UUID || e.REMISION_ID || '');
+    return (r?.ID_PEDIDO && eUUID === r.ID_PEDIDO) ||
+           String(e.REMISION || '') === String(remId);
+  });
+  const itemsPrev = elemsExist.length ? elemsExist.map(e => ({
+    cant: String(e.UNIDADES || e.CANT || '1'),
+    desc: e.DESCRIPCION || '',
+    itemNum: e.ITEM || e.ITEM_ID || '',
+    itemId: e.ID_ELEMENTO || e.ITEM_ID || '',
+    precio: Number(e.PRECIO_UNITARIO || 0),
+  })) : [{ cant: '', desc: '', itemNum: '', itemId: '', precio: 0 }];
+
+  // ── OPs disponibles para datalist ─────────────────────────
+  const opOpts = [...new Set([
+    ...(DB.produccion || []).map(o => String(o.OP || o.IDQR || '').trim()),
+  ].filter(Boolean))].sort((a, b) => Number(b) - Number(a));
+
+  const cotizOpts = [...new Set([
+    ...(DB.cotizaciones || []).map(c => String(c.COTIZACION || '').trim()),
+    ...(DB.produccion || []).map(o => String(o.COTIZACION || o.COT || '').trim()),
+  ].filter(Boolean))].sort((a, b) => Number(b) - Number(a));
+
+  // ── Datos de la remisión para precargar ───────────────────
+  const _datosRem = r ? {
+    OP:        r.OP || '',
+    SEÑORES:   r.EMPRESA || '',
+    NIT:       r.NIT || (_cotizMatch?.NIT || ''),
+    DIR:       r.DIRECCION || (_cotizMatch?.DIRECCION || ''),
+    CIUDAD:    r.CIUDAD || (_cotizMatch?.CIUDAD || ''),
+    ENCARGADO: r.ENCARGADO || (_cotizMatch?.ENCARGADO || _cotizMatch?.['ENCARGADO/CONTACTO'] || ''),
+    TEL:       r.TELEFONO || (_cotizMatch?.TELEFONO || ''),
+    PROYECTO:  r['DESCRIPCION DEL PROYECTO'] || r.DESCRIPCION || '',
+    OC:        r['ORDEN DE COMPRA'] || (_cotizMatch?.['ORDEN DE COMPRA'] || ''),
+    OBS:       r['OBSERVACIONES ESPECIALES'] || r.OBSERVACIONES || '',
+    ESTADO:    r.ESTADO || r.TIPO || 'BORRADOR',
+    FECHA:     r['FECHA EMISION COT.'] || r.FECHA || new Date().toISOString().slice(0, 10),
+    ID_PEDIDO: r.ID_PEDIDO || idRem,
+    VALOR_TOTAL: r.VALOR_TOTAL || 0,
+    CALIFICACION: r.CALIFICACION || 1,
+  } : null;
+
+  const today = new Date().toISOString().slice(0, 10);
+  const numRem = r ? (r.REMISION || r['NUMERO DE REMISION'] || remId) : '(nuevo)';
+
+  const dlOpts = arr => arr.map(v => `<option value="${esc(String(v))}">`).join('');
+
+  const filasItems = itemsPrev.map((it, i) => `
+    <tr id="ed-item-tr-${i}">
+      <td style="border:1px solid #ccc;padding:3px;text-align:center;width:32px;font-weight:700">${i + 1}</td>
+      <td style="border:1px solid #ccc;padding:3px;width:55px">
+        <input class="i-cant" type="text" value="${esc(String(it.cant || '1'))}"
+          style="text-align:center;width:100%;font-size:10px;border:none;background:transparent"></td>
+      <td style="border:1px solid #ccc;padding:3px">
+        <textarea class="i-desc" rows="2"
+          style="width:100%;font-size:10px;border:none;resize:vertical;background:transparent">${esc(it.desc || '')}</textarea></td>
+      <td style="border:1px solid #ccc;padding:3px;text-align:center;width:28px" class="no-print">
+        <button type="button" onclick="_edRemDelItem(${i})"
+          style="background:#dc2626;color:#fff;border:none;border-radius:3px;width:18px;height:18px;
+            font-size:10px;cursor:pointer;line-height:1">✕</button></td>
+    </tr>`).join('');
+
+  const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+  <title>${esNueva ? 'Nueva Remisión' : 'Editar Remisión — REM-' + numRem}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:Arial,sans-serif;font-size:10px;color:#000;background:#f1f5f9;padding-top:62px}
+    input,textarea,select{font:inherit;color:inherit;border:none;background:transparent;
+      width:100%;padding:2px 3px;border-radius:2px;transition:background .15s}
+    input:hover,textarea:hover,select:hover{background:rgba(37,99,235,.06)}
+    input:focus,textarea:focus,select:focus{outline:none;background:#eaf1ff;box-shadow:0 0 0 2px #2563eb inset}
+    textarea{resize:vertical}
+    .toolbar{position:fixed;top:0;left:0;right:0;z-index:99;background:#1a3a6b;color:#fff;
+      padding:10px 18px;display:flex;align-items:center;gap:10px;box-shadow:0 3px 10px rgba(0,0,0,.25)}
+    .toolbar b{flex:1;font-size:12.5px;font-weight:700}
+    .toolbar .status{font-size:11px;font-weight:600;color:#bbf7d0;min-width:120px;text-align:right}
+    .toolbar button{border:none;border-radius:8px;padding:9px 16px;font-size:12px;font-weight:700;cursor:pointer}
+    .btn-print{background:#0891b2;color:#fff}.btn-save{background:#16a34a;color:#fff}
+    .sheet{background:#fff;max-width:860px;margin:14px auto 30px;padding:20px;
+      border-radius:6px;box-shadow:0 2px 14px rgba(0,0,0,.12)}
+    .section-title{font-size:11px;font-weight:700;color:#1a3a6b;text-transform:uppercase;
+      letter-spacing:.6px;border-bottom:2px solid #1a3a6b;padding-bottom:4px;margin:18px 0 10px}
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+    .field{display:flex;flex-direction:column;gap:2px}
+    .field label{font-size:7.5px;font-weight:700;text-transform:uppercase;color:#555;letter-spacing:.3px}
+    .field input,.field textarea,.field select{border:1px solid #ddd;border-radius:4px;
+      padding:5px 7px;font-size:10px;background:#fff}
+    .field input:focus,.field textarea:focus{border-color:#2563eb;box-shadow:none;background:#eaf1ff}
+    .items-table{width:100%;border-collapse:collapse;margin-top:6px}
+    .items-table th{background:#1a3a6b;color:#fff;padding:6px 8px;font-size:9px;
+      text-align:center;text-transform:uppercase;border:1px solid #2a4a7b}
+    .items-table td{border:1px solid #ccc;padding:2px;vertical-align:top}
+    .btn-add-item{width:100%;border:1.5px dashed #2563eb;background:#fff;color:#2563eb;
+      border-radius:8px;padding:7px;font-size:11px;font-weight:700;cursor:pointer;margin-top:8px}
+    .search-box{background:#f0f4fa;border:1px solid #c7d4ea;border-radius:8px;
+      padding:12px;margin-bottom:12px}
+    @media print{
+      .no-print,.toolbar{display:none!important}
+      body{background:#fff;padding-top:0}
+      .sheet{box-shadow:none;padding:0;max-width:none;margin:0}
+      @page{size:A4 portrait;margin:0}
+    }
+  </style></head><body>
+  <datalist id="dl-op">${dlOpts(opOpts)}</datalist>
+  <datalist id="dl-cotiz">${dlOpts(cotizOpts)}</datalist>
+
+  <div class="toolbar no-print">
+    <b>${esNueva ? '📄 Nueva Remisión' : '✏️ Editando REM-' + numRem}</b>
+    <span class="status" id="ed-status"></span>
+    <button class="btn-print" onclick="_edImprimir()">🖨️ Imprimir / PDF</button>
+    <button class="btn-save" onclick="_edGuardar()">${esNueva ? '💾 Crear Remisión' : '💾 Guardar'}</button>
+  </div>
+
+  <div class="sheet">
+    <div class="section-title">📋 Datos Generales</div>
+    <div class="grid3">
+      <div class="field"><label>Fecha</label>
+        <input id="ed-fecha" type="date" value="${esc(String(_datosRem?.FECHA || today).slice(0, 10))}"></div>
+      <div class="field"><label>Estado</label>
+        <select id="ed-estado">
+          ${['BORRADOR','ENVIADA','RECIBIDA','FACTURADA','ANULADA'].map(e =>
+            `<option${(_datosRem?.ESTADO||'BORRADOR')===e?' selected':''}>${e}</option>`).join('')}
+        </select></div>
+      <div class="field"><label>Calificación (1=Mejor)</label>
+        <select id="ed-cal">
+          ${[1,2,3,4,5].map(n => `<option${Number(_datosRem?.CALIFICACION||1)===n?' selected':''}>${n}</option>`).join('')}
+        </select></div>
+    </div>
+
+    <div class="section-title">🏭 Buscar por OP o Cotización</div>
+    <div class="search-box">
+      <div style="font-size:9px;font-weight:700;color:#1a3a6b;text-transform:uppercase;margin-bottom:8px">
+        🔍 Autocompletar datos del cliente
+      </div>
+      <div class="grid2">
+        <div class="field"><label>Orden de Producción (OP)</label>
+          <input id="ed-op" type="text" list="dl-op" placeholder="Escribe o busca la OP…"
+            value="${esc(_datosRem?.OP || '')}"
+            style="font-weight:900;font-size:13px;color:#1a3a6b"
+            oninput="_edBuscarOP()" onchange="_edBuscarOP()"></div>
+        <div class="field"><label>Cotización</label>
+          <input id="ed-cotiz-bus" type="text" list="dl-cotiz" placeholder="Busca cotización…"
+            value="${esc(_cotizNumReal)}"
+            style="font-weight:900;font-size:13px;color:#1a3a6b"
+            oninput="_edBuscarCotiz()" onchange="_edBuscarCotiz()"></div>
+      </div>
+    </div>
+
+    <div class="section-title">🏢 Destinatario</div>
+    <div class="grid3">
+      <div class="field" style="grid-column:1/-1"><label>Cliente / Señores</label>
+        <input id="ed-señores" type="text" value="${esc(_datosRem?.SEÑORES || '')}"
+          style="font-weight:700;color:#1a3a6b"></div>
+      <div class="field"><label>NIT</label>
+        <input id="ed-nit" type="text" value="${esc(_datosRem?.NIT || '')}"></div>
+      <div class="field"><label>Dirección</label>
+        <input id="ed-dir" type="text" value="${esc(_datosRem?.DIR || '')}"></div>
+      <div class="field"><label>Ciudad</label>
+        <input id="ed-ciudad" type="text" value="${esc(_datosRem?.CIUDAD || '')}"></div>
+      <div class="field"><label>Encargado</label>
+        <input id="ed-encargado" type="text" value="${esc(_datosRem?.ENCARGADO || '')}"></div>
+      <div class="field"><label>Teléfono</label>
+        <input id="ed-tel" type="text" value="${esc(_datosRem?.TEL || '')}"></div>
+    </div>
+    <div class="grid2" style="margin-top:8px">
+      <div class="field"><label>Cotización (confirmada)</label>
+        <input id="ed-cotiz" type="text" value="${esc(_cotizNumReal)}"
+          style="background:#f8fafc;font-weight:700;color:#1a3a6b" readonly></div>
+      <div class="field"><label>Orden de Compra del cliente</label>
+        <input id="ed-oc" type="text" value="${esc(_datosRem?.OC || '')}"
+          style="font-weight:700;color:#1a3a6b"></div>
+    </div>
+    <div class="field" style="margin-top:8px"><label>Descripción del Proyecto</label>
+      <input id="ed-proyecto" type="text" value="${esc(_datosRem?.PROYECTO || '')}"
+        placeholder="ej. RECTIFICADO CILINDRICO RODILLO"></div>
+
+    <div class="section-title">📦 Ítems de la Remisión</div>
+    <div class="search-box">
+      <div style="font-size:9px;font-weight:700;color:#1a3a6b;text-transform:uppercase;margin-bottom:6px">
+        ➕ Seleccionar ítem para agregar
+      </div>
+      <div style="display:flex;gap:8px;align-items:flex-end">
+        <div class="field" style="flex:1"><label>Ítem de la OP/COT</label>
+          <select id="ed-item-pick" style="border:1px solid #c7d4ea;border-radius:4px;padding:6px;font-size:10px">
+            <option value="">— Busca una OP o COT arriba primero —</option>
+          </select></div>
+        <div class="field" style="width:70px"><label>Cantidad</label>
+          <input id="ed-item-cant" type="number" min="1" value="1"
+            style="border:1px solid #c7d4ea;border-radius:4px;padding:6px;font-size:11px;font-weight:700;text-align:center"></div>
+        <button type="button" onclick="_edAgregarItem()"
+          style="background:#1a3a6b;color:#fff;border:none;border-radius:6px;padding:8px 16px;
+            font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">+ Agregar</button>
+      </div>
+      <div class="field" style="margin-top:8px"><label>Descripción personalizada (opcional)</label>
+        <input id="ed-item-desc-extra" type="text" placeholder="Dejar vacío para usar la del ítem"
+          style="border:1px solid #c7d4ea;border-radius:4px;padding:5px;font-size:10px"></div>
+    </div>
+    <table class="items-table">
+      <thead><tr>
+        <th style="width:32px">#</th><th style="width:55px">Cant.</th>
+        <th>Descripción</th><th style="width:28px" class="no-print">Del</th>
+      </tr></thead>
+      <tbody id="ed-items-tbody">${filasItems}</tbody>
+    </table>
+    <button type="button" class="btn-add-item no-print" onclick="_edAddItemManual()">
+      + Agregar ítem manual
+    </button>
+
+    <div class="section-title">📝 Observaciones</div>
+    <div class="field">
+      <textarea id="ed-obs" rows="3">${esc(_datosRem?.OBS || '')}</textarea>
+    </div>
+
+    <input type="hidden" id="ed-id-pedido" value="${esc(_datosRem?.ID_PEDIDO || idRem)}">
+  </div><!-- /sheet -->
+
+  <script>
+  var _ED_ID_REM   = ${JSON.stringify(idRem)};
+  var _ED_ES_NUEVA = ${JSON.stringify(esNueva)};
+  var _ED_NUM_REM  = ${JSON.stringify(numRem)};
+  var _ED_COTIZ_REAL = ${JSON.stringify(_cotizNumReal)};
+  var _opItemIdx   = ${JSON.stringify(opItemIdx)};
+  var _cotizOpIdx  = {};
+  Object.keys(_opItemIdx).forEach(function(op){
+    _opItemIdx[op].forEach(function(it){ if(it.COTIZ) _cotizOpIdx[it.COTIZ]=op; });
+  });
+
+  function _esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function _g(id){ var el=document.getElementById(id); return el?el.value.trim():''; }
+  function _fmtFecha(s){
+    if(!s) return '—';
+    try{ var d=new Date(s+'T12:00:00'); return d.toLocaleDateString('es-CO',{day:'2-digit',month:'2-digit',year:'numeric'}); }
+    catch(e){ return s; }
+  }
+
+  function _edPoblarPicker(opVal){
+    var items=_opItemIdx[opVal]||[];
+    var sel=document.getElementById('ed-item-pick');
+    if(!sel) return;
+    if(!items.length){ sel.innerHTML='<option value="">— Sin ítems para esta OP —</option>'; return; }
+    sel.innerHTML='<option value="">— Escoger ítem —</option>';
+    items.forEach(function(it,i){
+      var opt=document.createElement('option');
+      opt.value=i;
+      var label='Ítem '+it.ITEM;
+      if(it.DESC) label+=' — '+it.DESC.slice(0,65);
+      if(it.CANT) label+=' (x'+it.CANT+')';
+      opt.textContent=label;
+      opt.dataset.cant=it.CANT||'1';
+      opt.dataset.desc=it.DESC||'';
+      opt.dataset.item=it.ITEM||'';
+      opt.dataset.itemid=it.ID_ITEM||'';
+      opt.dataset.precio=it.PRECIO||0;
+      sel.appendChild(opt);
+    });
+  }
+
+  function _edCargarEncabezado(opVal){
+    var items=_opItemIdx[opVal]||[];
+    if(!items.length) return;
+    var it=items[0];
+    var sf=function(id,v){ var el=document.getElementById(id); if(el&&v) el.value=v; };
+    sf('ed-cotiz', it.COTIZ); sf('ed-cotiz-bus', it.COTIZ);
+    sf('ed-señores', it.CLIENTE); sf('ed-nit', it.NIT);
+    sf('ed-dir', it.DIR); sf('ed-ciudad', it.CIUDAD);
+    sf('ed-encargado', it.ENCARGADO); sf('ed-tel', it.TEL);
+    sf('ed-oc', it.ORDEN_COMPRA); sf('ed-proyecto', it.DESC);
+    var hid=document.getElementById('ed-id-pedido'); if(hid&&it.ID_PEDIDO) hid.value=it.ID_PEDIDO;
+    _edPoblarPicker(opVal);
+  }
+
+  function _edBuscarOP(){
+    var v=_g('ed-op'); if(!v||!_opItemIdx[v]) return;
+    _edCargarEncabezado(v);
+  }
+
+  function _edBuscarCotiz(){
+    var cotVal=_g('ed-cotiz-bus'); if(!cotVal) return;
+    var opE=_cotizOpIdx[cotVal]||'';
+    if(!opE){
+      var keys=Object.keys(_cotizOpIdx);
+      var m=keys.find(function(k){ return k.indexOf(cotVal)!==-1; });
+      if(m) opE=_cotizOpIdx[m];
+    }
+    if(opE){
+      var opEl=document.getElementById('ed-op'); if(opEl) opEl.value=opE;
+      _edCargarEncabezado(opE);
+    } else {
+      var cotKey='_COT_'+cotVal;
+      if(_opItemIdx[cotKey]&&_opItemIdx[cotKey].length>0){
+        var sf=function(id,v){ var el=document.getElementById(id); if(el&&v) el.value=v; };
+        var it=_opItemIdx[cotKey][0];
+        sf('ed-cotiz',cotVal); sf('ed-señores',it.CLIENTE); sf('ed-nit',it.NIT);
+        sf('ed-dir',it.DIR); sf('ed-ciudad',it.CIUDAD); sf('ed-encargado',it.ENCARGADO);
+        sf('ed-tel',it.TEL); sf('ed-oc',it.ORDEN_COMPRA); sf('ed-proyecto',it.DESC);
+        var hid=document.getElementById('ed-id-pedido'); if(hid&&it.ID_PEDIDO) hid.value=it.ID_PEDIDO;
+        _edPoblarPickerCotiz(cotKey);
+      }
+    }
+  }
+
+  function _edPoblarPickerCotiz(cotKey){
+    var items=_opItemIdx[cotKey]||[];
+    var sel=document.getElementById('ed-item-pick');
+    if(!sel) return;
+    if(!items.length){ sel.innerHTML='<option value="">— Sin ítems para esta cotización —</option>'; return; }
+    sel.innerHTML='<option value="">— Escoger ítem —</option>';
+    items.forEach(function(it,i){
+      var opt=document.createElement('option');
+      opt.value=i; opt.dataset.cant=it.CANT||'1';
+      opt.dataset.desc=it.DESC||''; opt.dataset.item=it.ITEM||'';
+      opt.dataset.itemid=it.ID_ITEM||''; opt.dataset.precio=it.PRECIO||0;
+      opt.textContent='Ítem '+it.ITEM+(it.DESC?' — '+it.DESC.slice(0,55):'')+(it.CANT?' (x'+it.CANT+')':'');
+      sel.appendChild(opt);
+    });
+  }
+
+  function _edAgregarItem(){
+    var sel=document.getElementById('ed-item-pick');
+    var cantInp=document.getElementById('ed-item-cant');
+    var descExtra=document.getElementById('ed-item-desc-extra');
+    if(!sel||!sel.value) { alert('Primero escoge un ítem de la lista.'); return; }
+    var opt=sel.options[sel.selectedIndex];
+    var cant=cantInp?cantInp.value.trim():'1';
+    var descBase=opt.dataset.desc||opt.textContent;
+    var desc=descExtra&&descExtra.value.trim()?descExtra.value.trim():descBase;
+    _edInsertarFila(cant, desc, opt.dataset.item||'', opt.dataset.itemid||'', Number(opt.dataset.precio||0));
+    sel.value=''; if(cantInp) cantInp.value='1'; if(descExtra) descExtra.value='';
+  }
+
+  function _edAddItemManual(){ _edInsertarFila('','','','',0); }
+
+  function _edInsertarFila(cant, desc, itemNum, itemId, precio){
+    var tbody=document.getElementById('ed-items-tbody');
+    var idx=tbody.rows.length;
+    var tr=document.createElement('tr');
+    tr.id='ed-item-tr-'+idx;
+    tr.dataset.itemid=itemId; tr.dataset.itemnum=itemNum; tr.dataset.precio=precio;
+    tr.innerHTML=
+      '<td style="border:1px solid #ccc;padding:3px;text-align:center;width:32px;font-weight:700">'+(idx+1)+'</td>'+
+      '<td style="border:1px solid #ccc;padding:3px;width:55px"><input class="i-cant" type="text" value="'+_esc(String(cant||'1'))+'" style="text-align:center;width:100%;font-size:10px;border:none;background:transparent"></td>'+
+      '<td style="border:1px solid #ccc;padding:3px"><textarea class="i-desc" rows="2" style="width:100%;font-size:10px;border:none;resize:vertical;background:transparent">'+_esc(desc||'')+'</textarea></td>'+
+      '<td style="border:1px solid #ccc;padding:3px;text-align:center;width:28px">'+
+        '<button type="button" onclick="_edRemDelItem('+idx+')" style="background:#dc2626;color:#fff;border:none;border-radius:3px;width:18px;height:18px;font-size:10px;cursor:pointer;line-height:1">✕</button>'+
+      '</td>';
+    tbody.appendChild(tr);
+  }
+
+  function _edRemDelItem(idx){
+    var tr=document.getElementById('ed-item-tr-'+idx);
+    if(tr) tr.remove();
+    document.querySelectorAll('#ed-items-tbody tr').forEach(function(row,i){
+      row.cells[0].textContent=i+1;
+    });
+  }
+
+  function _getEdItems(){
+    var items=[];
+    document.querySelectorAll('#ed-items-tbody tr').forEach(function(tr){
+      var cant=tr.querySelector('.i-cant')?tr.querySelector('.i-cant').value.trim():'1';
+      var desc=tr.querySelector('.i-desc')?tr.querySelector('.i-desc').value.trim():'';
+      if(cant||desc) items.push({
+        cant:cant, desc:desc,
+        itemNum: tr.dataset.itemnum||'',
+        itemId:  tr.dataset.itemid||'',
+        precio:  Number(tr.dataset.precio||0),
+      });
+    });
+    return items;
+  }
+
+  function _edGuardar(){
+    var op=_g('ed-op');
+    var cotiz=_g('ed-cotiz')||_ED_COTIZ_REAL;
+    var items=_getEdItems();
+    var payload={
+      ID_REMISION:  _ED_ID_REM,
+      ID_PEDIDO:    document.getElementById('ed-id-pedido').value||_ED_ID_REM,
+      REMISION:     _ED_NUM_REM,
+      ES_NUEVA:     _ED_ES_NUEVA,
+      COTIZACION:   cotiz,
+      OP:           op,
+      'DESCRIPCION DEL PROYECTO': _g('ed-proyecto'),
+      EMPRESA:      _g('ed-señores'),
+      NIT:          _g('ed-nit'),
+      DIRECCION:    _g('ed-dir'),
+      CIUDAD:       _g('ed-ciudad'),
+      ENCARGADO:    _g('ed-encargado'),
+      TELEFONO:     _g('ed-tel'),
+      'ORDEN DE COMPRA': _g('ed-oc'),
+      'OBSERVACIONES ESPECIALES': _g('ed-obs'),
+      'FECHA EMISION COT.': _g('ed-fecha'),
+      FECHA:        _g('ed-fecha'),
+      ESTADO:       _g('ed-estado'),
+      TIPO:         _g('ed-estado'),
+      CALIFICACION: _g('ed-cal'),
+      VALOR_TOTAL:  items.reduce(function(s,it){ return s+(Number(it.cant||1)*Number(it.precio||0)); },0),
+      ITEMS: items.map(function(it,i){ return {
+        _itemId:  it.itemId,
+        _itemNum: it.itemNum||String(i+1),
+        _desc:    it.desc,
+        _cant:    Number(it.cant||1),
+        _precio:  it.precio||0,
+      }; }),
+    };
+    var st=document.getElementById('ed-status');
+    if(window.opener&&!window.opener.closed){
+      window.opener.postMessage({type:'remision-wedm-save',payload:payload},'*');
+      if(st){ st.textContent='✅ Guardado'; st.style.color='#bbf7d0'; }
+    } else {
+      alert('No se pudo comunicar con la ventana principal.');
+    }
+  }
+
+  // ── Imprimir ───────────────────────────────────────────
+  function _edImprimir(){
+    var op=_g('ed-op');
+    var señores=_g('ed-señores');
+    var isMosat = señores.toUpperCase().indexOf('MOSAT')>=0;
+    var items=_getEdItems();
+    var fecha=_fmtFecha(_g('ed-fecha'));
+    var numRem=_g('ed-num-rem-hidden')||_ED_NUM_REM;
+    var nit=_g('ed-nit');
+    var dir=_g('ed-dir');
+    var ciudad=_g('ed-ciudad');
+    var encargado=_g('ed-encargado');
+    var tel=_g('ed-tel');
+    var oc=_g('ed-oc');
+    var proyecto=_g('ed-proyecto');
+    var cotiz=_g('ed-cotiz')||_ED_COTIZ_REAL;
+    var obs=_g('ed-obs');
+
+    var filasHtml=items.map(function(it,i){
+      return '<tr style="'+(i%2?'background:#dde6f0':'')+'">'+
+        '<td style="border:1px solid #999;padding:6px 8px;text-align:center;font-weight:700">'+(i+1)+'</td>'+
+        '<td style="border:1px solid #999;padding:6px 8px;text-align:center">'+(it.cant||'1')+'</td>'+
+        '<td style="border:1px solid #999;padding:6px 12px;text-transform:uppercase;font-size:10px">'+_esc(it.desc)+'</td>'+
+      '</tr>';
+    }).join('');
+
+    var html = isMosat ? _buildMosatPDF(numRem,fecha,señores,nit,dir,ciudad,encargado,tel,oc,proyecto,cotiz,op,obs,filasHtml)
+                       : _buildWedmPDF(numRem,fecha,señores,nit,dir,ciudad,encargado,tel,oc,proyecto,cotiz,op,obs,filasHtml);
+
+    var win=window.open('','_blank','width=850,height=1100');
+    if(!win){ alert('Permite ventanas emergentes para imprimir'); return; }
+    win.document.write(html); win.document.close();
+    setTimeout(function(){ win.print(); },400);
+  }
+
+  ${_buildWedmPDFFn()}
+  ${_buildMosatPDFFn()}
+
+  // Inicialización
+  (function(){
+    var opEl=document.getElementById('ed-op');
+    var cotEl=document.getElementById('ed-cotiz-bus');
+    var opVal=opEl?opEl.value.trim():'';
+    var cotVal=cotEl?cotEl.value.trim():'';
+    if(opVal && _opItemIdx[opVal]){ _edPoblarPicker(opVal); }
+    else if(cotVal){ _edBuscarCotiz(); }
+  })();
+  <\\/script>
+  </body></html>`;
+
+  const win = window.open('', '_blank');
+  if (!win) { toast('Permite ventanas emergentes para editar', 'error'); return; }
+  win.document.write(html);
+  win.document.close();
+}
+
+// ─── Helpers de PDF inline (inyectados en el editor) ─────────
+function _buildWedmPDFFn() {
+  return `function _buildWedmPDF(numRem,fecha,señores,nit,dir,ciudad,encargado,tel,oc,proyecto,cotiz,op,obs,filasHtml){
+  var css='*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:10px;color:#111;padding:14mm 16mm;min-height:297mm}table{border-collapse:collapse;width:100%}th,td{border:1px solid #999;padding:5px 8px;font-size:10px}.azul{background:#1a3a6b;color:#fff;font-weight:700}.azul-row{background:#dde6f0}.borde{border:1px solid #999}.center{text-align:center}.footer{text-align:center;font-size:8px;color:#777;border-top:1px solid #ccc;padding-top:5px;margin-top:16px}@media print{body{padding:10mm 14mm;-webkit-print-color-adjust:exact;print-color-adjust:exact}@page{size:A4 portrait;margin:0}}';
+  return '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>REM-'+_esc(String(numRem))+'</title><style>'+css+'</style></head><body>'+
+    '<table style="margin-bottom:14px;border:none"><tr>'+
+      '<td style="border:none;width:55%;vertical-align:top;padding-right:16px">'+
+        '<div style="font-weight:900;font-size:20px;color:#1a3a6b;line-height:1">GRUPO<span style="color:#2563eb">WEDM</span><br><span style="font-size:9px;font-weight:400;color:#555">Metalmecánica Avanzada</span></div>'+
+        '<div style="font-size:8.5px;line-height:1.7;margin-top:8px;color:#333">CALLE 39 No. 1H-31 BOD-05<br>Tel: 3797352 &nbsp; Cel: 3008860468<br>Email: administracion@grupowedm.com<br>NIT: 900763241-7<br>CALI - VALLE DEL CAUCA - COLOMBIA</div>'+
+      '</td>'+
+      '<td style="border:none;width:45%;vertical-align:top">'+
+        '<table style="font-size:9.5px;border:none"><tbody>'+
+          '<tr><td style="border:none;color:#1a3a6b;font-weight:700;width:90px">FECHA:</td><td style="border:none">'+fecha+'</td></tr>'+
+          '<tr><td style="border:none;color:#1a3a6b;font-weight:700">SEÑORES:</td><td style="border:none;font-weight:700">'+_esc(señores)+'</td></tr>'+
+          '<tr><td style="border:none;color:#1a3a6b;font-weight:700">NIT:</td><td style="border:none">'+_esc(nit)+'</td></tr>'+
+          '<tr><td style="border:none;color:#1a3a6b;font-weight:700">DIRECCIÓN:</td><td style="border:none">'+_esc(dir)+'</td></tr>'+
+          '<tr><td style="border:none;color:#1a3a6b;font-weight:700">CIUDAD:</td><td style="border:none;font-weight:700">'+_esc(ciudad)+'</td></tr>'+
+          '<tr><td style="border:none;color:#1a3a6b;font-weight:700">ENCARGADO:</td><td style="border:none;font-weight:700">'+_esc(encargado)+'</td></tr>'+
+          '<tr><td style="border:none;color:#1a3a6b;font-weight:700">TELÉFONO:</td><td style="border:none">'+_esc(tel)+'</td></tr>'+
+          (oc?'<tr><td style="border:none;color:#1a3a6b;font-weight:700">O.C.:</td><td style="border:none;font-weight:700;color:#1a3a6b">'+_esc(oc)+'</td></tr>':'')+
+        '</tbody></table>'+
+      '</td>'+
+    '</tr></table>'+
+    '<table style="margin-bottom:10px;border:2px solid #1a3a6b"><tbody>'+
+      '<tr><td style="background:#f0f4fa;font-weight:700;width:120px;font-size:10px">PROYECTO:</td><td style="font-weight:700;font-size:11px;text-transform:uppercase">'+_esc(proyecto)+'</td></tr>'+
+      '<tr><td style="background:#f0f4fa;font-weight:700;font-size:10px">REMISIÓN:</td><td style="font-weight:900;font-size:20px">'+_esc(String(numRem))+'</td></tr>'+
+    '</tbody></table>'+
+    '<table style="margin-bottom:10px;border:2px solid #1a3a6b"><tbody>'+
+      '<tr><td class="azul" style="width:200px;padding:8px 12px">ORDEN DE PRODUCCIÓN</td><td style="font-weight:900;font-size:14px;padding:8px 16px">'+_esc(op)+'</td></tr>'+
+      '<tr><td class="azul" style="padding:8px 12px">COTIZACIÓN</td><td style="font-weight:900;font-size:14px;padding:8px 16px">'+_esc(cotiz)+'</td></tr>'+
+    '</tbody></table>'+
+    '<table><thead><tr class="azul"><th class="center" style="width:36px">#</th><th class="center" style="width:55px">CANT</th><th>DESCRIPCIÓN</th></tr></thead>'+
+    '<tbody>'+filasHtml+
+    (filasHtml?'':'<tr><td colspan="3" style="text-align:center;padding:16px;color:#888">Sin ítems</td></tr>')+
+    '</tbody></table>'+
+    (obs?'<p style="margin-top:10px;font-size:9px;color:#444"><b>OBSERVACIONES:</b> '+_esc(obs)+'</p>':'')+
+    '<div style="margin-top:22px;max-width:300px">'+
+      '<div style="background:#1a3a6b;color:#fff;font-weight:700;font-size:10px;text-transform:uppercase;padding:6px 16px;border-radius:4px 4px 0 0;display:inline-block">ATENTAMENTE</div>'+
+      '<div style="border:1px solid #ccc;padding:12px 16px;font-weight:700;font-size:12px">Mauricio García</div>'+
+    '</div>'+
+    '<div class="footer" style="margin-top:20px">Dirección: Calle 39 # 1H - 31 Bodega 5 &nbsp; Tel: 379 7352 &nbsp; Cel: 300 886 0468 &nbsp; NIT: 900763241-7<br>Cali - Valle del Cauca - Colombia</div>'+
+  '</body></html>';
+}`;
+}
+
+function _buildMosatPDFFn() {
+  return `function _buildMosatPDF(numRem,fecha,señores,nit,dir,ciudad,encargado,tel,oc,proyecto,cotiz,op,obs,filasHtml){
+  // Fecha en formato MM/DD/YYYY para el documento en inglés
+  var fechaEn=fecha;
+  try{ var d=new Date(document.getElementById('ed-fecha').value+'T12:00:00'); fechaEn=d.toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',year:'numeric'}); }catch(e){}
+  var css='*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:10px;color:#111;padding:14mm 16mm;min-height:297mm}table{border-collapse:collapse;width:100%}th,td{border:1px solid #999;padding:5px 8px;font-size:10px}.azul{background:#1a3a6b;color:#fff;font-weight:700}.azul-row{background:#dde6f0}.center{text-align:center}.footer{text-align:center;font-size:8px;color:#777;border-top:1px solid #ccc;padding-top:5px;margin-top:16px}@media print{body{padding:10mm 14mm;-webkit-print-color-adjust:exact;print-color-adjust:exact}@page{size:A4 portrait;margin:0}}';
+  return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>PACKING LIST '+_esc(String(numRem))+'</title><style>'+css+'</style></head><body>'+
+    '<table style="margin-bottom:14px;border:none"><tr>'+
+      '<td style="border:none;width:52%;vertical-align:top;padding-right:16px">'+
+        '<div style="font-weight:900;font-size:20px;color:#1a3a6b;line-height:1">MOSAT GROUP INC<br><span style="font-size:9px;font-weight:400;color:#555">Advanced Metalwork</span></div>'+
+        '<div style="font-size:8.5px;line-height:1.7;margin-top:8px;color:#333">6710 MAIN STREET SUITE 233 MIAMI LAKES<br>FL - 33014<br>Cel: 3008860468<br>Email: m.garcia@mosatgroup.com<br>EIN: 93-4707595<br>MIAMI - FLORIDA - USA</div>'+
+      '</td>'+
+      '<td style="border:none;width:48%;vertical-align:top">'+
+        '<table style="font-size:9.5px;border:none"><tbody>'+
+          '<tr><td style="border:none;color:#1a3a6b;font-weight:700;width:90px">DATE:</td><td style="border:none">'+fechaEn+'</td></tr>'+
+          '<tr><td style="border:none;color:#1a3a6b;font-weight:700">MESSRS.:</td><td style="border:none;font-weight:700">'+_esc(señores)+'</td></tr>'+
+          '<tr><td style="border:none;color:#1a3a6b;font-weight:700">EIN:</td><td style="border:none">'+_esc(nit)+'</td></tr>'+
+          '<tr><td style="border:none;color:#1a3a6b;font-weight:700">ADDRESS:</td><td style="border:none">'+_esc(dir)+'</td></tr>'+
+          '<tr><td style="border:none;color:#1a3a6b;font-weight:700">CITY:</td><td style="border:none;font-weight:700">'+_esc(ciudad)+'</td></tr>'+
+          '<tr><td style="border:none;color:#1a3a6b;font-weight:700">ATTENDANT:</td><td style="border:none;font-weight:700">'+_esc(encargado)+'</td></tr>'+
+          '<tr><td style="border:none;color:#1a3a6b;font-weight:700">PHONE:</td><td style="border:none">'+_esc(tel)+'</td></tr>'+
+          (oc?'<tr><td style="border:none;color:#1a3a6b;font-weight:700">P.O.:</td><td style="border:none;font-weight:700;color:#1a3a6b">'+_esc(oc)+'</td></tr>':'')+
+        '</tbody></table>'+
+      '</td>'+
+    '</tr></table>'+
+    '<table style="margin-bottom:10px;border:2px solid #1a3a6b"><tbody>'+
+      '<tr><td style="background:#f0f4fa;font-weight:700;width:120px;font-size:10px">PROJECT:</td><td style="font-weight:700;font-size:11px;text-transform:uppercase">'+_esc(proyecto)+'</td></tr>'+
+      '<tr><td style="background:#f0f4fa;font-weight:700;font-size:10px">PACKING LIST:</td><td style="font-weight:900;font-size:20px">'+_esc(String(numRem))+'</td></tr>'+
+    '</tbody></table>'+
+    '<table style="margin-bottom:10px;border:2px solid #1a3a6b"><tbody>'+
+      '<tr><td class="azul" style="width:200px;padding:8px 12px">PRODUCTION ORDER</td><td style="font-weight:900;font-size:14px;padding:8px 16px">'+_esc(op)+'</td></tr>'+
+      '<tr><td class="azul" style="padding:8px 12px">QUOTATION</td><td style="font-weight:900;font-size:14px;padding:8px 16px">'+_esc(cotiz)+'</td></tr>'+
+      (oc?'<tr><td class="azul" style="padding:8px 12px">PURCHASE ORDER:</td><td style="font-weight:700;font-size:13px;padding:8px 16px">'+_esc(oc)+'</td></tr>':'')+
+    '</tbody></table>'+
+    '<table><thead><tr class="azul"><th class="center" style="width:36px">ITEM</th><th class="center" style="width:55px">QTY</th><th>DESCRIPTION</th></tr></thead>'+
+    '<tbody>'+filasHtml+
+    (filasHtml?'':'<tr><td colspan="3" style="text-align:center;padding:16px;color:#888">No items</td></tr>')+
+    '</tbody></table>'+
+    (obs?'<p style="margin-top:10px;font-size:9px;color:#444"><b>OBSERVATIONS:</b> '+_esc(obs)+'</p>':'')+
+    '<div style="margin-top:22px;max-width:300px">'+
+      '<div style="background:#1a3a6b;color:#fff;font-weight:700;font-size:10px;text-transform:uppercase;padding:6px 16px;border-radius:4px 4px 0 0;display:inline-block">SINCERELY</div>'+
+      '<div style="border:1px solid #ccc;padding:12px 16px;font-weight:700;font-size:12px">Mauricio Garcia</div>'+
+    '</div>'+
+    '<div class="footer" style="margin-top:20px">6710 Main Street Suite 233, Miami Lakes FL 33014 &nbsp; Cel: 300 886 0468 &nbsp; EIN: 93-4707595<br>Miami - Florida - USA</div>'+
+  '</body></html>';
+}`;
+}
+
+// ══════════════════════════════════════════════════════════════
+//   PDF DIRECTO (desde detalle, sin abrir editor)
+// ══════════════════════════════════════════════════════════════
+async function generarPDFRemisionERP(remId, remUUID = '') {
+  if (!DB.remisiones) DB.remisiones = await GET('getRemisiones', '', { rango: RANGO_STATE.remisiones || '1m' });
+  const r = (DB.remisiones || []).find(x =>
+    String(x.REMISION || '') === String(remId) || String(x.ID_PEDIDO || '') === String(remId));
+  if (!r) { toast('Remisión no encontrada', 'error'); return; }
+
+  const uuid = remUUID || r.ID_PEDIDO || r.ID_REMISION_UUID || '';
+  if (!DB.elementosRemision) DB.elementosRemision = await GET('getElementosRemision');
+
+  const elems = (DB.elementosRemision || []).filter(e => {
+    const eUUID = String(e.ID_REMISION || e.ID_REMISION_UUID || e.REMISION_ID || '');
+    return (uuid && eUUID === uuid) || String(e.REMISION || '') === String(remId);
+  });
+
+  const hoy = new Date().toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const fecha = fmtDate(r['FECHA EMISION COT.'] || r.FECHA || '') || hoy;
+  const esMosat = (r.EMPRESA || '').toUpperCase().includes('MOSAT');
+
+  const filasHtml = elems.map((e, i) => `
+    <tr class="${i % 2 === 1 ? 'azul-row' : ''}">
+      <td class="borde center">${e.ITEM || e.ITEM_ID || String(i + 1)}</td>
+      <td class="borde center">${e.UNIDADES || e.CANT || '—'}</td>
+      <td class="borde">${e.DESCRIPCION || '—'}</td>
+    </tr>`).join('') || `<tr><td colspan="3" style="text-align:center;padding:20px;color:#888;border:1px solid #999">Sin elementos registrados</td></tr>`;
+
+  const op = r.OP || '';
+  const cotNum = r.COTIZACION || '';
+  const oc = r['ORDEN DE COMPRA'] || '';
+  const obs = r['OBSERVACIONES ESPECIALES'] || r.OBSERVACIONES || '';
+
+  let html;
+  if (esMosat) {
+    const fechaEn = (() => {
+      try {
+        const raw = r['FECHA EMISION COT.'] || r.FECHA || '';
+        const d = new Date((raw.includes('T') ? raw : raw + 'T12:00:00'));
+        return d.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
+      } catch { return fecha; }
+    })();
+    html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
+    <title>PACKING LIST ${remId}</title>${docCSS()}</head><body>
+    <div class="no-print" style="text-align:right;margin-bottom:12px">
+      <button onclick="window.print()" style="background:#1a3a6b;color:#fff;border:none;
+        padding:10px 20px;border-radius:6px;font-size:13px;cursor:pointer;font-weight:700">
+        🖨️ Print / Save PDF
+      </button>
+    </div>
+    <table style="margin-bottom:16px">
+      <tr>
+        <td style="width:52%;vertical-align:top;padding-right:16px;border:none">
+          <div style="font-weight:900;font-size:20px;color:#1a3a6b;line-height:1.1">MOSAT GROUP INC<br>
+            <span style="font-size:9px;font-weight:400;color:#555">Advanced Metalwork</span></div>
+          <div style="font-size:8.5px;line-height:1.7;margin-top:8px;color:#333">
+            6710 MAIN STREET SUITE 233 MIAMI LAKES<br>FL -33014<br>
+            Cel: 3008860468<br>Email: m.garcia@mosatgroup.com<br>EIN: 93-4707595<br>MIAMI - FLORIDA - USA
+          </div>
+        </td>
+        <td style="width:48%;vertical-align:top;border:none">
+          <table style="font-size:9.5px"><tbody>
+            <tr><td style="color:#1a3a6b;font-weight:700;width:90px;border:none">DATE:</td><td style="border:none">${fechaEn}</td></tr>
+            <tr><td style="color:#1a3a6b;font-weight:700;border:none">MESSRS.:</td><td style="border:none;font-weight:700">${r.EMPRESA || '—'}</td></tr>
+            <tr><td style="color:#1a3a6b;font-weight:700;border:none">EIN:</td><td style="border:none">${r.NIT || '—'}</td></tr>
+            <tr><td style="color:#1a3a6b;font-weight:700;border:none">ADDRESS:</td><td style="border:none">${r.DIRECCION || '—'}</td></tr>
+            <tr><td style="color:#1a3a6b;font-weight:700;border:none">CITY:</td><td style="border:none;font-weight:700">${r.CIUDAD || '—'}</td></tr>
+            <tr><td style="color:#1a3a6b;font-weight:700;border:none">ATTENDANT:</td><td style="border:none;font-weight:700">${r.ENCARGADO || '—'}</td></tr>
+            <tr><td style="color:#1a3a6b;font-weight:700;border:none">PHONE:</td><td style="border:none">${r.TELEFONO || '—'}</td></tr>
+            ${oc ? `<tr><td style="color:#1a3a6b;font-weight:700;border:none">P.O.:</td><td style="border:none;font-weight:700;color:#1a3a6b">${oc}</td></tr>` : ''}
+          </tbody></table>
+        </td>
+      </tr>
+    </table>
+    <table style="margin-bottom:12px;border:2px solid #1a3a6b"><tbody>
+      <tr><td class="azul borde" style="width:120px;font-size:10px">PROJECT:</td>
+          <td class="borde negrita" style="font-size:11px;text-transform:uppercase">${r['DESCRIPCION DEL PROYECTO'] || '—'}</td></tr>
+      <tr><td class="azul borde" style="font-size:10px">PACKING LIST:</td>
+          <td class="borde negrita" style="font-size:20px;font-weight:900">${remId}</td></tr>
+    </tbody></table>
+    <table style="margin-bottom:12px;border:2px solid #1a3a6b"><tbody>
+      <tr><td class="azul borde" style="width:200px;padding:8px 12px">PRODUCTION ORDER</td>
+          <td class="borde negrita" style="font-size:14px;padding:8px 16px">${op || '—'}</td></tr>
+      <tr><td class="azul borde" style="padding:8px 12px">QUOTATION</td>
+          <td class="borde negrita" style="font-size:14px;padding:8px 16px">${cotNum || '—'}</td></tr>
+      ${oc ? `<tr><td class="azul borde" style="padding:8px 12px">PURCHASE ORDER:</td>
+              <td class="borde negrita" style="font-size:13px;padding:8px 16px">${oc}</td></tr>` : ''}
+    </tbody></table>
+    <table style="margin-bottom:4px">
+      <thead><tr class="azul">
+        <th class="borde center" style="width:12%">ITEM</th>
+        <th class="borde center" style="width:15%">QTY</th>
+        <th class="borde">DESCRIPTION</th>
+      </tr></thead>
+      <tbody>${filasHtml}</tbody>
+    </table>
+    ${obs ? `<p style="font-size:9px;margin:10px 0;color:#444"><b>OBSERVATIONS:</b> ${obs}</p>` : ''}
+    <div style="margin-top:20px;max-width:300px">
+      <div class="azul" style="padding:6px 20px;border-radius:4px 4px 0 0;display:inline-block">SINCERELY</div>
+      <div style="border:1px solid #ccc;padding:12px 20px;font-weight:700;font-size:12px">Mauricio Garcia</div>
+    </div>
+    <div class="footer-wedm">
+      <p>6710 Main Street Suite 233, Miami Lakes FL 33014 &nbsp; Cel: 300 886 0468 &nbsp; EIN: 93-4707595</p>
+    </div>
+    </body></html>`;
+  } else {
+    html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+    <title>REM-${remId} — ${r.EMPRESA || ''}</title>${docCSS()}</head><body>
+    <div class="no-print" style="text-align:right;margin-bottom:12px">
+      <button onclick="window.print()" style="background:#1a3a6b;color:#fff;border:none;
+        padding:10px 20px;border-radius:6px;font-size:13px;cursor:pointer;font-weight:700">
+        🖨️ Imprimir / Guardar PDF
+      </button>
+    </div>
+    <table style="margin-bottom:16px">
+      <tr>
+        <td style="width:55%;vertical-align:top;padding-right:16px;border:none">
+          <div style="font-weight:900;font-size:20px;color:#1a3a6b;line-height:1.1">GRUPO<span style="color:#2563eb">WEDM</span><br>
+            <span style="font-size:9px;font-weight:400;color:#555">Metalmecánica Avanzada</span></div>
+          <div style="font-size:8.5px;line-height:1.7;margin-top:8px;color:#333">
+            CALLE 39 No. 1H-31 BOD-05<br>Tel: 3797352 &nbsp; Cel: 3008860468<br>
+            Email: administracion@grupowedm.com<br>NIT: 900763241-7<br>CALI - VALLE DEL CAUCA - COLOMBIA
+          </div>
+        </td>
+        <td style="width:45%;vertical-align:top;border:none">
+          <table style="font-size:9.5px"><tbody>
+            <tr><td style="color:#1a3a6b;font-weight:700;width:90px;border:none">FECHA:</td><td style="border:none">${fecha}</td></tr>
+            <tr><td style="color:#1a3a6b;font-weight:700;border:none">SEÑORES:</td><td style="border:none;font-weight:700">${r.EMPRESA || '—'}</td></tr>
+            <tr><td style="color:#1a3a6b;font-weight:700;border:none">NIT:</td><td style="border:none">${r.NIT || '—'}</td></tr>
+            <tr><td style="color:#1a3a6b;font-weight:700;border:none">COT Ref.:</td><td style="border:none">${cotNum ? 'COT-' + cotNum : '—'}</td></tr>
+            ${op ? `<tr><td style="color:#1a3a6b;font-weight:700;border:none">OP:</td><td style="border:none">${op}</td></tr>` : ''}
+            ${oc ? `<tr><td style="color:#1a3a6b;font-weight:700;border:none">O.C. Cliente:</td><td style="border:none;font-weight:700">${oc}</td></tr>` : ''}
+          </tbody></table>
+          <table style="margin-top:10px;font-size:9.5px;border-collapse:collapse">
+            <tr>
+              <td class="azul borde-azul" style="padding:5px 10px">DESCRIPCIÓN:</td>
+              <td class="borde-azul negrita" style="padding:5px 10px">${r['DESCRIPCION DEL PROYECTO'] || '—'}</td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+    <table style="margin-bottom:12px">
+      <tr>
+        <td class="azul borde" style="width:50%;font-size:12px;text-align:center;padding:8px">REMISIÓN</td>
+        <td class="borde negrita" style="width:50%;font-size:14px;text-align:center;padding:8px">REM-${remId}</td>
+      </tr>
+    </table>
+    <table style="margin-bottom:12px;border:2px solid #1a3a6b"><tbody>
+      <tr><td class="azul borde" style="width:200px;padding:8px 12px">ORDEN DE PRODUCCIÓN</td>
+          <td class="borde negrita" style="font-size:14px;padding:8px 16px">${op || '—'}</td></tr>
+      <tr><td class="azul borde" style="padding:8px 12px">COTIZACIÓN</td>
+          <td class="borde negrita" style="font-size:14px;padding:8px 16px">${cotNum || '—'}</td></tr>
+    </tbody></table>
+    <table style="margin-bottom:4px">
+      <thead><tr class="azul">
+        <th class="borde center" style="width:12%">ÍTEM</th>
+        <th class="borde center" style="width:15%">CANT</th>
+        <th class="borde">DESCRIPCIÓN</th>
+      </tr></thead>
+      <tbody>${filasHtml}
+        ${elems.length < 3 ? Array(Math.max(0, 3 - elems.length)).fill('<tr><td class="borde" colspan="3" style="height:22px"></td></tr>').join('') : ''}
+      </tbody>
+    </table>
+    ${obs ? `<p style="font-size:9px;margin:10px 0;color:#444"><b>OBSERVACIONES:</b> ${obs}</p>` : ''}
+    <table style="margin-top:16px;width:100%">
+      <tr>
+        <td style="width:33%;text-align:center;padding:0 10px;border:none">
+          <div style="border-top:1.5px solid #1a3a6b;margin-bottom:4px"></div>
+          <div style="font-size:9px;font-weight:700;color:#1a3a6b">ENTREGADO POR</div>
+          <div style="font-size:8.5px;color:#555;margin-top:2px">Grupo WEDM</div>
+        </td>
+        <td style="width:33%;text-align:center;padding:0 10px;border:none">
+          <div style="border-top:1.5px solid #1a3a6b;margin-bottom:4px"></div>
+          <div style="font-size:9px;font-weight:700;color:#1a3a6b">RECIBIDO POR</div>
+          <div style="font-size:8.5px;color:#555;margin-top:2px">Nombre y firma</div>
+        </td>
+        <td style="width:34%;text-align:center;padding:0 10px;border:none">
+          <div style="border-top:1.5px solid #1a3a6b;margin-bottom:4px"></div>
+          <div style="font-size:9px;font-weight:700;color:#1a3a6b">FECHA RECIBIDO</div>
+          <div style="font-size:8.5px;color:#555;margin-top:2px">&nbsp;</div>
+        </td>
+      </tr>
+    </table>
+    <div class="footer-wedm">
+      <p>✦ &nbsp;En <strong>GRUPO WEDM</strong> transformamos cada pieza en una solución de precisión &mdash; comprometidos con la calidad y el éxito de tus proyectos.&nbsp; ✦</p>
+    </div>
+    </body></html>`;
+  }
+
+  const clienteSlug = (r.EMPRESA || '').replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/, '').toUpperCase().slice(0, 30);
+  const prefix = esMosat ? 'ROPT' : 'REMV';
+  const pdfName = `${prefix}_${remId}-${clienteSlug}.pdf`;
+  _abrirDocParaImprimir(html, pdfName);
+}
+
+</script>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+//  INICIO
+// ═══════════════════════════════════════════════════════════
+history.replaceState({}, '', '#remisiones');
+remisiones();
+</script>
+
+</body>
+</html>
