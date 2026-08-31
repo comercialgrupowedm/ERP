@@ -287,6 +287,7 @@ const ACTION_TO_KEY = { getRemisiones:'remisiones', getElementosRemision:'elemen
 const _SYNC_ACTION = { remisiones:'getRemisiones', elementosRemision:'getElementosRemision', cotizaciones:'getCotizaciones', items:'getItems', produccion:'getControlProduccion' };
 const _RANGO_KEY = { remisiones:'remisiones', elementosRemision:'remisiones', cotizaciones:'cotizaciones', items:'elementos', produccion:'produccion' };
 
+const _SLOW_ACTIONS = { getItems:1, getCotizaciones:1 };
 function _fetchTimeout(url,opts={},ms=15000){ const ctrl=new AbortController(); const timer=setTimeout(()=>ctrl.abort(),ms); return fetch(url,{...opts,signal:ctrl.signal}).finally(()=>clearTimeout(timer)); }
 
 async function GET(action, id='', extraParams={}, _retry=1) {
@@ -294,7 +295,7 @@ async function GET(action, id='', extraParams={}, _retry=1) {
     let url=`${API}?action=${action}${id?'&id='+encodeURIComponent(id):''}`;
     Object.keys(extraParams||{}).forEach(k=>{ url+=`&${k}=${encodeURIComponent(extraParams[k])}`; });
     url+=`&_t=${Date.now()}`;
-    const r=await _fetchTimeout(url); if(!r.ok) throw new Error('HTTP '+r.status);
+    const r=await _fetchTimeout(url,{},_SLOW_ACTIONS[action]?30000:15000); if(!r.ok) throw new Error('HTTP '+r.status);
     const j=await r.json(); if(!j.ok) throw new Error(j.error);
     if(ACTION_TO_KEY[action]&&!id){ const rk=_RANGO_KEY?.[ACTION_TO_KEY[action]]; const esRangoActual=rk&&extraParams?.rango===(RANGO_STATE?.[rk]||'1m'); if(!Object.keys(extraParams||{}).length||esRangoActual) cacheSet(ACTION_TO_KEY[action],j.data); }
     return j.data;
@@ -639,7 +640,7 @@ async function remisiones() {
         <td style="font-weight:700;font-family:var(--mono)">${remId}</td>
         <td>${fecha}</td>
         <td>${esc(r.OP || '—')}</td>
-        <td>${esc(r.COTIZACION || '—')}</td>
+        <td>${esc(_resolverCotizNum(r) || '—')}</td>
         <td>
           <div style="font-weight:600">${esc(r.EMPRESA || '—')}</div>
           ${esMosat ? '<span style="font-size:9px;background:#1a3a6b;color:#fff;border-radius:3px;padding:1px 5px">EN</span>' : ''}
@@ -721,7 +722,7 @@ async function remisiones() {
         <!-- Datos clave -->
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;font-size:11px">
           <div><span style="color:var(--muted)">OP: </span><strong>${esc(r.OP || '—')}</strong></div>
-          <div><span style="color:var(--muted)">COT: </span><strong>${esc(String(r.COTIZACION || '—'))}</strong></div>
+          <div><span style="color:var(--muted)">COT: </span><strong>${esc(String(_resolverCotizNum(r) || '—'))}</strong></div>
           <div><span style="color:var(--muted)">Fecha: </span>${fecha}</div>
           <div><span style="color:var(--muted)">Ítems: </span><strong>${elems.length}</strong></div>
         </div>
@@ -761,6 +762,29 @@ function _remVista(v) {
 // ══════════════════════════════════════════════════════════════
 //   DETALLE DE REMISIÓN
 // ══════════════════════════════════════════════════════════════
+// Resuelve el NÚMERO REAL de cotización a partir de un registro de remisión.
+// Prioridad: 1) columna COT (nueva, viene directa de la hoja REMISIONES)
+//            2) si COTIZACION ya es numérico, usarlo
+//            3) resolver por ID_PEDIDO (UUID) contra DB.cotizaciones
+//            4) resolver por OP contra DB.produccion
+function _resolverCotizNum(r) {
+  if (!r) return '';
+  const colCOT = String(r.COT || '').trim();
+  if (colCOT) return colCOT;
+  const raw = String(r.COTIZACION || '').trim();
+  if (!raw) return '';
+  if (/^\d+$/.test(raw)) return raw; // ya es el número real
+  const byUUID = (DB.cotizaciones || []).find(c =>
+    String(c.ID_PEDIDO || '').trim() === raw);
+  if (byUUID && byUUID.COTIZACION) return String(byUUID.COTIZACION).trim();
+  // Fallback: intentar resolver por OP
+  if (r.OP) {
+    const po = (DB.produccion || []).find(o => String(o.OP || '').trim() === String(r.OP));
+    if (po && (po.COTIZACION || po.COT)) return String(po.COTIZACION || po.COT).trim();
+  }
+  return raw; // no se pudo resolver, mostrar lo que hay
+}
+
 async function detailRem(id, uuid = '') {
   const r = (DB.remisiones || []).find(x =>
     String(x.REMISION || '') === String(id) ||
@@ -829,7 +853,7 @@ async function detailRem(id, uuid = '') {
         estado.includes('ENVIADA') ? 'var(--warn)' : 'var(--muted)'}">${estado}</span>`)}
       ${dr('Empresa', esc(r.EMPRESA || ''))}
       ${dr('NIT', esc(r.NIT || ''))}
-      ${dr('Cotización', r.COTIZACION || '')}
+      ${dr('Cotización', _resolverCotizNum(r) || '')}
       ${dr('OP', r.OP || '')}
       ${dr('Fecha', fecha)}
       ${dr('O/C Cliente', esc(r['ORDEN DE COMPRA'] || ''))}
@@ -851,11 +875,17 @@ async function detailRem(id, uuid = '') {
 // ══════════════════════════════════════════════════════════════
 async function abrirEditorRem(remId = null) {
   // Cargar datos necesarios
-  if (!DB.remisiones) DB.remisiones = await GET('getRemisiones', '', { rango: RANGO_STATE.remisiones || '1m' });
-  if (!DB.elementosRemision) DB.elementosRemision = await GET('getElementosRemision');
-  if (!DB.cotizaciones) await load('cotizaciones', 'getCotizaciones');
-  if (!DB.items) await load('items', 'getItems');
-  if (!DB.produccion) await load('produccion', 'getProduccion');
+  try{
+    if (!DB.remisiones) DB.remisiones = await GET('getRemisiones', '', { rango: RANGO_STATE.remisiones || '1m' });
+    if (!DB.elementosRemision) DB.elementosRemision = await GET('getElementosRemision');
+    if (!DB.cotizaciones) await load('cotizaciones', 'getCotizaciones');
+    if (!DB.items) await load('items', 'getItems');
+    if (!DB.produccion) await load('produccion', 'getControlProduccion');
+    if (!DB.clientes) await load('clientes', 'getClientes');
+  }catch(e){
+    toast('⚠️ No se pudieron cargar los datos del editor (conexión lenta). Intenta de nuevo.','error');
+    return;
+  }
 
   const r = remId ? (DB.remisiones || []).find(x =>
     String(x.REMISION || '') === String(remId) ||
@@ -875,6 +905,26 @@ async function abrirEditorRem(remId = null) {
   if (!_cotizNumReal && r?.OP) {
     const po = (DB.produccion || []).find(o => String(o.OP || '').trim() === String(r.OP));
     if (po) _cotizNumReal = String(po.COTIZACION || po.COT || '').trim();
+  }
+
+  // ── Helper: lectura flexible de campos (ignora tildes/mayúsculas) ─
+  function _campoFlex(obj, nombre) {
+    if (!obj) return '';
+    const norm = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/\s+/g, ' ').trim().toUpperCase();
+    const objetivo = norm(nombre);
+    for (const k in obj) { if (norm(k) === objetivo) return obj[k]; }
+    return '';
+  }
+
+  // ── Índice de CLIENTES por nombre de empresa (respaldo de datos) ─
+  const _clientesIdx = {};
+  (DB.clientes || []).forEach(cl => {
+    const nombre = String(_campoFlex(cl, 'EMPRESA') || '').trim().toUpperCase();
+    if (nombre) _clientesIdx[nombre] = cl;
+  });
+  function _clientePorEmpresa(nombreEmpresa) {
+    return _clientesIdx[String(nombreEmpresa || '').trim().toUpperCase()] || null;
   }
 
   // ── Match en cotizaciones ─────────────────────────────────
@@ -908,13 +958,21 @@ async function abrirEditorRem(remId = null) {
       if (prod) opKey = String(prod.OP || prod.IDQR || '').trim();
     }
     const cdat = _cotizIdx[cotiz] || {};
+    const clienteEmpresa = String(it.EMPRESA || cdat.EMPRESA || '').trim();
+    const clienteDat = _clientePorEmpresa(clienteEmpresa);
     const entry = {
-      ITEM: itemNum, CLIENTE: String(it.EMPRESA || cdat.EMPRESA || ''),
-      COTIZ: cotiz, DESC: desc || String(cdat['DESCRIPCION DEL PROYECTO'] || ''),
-      CANT: cant, NIT: String(cdat.NIT || ''), DIR: String(cdat.DIRECCION || ''),
-      CIUDAD: String(it.CIUDAD || cdat.CIUDAD || ''),
-      ENCARGADO: String(cdat.ENCARGADO || cdat['ENCARGADO/CONTACTO'] || ''),
-      TEL: String(cdat.TELEFONO || ''),
+      ITEM: itemNum, CLIENTE: clienteEmpresa,
+      COTIZ: cotiz,
+      // DESC = descripción del ÍTEM (para el selector de ítems)
+      DESC: desc || String(cdat['DESCRIPCION DEL PROYECTO'] || ''),
+      // PROYECTO = SIEMPRE la descripción del proyecto de la cotización (columna F)
+      PROYECTO: String(cdat['DESCRIPCION DEL PROYECTO'] || ''),
+      CANT: cant,
+      NIT:       String(cdat.NIT || _campoFlex(clienteDat, 'NIT') || ''),
+      DIR:       String(cdat.DIRECCION || _campoFlex(clienteDat, 'DIRECCION') || ''),
+      CIUDAD:    String(it.CIUDAD || cdat.CIUDAD || _campoFlex(clienteDat, 'CIUDAD') || ''),
+      ENCARGADO: String(cdat.ENCARGADO || cdat['ENCARGADO/CONTACTO'] || _campoFlex(clienteDat, 'CONTACTO') || ''),
+      TEL:       String(cdat.TELEFONO || _campoFlex(clienteDat, 'TELEFONO') || ''),
       ORDEN_COMPRA: String(cdat['ORDEN DE COMPRA'] || ''),
       ID_PEDIDO: String(it.ID_PEDIDO || cdat.ID_PEDIDO || ''),
       ID_ITEM: String(it.ID_ITEM || it.OP_ID || ''),
@@ -936,14 +994,21 @@ async function abrirEditorRem(remId = null) {
     if (!k || (opItemIdx[k] && opItemIdx[k].length > 0)) return;
     const cotiz = String(o.COTIZACION || o.COT || '').trim();
     const cdat = _cotizIdx[cotiz] || {};
+    const clienteEmpresa = String(o.EMPRESA || o.CLIENTE || cdat.EMPRESA || '').trim();
+    const clienteDat = _clientePorEmpresa(clienteEmpresa);
     if (!opItemIdx[k]) opItemIdx[k] = [];
     opItemIdx[k].push({
-      ITEM: String(o.ITEM || ''), CLIENTE: String(o.EMPRESA || o.CLIENTE || cdat.EMPRESA || ''),
-      COTIZ: cotiz, DESC: String(o['DESCRIPCION DEL PROYECTO'] || o.DESCRIPCION || cdat['DESCRIPCION DEL PROYECTO'] || ''),
-      CANT: String(o.CANTIDAD || o.CANT || '1'), NIT: String(cdat.NIT || ''),
-      DIR: String(cdat.DIRECCION || ''), CIUDAD: String(o.CIUDAD || cdat.CIUDAD || ''),
-      ENCARGADO: String(cdat.ENCARGADO || cdat['ENCARGADO/CONTACTO'] || ''),
-      TEL: String(cdat.TELEFONO || ''), ORDEN_COMPRA: String(cdat['ORDEN DE COMPRA'] || ''),
+      ITEM: String(o.ITEM || ''), CLIENTE: clienteEmpresa,
+      COTIZ: cotiz,
+      DESC:     String(o['DESCRIPCION DEL PROYECTO'] || o.DESCRIPCION || cdat['DESCRIPCION DEL PROYECTO'] || ''),
+      PROYECTO: String(cdat['DESCRIPCION DEL PROYECTO'] || o['DESCRIPCION DEL PROYECTO'] || ''),
+      CANT: String(o.CANTIDAD || o.CANT || '1'),
+      NIT:       String(cdat.NIT      || _campoFlex(clienteDat, 'NIT')       || ''),
+      DIR:       String(cdat.DIRECCION|| _campoFlex(clienteDat, 'DIRECCION')  || ''),
+      CIUDAD:    String(o.CIUDAD || cdat.CIUDAD || _campoFlex(clienteDat, 'CIUDAD') || ''),
+      ENCARGADO: String(cdat.ENCARGADO || cdat['ENCARGADO/CONTACTO'] || _campoFlex(clienteDat, 'CONTACTO') || ''),
+      TEL:       String(cdat.TELEFONO || _campoFlex(clienteDat, 'TELEFONO')   || ''),
+      ORDEN_COMPRA: String(cdat['ORDEN DE COMPRA'] || ''),
       ID_PEDIDO: String(cdat.ID_PEDIDO || ''), ID_ITEM: '', PRECIO: 0,
     });
   });
@@ -1046,6 +1111,17 @@ async function abrirEditorRem(remId = null) {
       border-radius:8px;padding:7px;font-size:11px;font-weight:700;cursor:pointer;margin-top:8px}
     .search-box{background:#f0f4fa;border:1px solid #c7d4ea;border-radius:8px;
       padding:12px;margin-bottom:12px}
+    /* ── COMBO BUSCABLE (ítem de la OP/COT) — igual que en CALIDAD ── */
+    .combo-wrap{position:relative}
+    .combo-list{position:absolute;z-index:60;top:calc(100% + 2px);left:0;right:0;
+      background:#fff;border:1px solid #c7d4ea;border-radius:8px;
+      max-height:190px;overflow-y:auto;box-shadow:0 6px 18px rgba(0,0,0,.14);display:none}
+    .combo-list.show{display:block}
+    .combo-item{padding:9px 12px;font-size:11px;color:#222;cursor:pointer;
+      border-bottom:1px solid #eef2f7}
+    .combo-item:last-child{border-bottom:none}
+    .combo-item:hover,.combo-item:active{background:#eaf1ff}
+    .combo-empty{padding:9px 12px;font-size:10.5px;color:#888}
     @media print{
       .no-print,.toolbar{display:none!important}
       body{background:#fff;padding-top:0}
@@ -1133,9 +1209,14 @@ async function abrirEditorRem(remId = null) {
       </div>
       <div style="display:flex;gap:8px;align-items:flex-end">
         <div class="field" style="flex:1"><label>Ítem de la OP/COT</label>
-          <select id="ed-item-pick" style="border:1px solid #c7d4ea;border-radius:4px;padding:6px;font-size:10px">
-            <option value="">— Busca una OP o COT arriba primero —</option>
-          </select></div>
+          <div class="combo-wrap">
+            <input id="ed-item-pick" type="text" autocomplete="off"
+              placeholder="— Busca una OP o COT arriba primero —"
+              style="border:1px solid #c7d4ea;border-radius:4px;padding:6px;font-size:10px;background:#fff"
+              oninput="_edItemComboFilter()" onfocus="_edItemComboFilter()"
+              onblur="setTimeout(function(){_edItemComboHide();},160)">
+            <div class="combo-list" id="ed-item-pick-list"></div>
+          </div></div>
         <div class="field" style="width:70px"><label>Cantidad</label>
           <input id="ed-item-cant" type="number" min="1" value="1"
             style="border:1px solid #c7d4ea;border-radius:4px;padding:6px;font-size:11px;font-weight:700;text-align:center"></div>
@@ -1185,26 +1266,66 @@ async function abrirEditorRem(remId = null) {
     catch(e){ return s; }
   }
 
+  // ── Combo buscable de ítems (input + lista filtrable en vivo) ──
+  var _edItemComboAll=[];     // ítems disponibles para la OP/COT actual
+  var _edItemComboSelIdx=-1;  // índice del ítem elegido dentro de _edItemComboAll (-1 = ninguno)
+
+  function _edNormKey(s){
+    return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+      .trim().toUpperCase().replace(/\s+/g,' ');
+  }
+  function _edItemLabel(it){
+    var label='Ítem '+(it.ITEM||'');
+    if(it.DESC) label+=' — '+it.DESC.slice(0,65);
+    if(it.CANT) label+=' (x'+it.CANT+')';
+    return label;
+  }
+  function _edSetItemComboItems(items){
+    _edItemComboAll=items||[];
+    _edItemComboSelIdx=-1;
+    var inp=document.getElementById('ed-item-pick');
+    if(inp){
+      inp.value='';
+      inp.placeholder=_edItemComboAll.length?'Escribe para buscar el ítem…':'— Sin ítems para esta OP/COT —';
+    }
+    _edItemComboHide();
+  }
+  function _edItemComboFilter(){
+    var inp=document.getElementById('ed-item-pick');
+    var list=document.getElementById('ed-item-pick-list');
+    if(!inp||!list) return;
+    _edItemComboSelIdx=-1; // escribir invalida la selección previa
+    var q=_edNormKey(inp.value);
+    if(!_edItemComboAll.length){
+      list.innerHTML='<div class="combo-empty">Primero busca una OP o Cotización arriba</div>';
+      list.classList.add('show');
+      return;
+    }
+    var opts=_edItemComboAll
+      .map(function(it,i){ return {it:it,i:i,label:_edItemLabel(it)}; })
+      .filter(function(o){ return !q || _edNormKey(o.label).indexOf(q)!==-1; });
+    if(!opts.length){
+      list.innerHTML='<div class="combo-empty">Sin coincidencias</div>';
+    } else {
+      list.innerHTML=opts.slice(0,60).map(function(o){
+        return '<div class="combo-item" onmousedown="_edItemComboPick('+o.i+')">'+_esc(o.label)+'</div>';
+      }).join('');
+    }
+    list.classList.add('show');
+  }
+  function _edItemComboPick(i){
+    var it=_edItemComboAll[i]; if(!it) return;
+    _edItemComboSelIdx=i;
+    var inp=document.getElementById('ed-item-pick');
+    if(inp) inp.value=_edItemLabel(it);
+    _edItemComboHide();
+  }
+  function _edItemComboHide(){
+    var list=document.getElementById('ed-item-pick-list');
+    if(list) list.classList.remove('show');
+  }
   function _edPoblarPicker(opVal){
-    var items=_opItemIdx[opVal]||[];
-    var sel=document.getElementById('ed-item-pick');
-    if(!sel) return;
-    if(!items.length){ sel.innerHTML='<option value="">— Sin ítems para esta OP —</option>'; return; }
-    sel.innerHTML='<option value="">— Escoger ítem —</option>';
-    items.forEach(function(it,i){
-      var opt=document.createElement('option');
-      opt.value=i;
-      var label='Ítem '+it.ITEM;
-      if(it.DESC) label+=' — '+it.DESC.slice(0,65);
-      if(it.CANT) label+=' (x'+it.CANT+')';
-      opt.textContent=label;
-      opt.dataset.cant=it.CANT||'1';
-      opt.dataset.desc=it.DESC||'';
-      opt.dataset.item=it.ITEM||'';
-      opt.dataset.itemid=it.ID_ITEM||'';
-      opt.dataset.precio=it.PRECIO||0;
-      sel.appendChild(opt);
-    });
+    _edSetItemComboItems(_opItemIdx[opVal]||[]);
   }
 
   function _edCargarEncabezado(opVal){
@@ -1216,7 +1337,7 @@ async function abrirEditorRem(remId = null) {
     sf('ed-señores', it.CLIENTE); sf('ed-nit', it.NIT);
     sf('ed-dir', it.DIR); sf('ed-ciudad', it.CIUDAD);
     sf('ed-encargado', it.ENCARGADO); sf('ed-tel', it.TEL);
-    sf('ed-oc', it.ORDEN_COMPRA); sf('ed-proyecto', it.DESC);
+    sf('ed-oc', it.ORDEN_COMPRA); sf('ed-proyecto', it.PROYECTO || it.DESC);
     var hid=document.getElementById('ed-id-pedido'); if(hid&&it.ID_PEDIDO) hid.value=it.ID_PEDIDO;
     _edPoblarPicker(opVal);
   }
@@ -1244,7 +1365,7 @@ async function abrirEditorRem(remId = null) {
         var it=_opItemIdx[cotKey][0];
         sf('ed-cotiz',cotVal); sf('ed-señores',it.CLIENTE); sf('ed-nit',it.NIT);
         sf('ed-dir',it.DIR); sf('ed-ciudad',it.CIUDAD); sf('ed-encargado',it.ENCARGADO);
-        sf('ed-tel',it.TEL); sf('ed-oc',it.ORDEN_COMPRA); sf('ed-proyecto',it.DESC);
+        sf('ed-tel',it.TEL); sf('ed-oc',it.ORDEN_COMPRA); sf('ed-proyecto',it.PROYECTO || it.DESC);
         var hid=document.getElementById('ed-id-pedido'); if(hid&&it.ID_PEDIDO) hid.value=it.ID_PEDIDO;
         _edPoblarPickerCotiz(cotKey);
       }
@@ -1411,7 +1532,7 @@ async function abrirEditorRem(remId = null) {
     if(opVal && _opItemIdx[opVal]){ _edPoblarPicker(opVal); }
     else if(cotVal){ _edBuscarCotiz(); }
   })();
-  <\\/script>
+  <\/script>
   </body></html>`;
 
   const win = window.open('', '_blank');
@@ -1542,7 +1663,8 @@ async function generarPDFRemisionERP(remId, remUUID = '') {
     </tr>`).join('') || `<tr><td colspan="3" style="text-align:center;padding:20px;color:#888;border:1px solid #999">Sin elementos registrados</td></tr>`;
 
   const op = r.OP || '';
-  const cotNum = r.COTIZACION || '';
+  if (!DB.cotizaciones) DB.cotizaciones = await GET('getCotizaciones');
+  const cotNum = _resolverCotizNum(r) || '';
   const oc = r['ORDEN DE COMPRA'] || '';
   const obs = r['OBSERVACIONES ESPECIALES'] || r.OBSERVACIONES || '';
 
